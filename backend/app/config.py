@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     scan_depth: int = 3
     scan_ignore: str = "node_modules,.venv,vendor,dist,build,target"
     scan_concurrency: int = 4
+    status_ttl_seconds: int = 60
     debug: bool = False
     app_version: str = "0.1.0"
 
