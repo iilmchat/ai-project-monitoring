@@ -1,6 +1,24 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.3.0 (2026-11-05)
+**Текущая версия:** v0.4.0 (2026-11-05)
+
+---
+
+## Релиз v0.4.0 — «UX & Advanced Monitoring»
+
+**Дата:** 2026-11-05 · **Тег:** `v0.4.0`
+
+Итоги этапа (спринты 17–22):
+
+- **Advanced Data Table (S18):** batch selection, bulk по выбранным, контекстное меню, управление колонками.
+- **Filtering & Saved Views (S19):** filter chips, сохранённые представления, URL-состояние, CI-агрегат в dashboard.
+- **Keyboard (S20):** Command Palette (`Ctrl/Cmd+K`), навигация по таблице, панель подсказок `?`.
+- **Visuals/A11y (S21):** иконки статусов, stale-индикатор, Conflict Manager, contribution heatmap, экспорт CSV/JSON.
+- **Notifications (S21):** Telegram Bot API вместо `plyer`; KI-007 и KI-008 закрыты.
+- **Релиз (S22):** docs-consistency audit, тег `v0.4.0` в GitHub и GitFlic.
+
+**Итоговые метрики:** 121 backend-тест, 11 frontend-тестов, entry ~86 kB gzip
+(графики и Command Palette — отдельные lazy-chunks).
 
 ---
 

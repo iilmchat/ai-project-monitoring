@@ -25,6 +25,7 @@
 - **Read-only по умолчанию** — только чтение состояния; мутации (`pull`/`push`/`stash`/`push_mirror`) — по явной кнопке с подтверждением и аудитом.
 - **Зеркалирование GitHub ↔ GitFlic** — `mirror_status` (9 состояний), polling, webhooks, настройка политики.
 - **Продуктивность и UI** — тёмная тема, интерактивные графики распределения статусов, страница настроек (токены хранятся в БД с маскировкой), массовые операции (Fetch All / Sync Mirrors) и миграция на GitFlic.
+- **UX и продвинутый мониторинг** — Command Palette (`Ctrl+K`), продвинутая таблица с чекбоксами и контекстным меню, сохранённые представления (Saved Views), Telegram-уведомления, менеджер конфликтов и график активности (Heatmap).
 - **Наблюдаемость** — Prometheus-метрики, расширенный `/health`, JSON-логи.
 - **CI и уведомления** — статус GitHub Actions и desktop-уведомления о проблемах.
 - **Веб-дашборд** — обзор всех репозиториев, фильтры «требуют внимания», детали по каждому.
@@ -105,8 +106,8 @@ pnpm --dir frontend dev
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.3.0** (2026-11-05) |
-| Спринты | 1–16 (v0.3.0 «Productivity & UI») |
+| Версия | **v0.4.0** (2026-11-05) |
+| Спринты | 1–22 (v0.4.0 «UX & Advanced Monitoring») |
 | Тесты backend | **121** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **11** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 114 kB) |
@@ -115,14 +116,11 @@ pnpm --dir frontend dev
 
 ### Roadmap
 
-**v0.4.0 «UX/UI & Productivity»** ([полный план](TODO_V0.4.md)):
+**v0.5.0+** (планирование):
 
-- Advanced Data Table: batch selection, управление колонками, контекстное меню, моноширинный стиль.
-- Filter chips и Saved Views (фильтры + сортировка + колонки, localStorage/URL).
-- Command Palette (`Ctrl/Cmd+K`), горячие клавиши и панель подсказок.
-- A11y-иконки статусов, stale-индикатор, Conflict Manager (`diverged`).
-- Telegram-уведомления вместо `plyer` для headless/Docker.
-- Contribution heatmap и экспорт таблицы в CSV/JSON.
+- Синхронизация Saved Views между устройствами (БД, `saved_views`).
+- История статусов и тренды (как часто репозиторий был `dirty`/`behind_gitflic`).
+- Расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
 
 ---
 
