@@ -93,3 +93,22 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 | `remote_status = unavailable` | Нет доступа к remote | Проверить URL remote, токен, сеть |
 | `pygit2` не устанавливается | Нет libgit2 | Установить `libgit2` (Linux: `apt install libgit2-dev`) или использовать Docker |
 | Docker: permission denied на `/repos` | Монтирование директории с репозиториями | Добавить volume с правильными правами |
+
+---
+
+## 7. Синхронизация с GitFlic (Зеркало)
+
+Основной провайдер — GitHub (`origin`). Зеркало — GitFlic (`gitflic`). Автоматическое зеркалирование GitFlic не используется (см. KI-006 в `docs/KNOWN_ISSUES.md`), синхронизация выполняется вручную после пуша в GitHub:
+
+```powershell
+# 1. Пушим в GitHub
+git push origin main
+
+# 2. Зеркалируем в GitFlic
+git push gitflic main
+
+# 3. Проверяем, что SHA совпадают (опционально)
+$ghSha = (git ls-remote origin main).Split()[0]
+$gfSha = (git ls-remote gitflic main).Split()[0]
+if ($ghSha -eq $gfSha) { Write-Host "OK: mirror in_sync" }
+```
