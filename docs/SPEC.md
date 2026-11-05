@@ -266,11 +266,13 @@
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true) | `202 {status:"accepted"}` |
-| POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?` | `202 {status:"accepted"}` |
+| POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true), body `{repo_ids?}` | `202 {status:"accepted"}` |
+| POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?`, body `{repo_ids?}` | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
 
 Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
+`repo_ids` (опционально) ограничивает операцию выбранными репозиториями; без него
+действует фильтр `tracked_only`.
 `fetch_all` делает `git fetch --all --prune`; `sync_mirrors_all` — `git push gitflic <branch>`
 для `mirror_status ∈ {behind_gitflic, missing_on_gitflic}` и пишет `action_log` (`actor=bulk`).
 `migrate_to_gitflic` переводит `canonical_provider=github` на `gitflic` при заданном

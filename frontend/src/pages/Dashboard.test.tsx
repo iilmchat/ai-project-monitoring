@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getDashboard } from '../api/client'
+import { bulkFetchAll, getDashboard } from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
+import { useTableStore } from '../store/useTableStore'
 import Dashboard from './Dashboard'
 
 vi.mock('../api/client', () => ({
@@ -12,6 +13,7 @@ vi.mock('../api/client', () => ({
   bulkSyncMirrorsAll: vi.fn(),
   getDashboard: vi.fn(),
   migrateToGitflic: vi.fn(),
+  runAction: vi.fn(),
   scan: vi.fn(),
   getScan: vi.fn(),
   trackRepository: vi.fn(),
@@ -30,8 +32,6 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   CartesianGrid: () => null,
 }))
-
-const mockedGetDashboard = vi.mocked(getDashboard)
 
 function makeStatus(overrides: Partial<RepositoryStatus>): RepositoryStatus {
   return {
@@ -115,7 +115,25 @@ function renderDashboard() {
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedGetDashboard.mockResolvedValue(dashboard)
+    window.localStorage.clear()
+    useTableStore.setState({
+      selectedRepoIds: [],
+      visibleColumns: {
+        branch: true,
+        status: true,
+        mirror: true,
+        aheadBehind: true,
+        ci: true,
+      },
+      columnWidths: {
+        branch: 110,
+        status: 120,
+        mirror: 150,
+        aheadBehind: 120,
+        ci: 90,
+      },
+    })
+    vi.mocked(getDashboard).mockResolvedValue(dashboard)
   })
 
   it('renders summary cards and repository table', async () => {
@@ -159,5 +177,32 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('alpha')).toBeInTheDocument()
     expect(screen.queryByText('beta')).not.toBeInTheDocument()
+  })
+
+  it('selects rows and scopes bulk fetch to selection', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+
+    await screen.findByText('alpha')
+    await user.click(screen.getByRole('checkbox', { name: 'Выбрать alpha' }))
+
+    const fetchSelected = screen.getByRole('button', { name: 'Fetch Selected (1)' })
+    expect(fetchSelected).toBeInTheDocument()
+
+    await user.click(fetchSelected)
+    expect(bulkFetchAll).toHaveBeenCalledWith([1])
+  })
+
+  it('opens a context menu on right click', async () => {
+    renderDashboard()
+
+    const alpha = await screen.findByText('alpha')
+    const row = alpha.closest('tr')
+    expect(row).not.toBeNull()
+    fireEvent.contextMenu(row as HTMLTableRowElement, { clientX: 20, clientY: 20 })
+
+    expect(
+      await screen.findByRole('menuitem', { name: 'Скопировать путь' }),
+    ).toBeInTheDocument()
   })
 })

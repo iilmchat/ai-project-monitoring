@@ -107,8 +107,8 @@ pnpm --dir frontend dev
 |------------|----------|
 | Версия | **v0.3.0** (2026-11-05) |
 | Спринты | 1–16 (v0.3.0 «Productivity & UI») |
-| Тесты backend | **116** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **5** (Vitest + Testing Library) |
+| Тесты backend | **117** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **7** (Vitest + Testing Library) |
 | Entry bundle | 84.2 kB gzip (+ lazy charts 114 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |

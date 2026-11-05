@@ -41,15 +41,25 @@ class BulkService:
         self._fetch_timeout = fetch_timeout
         self._action_timeout = action_timeout
 
-    async def _repositories(self, tracked_only: bool) -> list[Repository]:
+    async def _repositories(
+        self,
+        tracked_only: bool,
+        repo_ids: list[int] | None = None,
+    ) -> list[Repository]:
         async with self._session_factory() as session:
             statement = select(Repository).order_by(Repository.path)
             if tracked_only:
                 statement = statement.where(Repository.tracked.is_(True))
+            if repo_ids is not None:
+                statement = statement.where(Repository.id.in_(repo_ids))
             return list((await session.scalars(statement)).all())
 
-    async def fetch_all(self, tracked_only: bool = True) -> dict[str, Any]:
-        repositories = await self._repositories(tracked_only)
+    async def fetch_all(
+        self,
+        tracked_only: bool = True,
+        repo_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        repositories = await self._repositories(tracked_only, repo_ids)
         semaphore = asyncio.Semaphore(self._concurrency)
 
         async def worker(repository: Repository) -> dict[str, Any]:
@@ -83,7 +93,11 @@ class BulkService:
         )
         return summary
 
-    async def sync_mirrors_all(self, tracked_only: bool = True) -> dict[str, Any]:
+    async def sync_mirrors_all(
+        self,
+        tracked_only: bool = True,
+        repo_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
         async with self._session_factory() as session:
             statement = (
                 select(Repository, RepositoryMirrorStatus)
@@ -96,6 +110,8 @@ class BulkService:
             )
             if tracked_only:
                 statement = statement.where(Repository.tracked.is_(True))
+            if repo_ids is not None:
+                statement = statement.where(Repository.id.in_(repo_ids))
             rows = (await session.execute(statement)).all()
 
         semaphore = asyncio.Semaphore(self._concurrency)

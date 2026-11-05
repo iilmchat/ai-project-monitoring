@@ -17,7 +17,11 @@ from app.git.pygit2_backend import (
     read_local_status,
 )
 from app.models.entities import ActionLog, Repository, RepositoryStatus
-from app.schemas.action import ActionLogResponse, ActionRequest
+from app.schemas.action import (
+    ActionLogResponse,
+    ActionRequest,
+    BulkActionRequest,
+)
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
@@ -440,12 +444,17 @@ async def bulk_fetch_all(
     request: Request,
     background_tasks: BackgroundTasks,
     tracked_only: Annotated[bool, Query()] = True,
+    payload: BulkActionRequest | None = None,
 ) -> dict[str, object]:
-    background_tasks.add_task(_bulk_service(request).fetch_all, tracked_only)
+    repo_ids = payload.repo_ids if payload is not None else None
+    background_tasks.add_task(
+        _bulk_service(request).fetch_all, tracked_only, repo_ids
+    )
     return {
         "status": "accepted",
         "action": "fetch_all",
         "tracked_only": tracked_only,
+        "repo_ids": repo_ids,
     }
 
 
@@ -457,12 +466,17 @@ async def bulk_sync_mirrors(
     request: Request,
     background_tasks: BackgroundTasks,
     tracked_only: Annotated[bool, Query()] = True,
+    payload: BulkActionRequest | None = None,
 ) -> dict[str, object]:
-    background_tasks.add_task(_bulk_service(request).sync_mirrors_all, tracked_only)
+    repo_ids = payload.repo_ids if payload is not None else None
+    background_tasks.add_task(
+        _bulk_service(request).sync_mirrors_all, tracked_only, repo_ids
+    )
     return {
         "status": "accepted",
         "action": "sync_mirrors_all",
         "tracked_only": tracked_only,
+        "repo_ids": repo_ids,
     }
 
 

@@ -318,3 +318,22 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 116 passed
 - Frontend-тесты: 5 passed
 - Entry bundle: 84.18 kB gzip
+
+---
+
+## Спринт 18: Advanced Data Table (v0.4.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S18-001: Zustand `useTableStore` (selection, columns, widths) + persist v1
+- [x] S18-002: batch selection + bulk API `repo_ids`
+- [x] S18-003: контекстное меню (открыть/fetch/copy path)
+- [x] S18-004: управление колонками, resize, моноширинный стиль
+- [x] S18-005: тесты (selection/bulk-scope/context menu)
+
+### Метрики
+- Backend-тесты: 117 passed
+- Frontend-тесты: 7 passed
+- Entry bundle: 84.19 kB gzip; Dashboard chunk: 20.27 kB

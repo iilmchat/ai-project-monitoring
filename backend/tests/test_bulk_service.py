@@ -127,8 +127,10 @@ async def test_bulk_api_returns_202(app, client: AsyncClient) -> None:
     calls: list[bool] = []
 
     class FakeBulk:
-        async def fetch_all(self, tracked_only: bool = True) -> dict[str, object]:
-            calls.append(tracked_only)
+        async def fetch_all(
+            self, tracked_only: bool = True, repo_ids: list[int] | None = None
+        ) -> dict[str, object]:
+            calls.append((tracked_only, repo_ids))
             return {"total": 0, "success": 0, "failed": 0, "details": []}
 
     app.state.bulk_service = FakeBulk()
@@ -137,4 +139,23 @@ async def test_bulk_api_returns_202(app, client: AsyncClient) -> None:
 
     assert response.status_code == 202
     assert response.json()["action"] == "fetch_all"
-    assert calls == [True]
+    assert calls == [(True, None)]
+
+
+async def test_fetch_all_filters_by_repo_ids(
+    session_factory, tmp_path: Path, monkeypatch
+) -> None:
+    first = await _create_repository(session_factory, tmp_path, "one")
+    second = await _create_repository(session_factory, tmp_path, "two")
+    monkeypatch.setattr(
+        "app.services.bulk_service.run_git",
+        lambda args, *, cwd, timeout: _ok(),
+    )
+
+    result = await BulkService(session_factory).fetch_all(
+        tracked_only=True, repo_ids=[first]
+    )
+
+    assert result["total"] == 1
+    assert result["details"][0]["repository_id"] == first
+    assert second not in [item["repository_id"] for item in result["details"]]

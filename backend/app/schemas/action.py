@@ -14,6 +14,12 @@ class ActionRequest(BaseModel):
     repository_id: int | None = None
 
 
+class BulkActionRequest(BaseModel):
+    """Optional scope for bulk fetch/sync operations."""
+
+    repo_ids: list[int] | None = None
+
+
 class ActionLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

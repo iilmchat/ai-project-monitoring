@@ -171,19 +171,25 @@ export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
   return request<CIStatus>(`/repositories/${repositoryId}/ci-status`)
 }
 
-export async function bulkFetchAll(trackedOnly = true): Promise<Record<string, unknown>> {
+export async function bulkFetchAll(
+  repoIds?: number[],
+  trackedOnly = true,
+): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>('/repositories/actions/fetch_all', {
     method: 'POST',
     query: { tracked_only: trackedOnly },
+    body: repoIds ? { repo_ids: repoIds } : {},
   })
 }
 
 export async function bulkSyncMirrorsAll(
+  repoIds?: number[],
   trackedOnly = true,
 ): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>('/repositories/actions/sync_mirrors_all', {
     method: 'POST',
     query: { tracked_only: trackedOnly },
+    body: repoIds ? { repo_ids: repoIds } : {},
   })
 }
 

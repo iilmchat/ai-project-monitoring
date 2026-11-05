@@ -10,6 +10,8 @@
 
 ### Добавлено
 
+- feat(table): batch selection (Zustand + persist), bulk fetch/sync по `repo_ids`, контекстное меню (open/fetch/copy path).
+- feat(table): управление колонками (видимость/ширина, localStorage), моноширинные пути и SHA.
 - feat(settings): `app_settings` + `GET/PATCH /settings` с маскировкой токенов; значения подхватываются в конфиг при старте.
 - feat(settings-ui): страница `/settings` (SCAN_ROOTS, токены, webhook secret, default provider) и ссылка в шапке.
 - feat(migration): `POST /repositories/actions/migrate_to_gitflic` — массовый перевод canonical на GitFlic + отчёт.
