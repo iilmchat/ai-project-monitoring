@@ -70,6 +70,30 @@ async def list_repositories(
     )
 
 
+@router.post("/repositories/{repository_id}/track", response_model=RepositoryRead)
+async def track_repository(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RepositoryRead:
+    repository = await _get_repository(session, repository_id)
+    repository.tracked = True
+    await session.commit()
+    await session.refresh(repository)
+    return RepositoryRead.model_validate(repository)
+
+
+@router.post("/repositories/{repository_id}/untrack", response_model=RepositoryRead)
+async def untrack_repository(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RepositoryRead:
+    repository = await _get_repository(session, repository_id)
+    repository.tracked = False
+    await session.commit()
+    await session.refresh(repository)
+    return RepositoryRead.model_validate(repository)
+
+
 @router.get("/repositories/{repository_id}/status", response_model=RepositoryStatusResponse)
 async def get_repository_status(
     repository_id: int,

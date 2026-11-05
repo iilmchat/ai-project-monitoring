@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import Settings
@@ -52,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
             logger.info("app_stopped")
 
-    application = FastAPI(
+    application: FastAPI = FastAPI(
         title="IIRuchating API",
         version=resolved.app_version,
         description="Monitoring of local Git repositories (read-only).",
@@ -65,6 +66,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.remote_service = remote_service
     application.state.status_service = status_service
     application.add_middleware(RequestLoggingMiddleware)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     application.include_router(api_router, prefix="/api/v1")
     return application
 

@@ -148,7 +148,7 @@ class StatusService:
                 return cached
             row = await self._load_row(session, repository.id)
             if row is not None and self._is_fresh(row.checked_at):
-                snapshot = _snapshot_from_row(repository, row)
+                snapshot = snapshot_from_row(repository, row)
                 self._cache.set(snapshot)
                 return snapshot
 
@@ -285,7 +285,7 @@ def _snapshot_from_local(
     )
 
 
-def _snapshot_from_row(repository: Repository, row: RepositoryStatus) -> StatusSnapshot:
+def snapshot_from_row(repository: Repository, row: RepositoryStatus) -> StatusSnapshot:
     return StatusSnapshot(
         repository_id=repository.id,
         path=repository.path,
@@ -336,4 +336,5 @@ __all__ = [
     "StatusService",
     "StatusSnapshot",
     "classify_state",
+    "snapshot_from_row",
 ]
