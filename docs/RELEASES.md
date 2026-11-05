@@ -355,3 +355,20 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 117 passed
 - Frontend-тесты: 8 passed
 - Entry bundle: 84.53 kB gzip; Dashboard chunk: 26.36 kB
+
+---
+
+## Спринт 20: Keyboard Navigation & Command Palette (v0.4.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S20-001: Command Palette (`Ctrl/Cmd+K`) с репозиториями, страницами и действиями
+- [x] S20-002: навигация по таблице (`↑/↓`, Enter, Space, `/`, Esc) + подсветка
+- [x] S20-003: модалка горячих клавиш (`?`) и подсказка в футере
+
+### Метрики
+- Backend-тесты: 117 passed
+- Frontend-тесты: 11 passed
+- Entry bundle: 85.59 kB gzip; Command Palette chunk (lazy): 4.33 kB

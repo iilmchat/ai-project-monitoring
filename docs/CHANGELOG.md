@@ -10,6 +10,9 @@
 
 ### Добавлено
 
+- feat(keyboard): Command Palette (`Ctrl/Cmd+K`) — репозитории, страницы, scan/fetch/migrate.
+- feat(keyboard): навигация по таблице `↑/↓`, `Enter`, `Space`, `/`, `Esc` + ring-подсветка.
+- feat(keyboard): модалка горячих клавиш по `?` и подсказка в футере.
 - feat(filters): filter chips (статус/зеркало/CI + untracked), OR внутри категории и AND между категориями.
 - feat(views): сохранённые представления (фильтры, сортировка, колонки) в Zustand + localStorage.
 - feat(url): синхронизация фильтров/поиска/сортировки с query string (`?status=…&mirror=…&q=…`).

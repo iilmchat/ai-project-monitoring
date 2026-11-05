@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -206,8 +206,21 @@ describe('Dashboard', () => {
     ).toBeInTheDocument()
   })
 
-  it('applies filters from URL search params', async () => {
-    render(
+  it('supports Space to select a focused table row', async () => {
+    renderDashboard()
+
+    const alpha = await screen.findByText('alpha')
+    const row = alpha.closest('tr') as HTMLTableRowElement
+    row.focus()
+    await waitFor(() => {
+      expect(row.className).toContain('ring-primary')
+    })
+    fireEvent.keyDown(row, { key: ' ', code: 'Space' })
+
+    expect(await screen.findByRole('button', { name: 'Fetch Selected (1)' })).toBeInTheDocument()
+  })
+
+  it('applies filters from URL search params', async () => {    render(
       <MemoryRouter initialEntries={['/?status=dirty']}>
         <Dashboard />
       </MemoryRouter>,

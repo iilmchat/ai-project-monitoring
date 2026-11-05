@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import type { FormEvent, MouseEvent as ReactMouseEvent } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
@@ -109,6 +109,9 @@ export default function Dashboard() {
   const [viewsOpen, setViewsOpen] = useState(false)
   const [saveViewOpen, setSaveViewOpen] = useState(false)
   const [viewName, setViewName] = useState('')
+  const [focusedRepoId, setFocusedRepoId] = useState<number | null>(null)
+  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({})
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const selectedRepoIds = useTableStore((state) => state.selectedRepoIds)
   const visibleColumns = useTableStore((state) => state.visibleColumns)
@@ -387,8 +390,69 @@ export default function Dashboard() {
     }
   }
 
-  function applyView(viewId: string) {
-    const view = savedViews.find((item) => item.id === viewId)
+  function handleTableKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
+    ) {
+      return
+    }
+
+    const currentIndex = repositories.findIndex(
+      (repository) => repository.id === focusedRepoId,
+    )
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const delta = event.key === 'ArrowDown' ? 1 : -1
+      const nextIndex = Math.min(
+        Math.max(currentIndex === -1 ? (delta > 0 ? 0 : repositories.length - 1) : currentIndex + delta, 0),
+        repositories.length - 1,
+      )
+      const next = repositories[nextIndex]
+      if (next) {
+        setFocusedRepoId(next.id)
+        rowRefs.current[next.id]?.focus()
+      }
+      return
+    }
+
+    if (event.key === 'Enter') {
+      const current = repositories.find((repository) => repository.id === focusedRepoId)
+      if (current) {
+        event.preventDefault()
+        navigate(`/repo/${current.id}`)
+      }
+      return
+    }
+
+    if (event.key === ' ' || event.code === 'Space') {
+      const current = repositories.find((repository) => repository.id === focusedRepoId)
+      if (current) {
+        event.preventDefault()
+        toggleSelected(current.id)
+      }
+      return
+    }
+
+    if (event.key === '/') {
+      event.preventDefault()
+      searchRef.current?.focus()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setFocusedRepoId(null)
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    }
+  }
+
+  function applyView(viewId: string) {    const view = savedViews.find((item) => item.id === viewId)
     if (!view) {
       return
     }
@@ -553,6 +617,7 @@ export default function Dashboard() {
           </div>
         </div>
         <input
+          ref={searchRef}
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -670,7 +735,7 @@ export default function Dashboard() {
             Нет репозиториев по текущим фильтрам.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" onKeyDown={handleTableKeyDown}>
             <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
               <colgroup>
                 <col style={{ width: 40 }} />
@@ -772,7 +837,11 @@ export default function Dashboard() {
                 {repositories.map((repository) => (
                   <tr
                     key={repository.id}
+                    ref={(element) => {
+                      rowRefs.current[repository.id] = element
+                    }}
                     onClick={() => navigate(`/repo/${repository.id}`)}
+                    onFocus={() => setFocusedRepoId(repository.id)}
                     onContextMenu={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
@@ -782,14 +851,11 @@ export default function Dashboard() {
                         repository,
                       })
                     }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        navigate(`/repo/${repository.id}`)
-                      }
-                    }}
                     tabIndex={0}
-                    className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-800/60 dark:focus:bg-slate-800/60"
+                    aria-selected={focusedRepoId === repository.id}
+                    className={`cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-800/60 dark:focus:bg-slate-800/60 ${
+                      focusedRepoId === repository.id ? 'ring-2 ring-inset ring-primary' : ''
+                    }`}
                   >
                     <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                       <input
