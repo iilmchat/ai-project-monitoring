@@ -6,6 +6,7 @@ import type {
   CompareResponse,
   ConflictsResponse,
   DashboardResponse,
+  DependencyReport,
   DockerStatus,
   HeatmapData,
   MirrorCandidates,
@@ -184,6 +185,16 @@ export async function getDockerStatus(
 ): Promise<DockerStatus> {
   return request<DockerStatus>(`/repositories/${repositoryId}/docker`, {
     query: { refresh },
+  })
+}
+
+export async function getDependencies(
+  repositoryId: number,
+  ecosystem: 'python' | 'node' = 'python',
+  refresh = false,
+): Promise<DependencyReport> {
+  return request<DependencyReport>(`/repositories/${repositoryId}/dependencies`, {
+    query: { ecosystem, refresh },
   })
 }
 

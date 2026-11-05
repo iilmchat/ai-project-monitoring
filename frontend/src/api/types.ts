@@ -170,6 +170,42 @@ export interface DockerStatus {
   checked_at: string
 }
 
+export type DependencyPackageStatus = 'outdated' | 'current' | 'unknown' | 'ignored'
+export type DependencyPackageKind = 'exact' | 'range' | 'vcs' | 'path' | 'workspace'
+export type DependencySeverity = 'major' | 'minor' | 'patch'
+
+export interface DependencyPackage {
+  name: string
+  declared: string
+  current: string | null
+  latest: string | null
+  status: DependencyPackageStatus
+  kind: DependencyPackageKind
+  severity: DependencySeverity | null
+  manifest_line: number | null
+  manifest_section: string | null
+}
+
+export interface DependencyEcosystemReport {
+  ecosystem: 'python' | 'node'
+  manifest: string | null
+  status: 'ok' | 'no_manifest' | 'parse_error' | 'unavailable'
+  source: 'registry' | 'cache' | 'mixed' | 'stale_cache' | 'none'
+  total: number
+  outdated: number
+  up_to_date: number
+  unknown: number
+  ignored: number
+  packages: DependencyPackage[]
+  error: string | null
+}
+
+export interface DependencyReport {
+  repository_id: number
+  checked_at: string
+  ecosystems: DependencyEcosystemReport[]
+}
+
 export type HeatmapData = Record<string, number>
 
 export interface AppSettings {

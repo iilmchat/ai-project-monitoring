@@ -17,10 +17,12 @@ from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
+from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
+from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
@@ -88,6 +90,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         timeout_seconds=resolved.docker_timeout_seconds,
         cache_ttl_seconds=resolved.docker_status_ttl_seconds,
     )
+    pypi_client = PypiClient(timeout_seconds=resolved.dependency_http_timeout)
+    dependency_service = DependencyService(
+        session_factory,
+        pypi_client,
+        cache_ttl_seconds=resolved.dependency_cache_ttl_seconds,
+        concurrency=resolved.dependency_check_concurrency,
+    )
     mirror_scheduler = MirrorScheduler(
         mirror_service,
         session_factory,
@@ -144,6 +153,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.mirror_service = mirror_service
     application.state.ci_service = ci_service
     application.state.docker_service = docker_service
+    application.state.pypi_client = pypi_client
+    application.state.dependency_service = dependency_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

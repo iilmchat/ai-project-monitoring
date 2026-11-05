@@ -38,6 +38,7 @@ from app.schemas.action import (
     BulkActionRequest,
 )
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
+from app.schemas.dependency import DependencyReport
 from app.schemas.docker import DockerStatusResponse
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
@@ -63,6 +64,7 @@ from app.services.action_service import (
 from app.services.bulk_service import BulkService
 from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
+from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
@@ -88,6 +90,11 @@ def _mirror_service(request: Request) -> MirrorService:
 
 def _docker_service(request: Request) -> DockerService:
     service: DockerService = request.app.state.docker_service
+    return service
+
+
+def _dependency_service(request: Request) -> DependencyService:
+    service: DependencyService = request.app.state.dependency_service
     return service
 
 
@@ -177,6 +184,26 @@ async def repository_docker_status(
         repository_id=repository_id,
         checked_at=utcnow(),
         **result.model_dump(),
+    )
+
+
+@router.get(
+    "/repositories/{repository_id}/dependencies",
+    response_model=DependencyReport,
+)
+async def repository_dependencies(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    refresh: Annotated[bool, Query()] = False,
+    ecosystem: Annotated[Literal["python", "node"] | None, Query()] = None,
+) -> DependencyReport:
+    repository = await _get_repository(session, repository_id)
+    return await _dependency_service(request).get_report(
+        repository.id,
+        repository.path,
+        ecosystem=ecosystem,
+        refresh=refresh,
     )
 
 

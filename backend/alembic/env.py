@@ -14,6 +14,7 @@ from app.config import Settings
 from app.db.base import Base
 from app.db.session import ensure_sqlite_directory
 from app.models import (  # noqa: F401
+    DependencyCache,
     Repository,
     RepositoryMirrorStatus,
     RepositoryStatus,

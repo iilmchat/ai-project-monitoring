@@ -32,6 +32,34 @@
 
 ---
 
+## Спринт 25: Dependency Management (Python) (v0.5.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S25-001: `dependency_cache` + миграция `006`, TTL 24 ч, single-flight,
+  stale-while-revalidate.
+- [x] S25-002: безопасный парсер `requirements.txt` (`-r` include, cycles,
+  path traversal, pins/ranges/extras/markers).
+- [x] S25-003: PyPI-клиент с timeout, retry/backoff на 429/5xx и partial results.
+- [x] S25-004: `GET /repositories/{id}/dependencies` с `refresh` и `ecosystem`.
+- [x] S25-005: UI-блок «Зависимости» со счётчиками, severity и ссылками на PyPI.
+- [x] S25-006: тесты парсера, кэша, single-flight, stale, API и UI.
+- [x] S25-007: ADR-0008, SPEC §3.15, ARCHITECTURE §11, KI-010, CHANGELOG.
+
+### Метрики
+
+- Backend: **145 passed** (включая 14 dependency-тестов).
+- Frontend: **16 passed**; entry bundle **85.59 kB gzip**,
+  `RepositoryDetails` — 6.82 kB, `DashboardCharts` — 114.55 kB gzip (lazy).
+- Smoke: временный root `requirements.txt` (fastapi==0.115.6, requests>=2.31)
+  → `GET /repositories/26/dependencies?ecosystem=python&refresh=true` вернул
+  `status=ok`, `source=registry`, 2 outdated; повторный запрос — `source=cache`.
+  Файл после проверки удалён.
+
+---
+
 ## Релиз v0.4.0 — «UX & Advanced Monitoring»
 
 **Дата:** 2026-11-05 · **Тег:** `v0.4.0`

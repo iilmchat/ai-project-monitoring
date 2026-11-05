@@ -6,6 +6,7 @@ import {
   getActions,
   getCiStatus,
   getConflicts,
+  getDependencies,
   getDockerStatus,
   getLog,
   getMirror,
@@ -23,6 +24,9 @@ import type {
   CIStatus,
   CommitInfo,
   ConflictsResponse,
+  DependencyEcosystemReport,
+  DependencyPackage,
+  DependencyReport,
   DockerContainer,
   DockerPort,
   DockerStatus,
@@ -72,6 +76,10 @@ export default function RepositoryDetails() {
   const [conflicts, setConflicts] = useState<ConflictsResponse | null>(null)
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [dockerRefreshing, setDockerRefreshing] = useState(false)
+  const [dependencies, setDependencies] = useState<DependencyReport | null>(null)
+  const [dependenciesLoading, setDependenciesLoading] = useState(!invalidId)
+  const [dependenciesRefreshing, setDependenciesRefreshing] = useState(false)
+  const [dependenciesError, setDependenciesError] = useState<string | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -155,6 +163,34 @@ export default function RepositoryDetails() {
     }
   }, [invalidId, repositoryId])
 
+  useEffect(() => {
+    if (invalidId) {
+      return
+    }
+    let active = true
+    setDependenciesLoading(true)
+    void getDependencies(repositoryId, 'python')
+      .then((report) => {
+        if (active) {
+          setDependencies(report)
+          setDependenciesError(null)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDependenciesError('Не удалось проверить зависимости.')
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDependenciesLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [invalidId, repositoryId])
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
@@ -204,6 +240,18 @@ export default function RepositoryDetails() {
       setError('Не удалось обновить статус Docker.')
     } finally {
       setDockerRefreshing(false)
+    }
+  }
+
+  async function handleDependenciesRefresh() {
+    setDependenciesRefreshing(true)
+    try {
+      setDependencies(await getDependencies(repositoryId, 'python', true))
+      setDependenciesError(null)
+    } catch {
+      setDependenciesError('Не удалось проверить зависимости.')
+    } finally {
+      setDependenciesRefreshing(false)
     }
   }
 
@@ -298,6 +346,9 @@ export default function RepositoryDetails() {
       setActionRunning(false)
     }
   }
+
+  const pythonDependencies =
+    dependencies?.ecosystems.find((item) => item.ecosystem === 'python') ?? null
 
   return (
     <section className="space-y-6">
@@ -562,6 +613,106 @@ export default function RepositoryDetails() {
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
                     Проверено: {formatDate(dockerStatus.checked_at)}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div
+            data-testid="dependencies-block"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Зависимости
+              </h2>
+              <div className="flex items-center gap-2">
+                <DependencyBadge report={pythonDependencies} />
+                <button
+                  type="button"
+                  onClick={() => void handleDependenciesRefresh()}
+                  disabled={dependenciesRefreshing || dependenciesLoading}
+                  className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {dependenciesRefreshing ? 'Проверка…' : 'Проверить снова'}
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {dependenciesLoading ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Проверка зависимостей…
+                </p>
+              ) : dependenciesError ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  {dependenciesError}
+                </p>
+              ) : pythonDependencies === null ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Нет данных о зависимостях.
+                </p>
+              ) : (
+                <>
+                  {pythonDependencies.status === 'no_manifest' && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      requirements.txt не найден.
+                    </p>
+                  )}
+                  {pythonDependencies.status === 'parse_error' && (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                      {pythonDependencies.error ?? 'Ошибка разбора requirements.txt.'}
+                    </p>
+                  )}
+                  {pythonDependencies.status === 'unavailable' && (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                      {dependencyErrorMessage(pythonDependencies.error)}
+                    </p>
+                  )}
+                  {pythonDependencies.status !== 'no_manifest' &&
+                    pythonDependencies.status !== 'parse_error' && (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <DependencyCounter
+                          label="Устарели"
+                          value={pythonDependencies.outdated}
+                          tone="amber"
+                        />
+                        <DependencyCounter
+                          label="Актуальны"
+                          value={pythonDependencies.up_to_date}
+                          tone="emerald"
+                        />
+                        <DependencyCounter
+                          label="Неизвестны"
+                          value={pythonDependencies.unknown}
+                          tone="slate"
+                        />
+                        <DependencyCounter
+                          label="Игнорируются"
+                          value={pythonDependencies.ignored}
+                          tone="slate"
+                        />
+                      </div>
+                    )}
+                  {pythonDependencies.packages.length > 0 ? (
+                    <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
+                      {pythonDependencies.packages.map((item) => (
+                        <DependencyPackageRow
+                          key={`${item.name}-${item.manifest_line ?? item.declared}`}
+                          item={item}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    pythonDependencies.status === 'ok' && (
+                      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                        Зависимости не объявлены.
+                      </p>
+                    )
+                  )}
+                  <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                    Проверено: {formatDate(dependencies?.checked_at)} · источник:{' '}
+                    {dependencySourceLabel(pythonDependencies.source)}
                   </p>
                 </>
               )}
@@ -889,6 +1040,140 @@ export default function RepositoryDetails() {
       )}
     </section>
   )
+}
+
+function DependencyBadge({ report }: { report: DependencyEcosystemReport | null }) {
+  let label = 'Нет данных'
+  let className = 'bg-slate-100 text-slate-500 ring-slate-200'
+  if (report?.status === 'no_manifest') {
+    label = 'Нет манифеста'
+  } else if (report?.status === 'parse_error') {
+    label = 'Ошибка парсинга'
+    className = 'bg-red-100 text-red-800 ring-red-200'
+  } else if (report?.status === 'unavailable') {
+    label = 'Недоступно'
+    className = 'bg-amber-100 text-amber-800 ring-amber-200'
+  } else if (report?.status === 'ok' && report.outdated > 0) {
+    label = `${report.outdated} устарели`
+    className = 'bg-amber-100 text-amber-800 ring-amber-200'
+  } else if (report?.status === 'ok') {
+    label = 'Актуально'
+    className = 'bg-emerald-100 text-emerald-800 ring-emerald-200'
+  }
+
+  return (
+    <span
+      data-testid="dependencies-status"
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${className}`}
+    >
+      {label}
+    </span>
+  )
+}
+
+type CounterTone = 'amber' | 'emerald' | 'slate'
+
+function DependencyCounter({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: CounterTone
+}) {
+  const toneClass =
+    tone === 'amber'
+      ? 'text-amber-700 dark:text-amber-300'
+      : tone === 'emerald'
+        ? 'text-emerald-700 dark:text-emerald-300'
+        : 'text-slate-600 dark:text-slate-300'
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
+      <p className={`text-lg font-semibold ${toneClass}`}>{value}</p>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+    </div>
+  )
+}
+
+function DependencyPackageRow({ item }: { item: DependencyPackage }) {
+  const statusClass =
+    item.status === 'outdated'
+      ? 'bg-amber-100 text-amber-800'
+      : item.status === 'current'
+        ? 'bg-emerald-100 text-emerald-800'
+        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
+  const severityClass =
+    item.severity === 'major'
+      ? 'bg-red-100 text-red-800'
+      : item.severity === 'minor'
+        ? 'bg-amber-100 text-amber-800'
+        : 'bg-slate-100 text-slate-600'
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+      <div className="min-w-0">
+        <a
+          href={`https://pypi.org/project/${encodeURIComponent(item.name)}/`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono text-sm font-medium text-primary hover:underline"
+        >
+          {item.name}
+        </a>
+        <p
+          className="truncate font-mono text-[11px] text-slate-500 dark:text-slate-400"
+          title={item.declared}
+        >
+          {item.declared}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="font-mono text-slate-600 dark:text-slate-300">
+          {item.current ?? '—'} → {item.latest ?? '—'}
+        </span>
+        {item.severity && (
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${severityClass}`}>
+            {item.severity}
+          </span>
+        )}
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass}`}>
+          {item.status}
+        </span>
+      </div>
+    </li>
+  )
+}
+
+function dependencyErrorMessage(code: string | null): string {
+  switch (code) {
+    case 'rate_limited':
+      return 'PyPI ограничил частоту запросов. Показаны данные из кэша, если они есть.'
+    case 'timeout':
+      return 'PyPI не ответил вовремя.'
+    case 'registry_unavailable':
+      return 'PyPI временно недоступен.'
+    case 'node_not_implemented':
+      return 'Проверка Node-зависимостей появится в Sprint 26.'
+    default:
+      return code ?? 'Реестр зависимостей недоступен.'
+  }
+}
+
+function dependencySourceLabel(source: DependencyEcosystemReport['source']): string {
+  switch (source) {
+    case 'registry':
+      return 'PyPI'
+    case 'cache':
+      return 'кэш'
+    case 'mixed':
+      return 'PyPI + кэш'
+    case 'stale_cache':
+      return 'устаревший кэш'
+    default:
+      return '—'
+  }
 }
 
 function DockerBadge({ status }: { status: DockerStatus['status'] | undefined }) {

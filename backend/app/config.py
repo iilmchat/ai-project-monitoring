@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     docker_path_map: str = ""
     docker_status_ttl_seconds: int = 30
     docker_timeout_seconds: float = 3.0
+    dependency_cache_ttl_seconds: int = 86400
+    dependency_check_concurrency: int = 4
+    dependency_http_timeout: float = 5.0
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

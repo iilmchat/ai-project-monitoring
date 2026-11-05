@@ -1,8 +1,8 @@
 # ARCHITECTURE — как устроен IIRuchating
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
-реализован в Sprint 24; разделы с пометкой «v0.5.0 (план)» фиксируют проектное
-решение до реализации.
+реализован в Sprint 24; §11 (Python dependencies) — в Sprint 25; Node-часть
+§11 и разделы с пометкой «план» фиксируют проектное решение до реализации.
 
 ---
 
@@ -430,10 +430,14 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 
 ---
 
-## 11. Dependency Management (v0.5.0, план)
+## 11. Dependency Management (v0.5.0, Sprint 25; Node — Sprint 26)
 
 **Задача.** Показать, какие объявленные зависимости устарели, не изменяя
 репозиторий и не запуская пакетные менеджеры.
+
+**Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25.
+Node (`package.json`, npm) — Sprint 26; до этого Node-запись возвращает
+`status=unavailable`/`error=node_not_implemented` при наличии `package.json`.
 
 ### 11.1. Поток
 
@@ -455,10 +459,14 @@ GET /repositories/{id}/dependencies
 | `package.json` | `dependencies`, `devDependencies`; `^`, `~`, exact | `workspace:`, `file:`, `link:`, `git+`, `http(s):`, `npm:` aliases |
 
 - Include-файлы `requirements.txt` разрешены только внутри корня репозитория;
-  циклы и path traversal пропускаются с warning.
+  циклы, path traversal и выход за корень пропускаются. `-c`/constraints и
+  `--index-url`/`--hash` не являются объявлениями зависимостей.
 - Lock-файлы и транзитивные зависимости не анализируются.
 - `current` — exact-версия или нижняя граница диапазона; для сложных диапазонов
-  `current=null`, `status=unknown`. Без `packaging`/`semver`-библиотек.
+  `current=null`, `status=unknown`. Без `packaging`/`semver`-библиотек:
+  сравнение release-части версии (`major.minor.patch`) собственное.
+- `declared` сохраняет исходную строку (без inline-комментария); extras и
+  environment markers не участвуют в запросе к PyPI.
 
 ### 11.3. Кэш
 
@@ -466,29 +474,36 @@ GET /repositories/{id}/dependencies
   payload, checked_at)`.
 - Ключ `pypi:<normalized-name>` / `npm:<normalized-name>`.
 - TTL `DEPENDENCY_CACHE_TTL_SECONDS=86400` (24 ч); кэш переживает перезапуск.
-- In-memory LRU перед БД; single-flight на ключ (asyncio lock), чтобы N
-  одновременных запросов не делали N сетевых вызовов.
+- `DependencyService` использует `session_factory`: чтение/запись кэша идут в
+  отдельных коротких сессиях, поэтому пакеты можно проверять конкурентно.
+- Single-flight на ключ (asyncio lock): N одновременных запросов одного пакета
+  не делают N сетевых вызовов; после lock-а кэш перечитывается.
 - Stale-while-revalidate: при ошибке реестра и наличии stale-записи отдаётся
-  `source=stale_cache`, `checked_at` — время старой проверки.
+  `source=stale_cache` с прежним `latest`; `checked_at` отчёта — момент
+  формирования ответа.
 - `refresh=true` обходит TTL для запрошенного репозитория, но обновляет кэш.
 
 ### 11.4. Registry clients
 
-- PyPI: `GET https://pypi.org/pypi/{name}/json`, latest = `info.version`.
-- npm: `GET https://registry.npmjs.org/{name}/latest`; scoped-имя кодируется
-  (`@scope%2Fname`).
-- Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/<version>`.
-- 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `unknown`.
-- Concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY=4`.
-- Ответы реестров ограничиваются по размеру; в логи не пишутся тела манифестов.
+- PyPI (Sprint 25): `GET https://pypi.org/pypi/{name}/json`, latest =
+  `info.version`; имя URL-encode.
+- npm (Sprint 26): `GET https://registry.npmjs.org/{name}/latest`; scoped-имя
+  кодируется (`@scope%2Fname`).
+- Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/0.5`.
+- 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `not_found`
+  (пакет получает `status=unknown`).
+- Concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY=4`; исключения клиента
+  превращаются в `registry_unavailable`, а не в 500.
+- В логи не пишутся тела манифестов; ответы реестров не кэшируются целиком,
+  только latest/etag/payload статуса.
 
 ### 11.5. Partial failure
 
 - Ошибка одного пакета не скрывает остальные: пакет получает `unknown`/`latest=null`.
 - Если реестр недоступен и кэша нет — `ecosystem.status=unavailable`,
-  `error.code` (`rate_limited`, `registry_unavailable`, `timeout`), HTTP 200.
+  `error` (`rate_limited`, `registry_unavailable`, `timeout`), HTTP 200.
 - Один ecosystem не влияет на другой: Python может быть `ok`, Node — `unavailable`.
-- `checked_at` и `source` позволяют UI показать stale-состояние.
+- `source` и `error` позволяют UI показать stale/частичное состояние.
 
 ### 11.6. Read-only и безопасность
 

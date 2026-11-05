@@ -78,6 +78,17 @@ Backend монтирует Docker-сокет хоста read-only и показ�
   `status: "unavailable"` и текст ошибки; остальной дашборд продолжит работать.
   Подробности — KI-009.
 
+### Проверка зависимостей (v0.5.0, Sprint 25)
+
+Backend читает `requirements.txt` в корне репозитория и сверяет версии с PyPI:
+
+- `GET /api/v1/repositories/{id}/dependencies?ecosystem=python`.
+- `refresh=true` запускает повторную проверку, иначе используется кэш
+  `dependency_cache` с TTL 24 часа.
+- `pip`/`npm` не запускаются; читаются только манифесты внутри репозитория.
+- Node (`package.json`) появится в Sprint 26; до этого `ecosystem=node`
+  возвращает `status=unavailable`, `error=node_not_implemented`.
+
 ---
 
 ## 4. Локальный запуск (без Docker)

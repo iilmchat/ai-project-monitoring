@@ -1,9 +1,8 @@
 # SPEC — спецификация проекта (источник истины по контрактам)
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
-Разделы с пометкой «v0.5.0, план» — проектные контракты следующего релиза,
-ещё не реализованные в текущей версии. Docker-контракт §3.14 реализован в
-Sprint 24; dependency-контракт §3.15 остаётся планом до Sprint 25–26.
+Разделы с пометкой «v0.5.0» — контракты следующего релиза. Docker §3.14
+реализован в Sprint 24; Python dependency §3.15 — в Sprint 25, Node — в Sprint 26.
 
 **Версия:** v0.4.0 (текущая) · v0.5.0 «Insights & Integrations» (в разработке) · **Обновлено:** 2026-11-06
 
@@ -398,10 +397,14 @@ Docker API наружу не отдаётся, только нормализов
 
 ---
 
-### 3.15. Dependency management (v0.5.0, план)
+### 3.15. Dependency management (v0.5.0, Sprint 25)
 
 Проверка объявленных зависимостей по манифестам в корне репозитория.
 Файлы только читаются; `pip`/`npm`/`pnpm` не запускаются.
+
+**Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25.
+Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` при наличии
+`package.json` возвращает `status=unavailable`, `error=node_not_implemented`.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -465,13 +468,19 @@ Docker API наружу не отдаётся, только нормализов
 - Python: `==` → `exact`; `~=`, `>=`, `>`, `<=`, `<` → `range`. `current` —
   точная версия для `exact` или нижняя граница диапазона; если граница не
   извлекается — `current=null`, `status=unknown`.
-- Node: `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` → `range`/`unknown`.
-  `workspace:`, `file:`, `link:`, `git+`, `http(s):`, `npm:` → `ignored`.
+- Python: `-e`, VCS, local path и URL → `ignored`; `-r` include читается
+  относительно манифеста, только внутри корня репозитория, глубина ≤ 3;
+  `-c`/constraints не раскрываются.
+- Node (Sprint 26): `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` →
+  `range`/`unknown`. `workspace:`, `file:`, `link:`, `git+`, `http(s):`,
+  `npm:` → `ignored`.
 - `declared` сохраняет исходное объявление; extras, environment markers и hashes
   не участвуют в сравнении.
 - `manifest_line` — 1-based строка для `requirements.txt`; для `package.json`
   `null`. `manifest_section` — `dependencies`/`devDependencies` для Node, иначе
   `null`.
+- `severity` считается по первой различающейся части версии (major/minor/patch)
+  от `current` к `latest`.
 - Транзитивные зависимости и lock-файлы **не** анализируются.
 
 **Кэш:** `DEPENDENCY_CACHE_TTL_SECONDS` (default 86400 = 24 ч), ключ
@@ -482,8 +491,10 @@ Docker API наружу не отдаётся, только нормализов
 
 **Rate limits и ошибки:** concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY` (default 4),
 timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 с).
-Ошибка одного пакета не скрывает остальные. Коды `error.code`: `no_manifest`,
-`parse_error`, `rate_limited`, `registry_unavailable`, `timeout`, `not_found`.
+Ошибка одного пакета не скрывает остальные. `error` — строка: для registry-ошибок
+используются коды `rate_limited`, `registry_unavailable`, `timeout`; для
+`parse_error` — сообщение; для Node-заглушки — `node_not_implemented`.
+Пакет, отсутствующий в PyPI (404), получает `latest=null`, `status=unknown`.
 При недоступном реестре и отсутствии кэша — `ecosystem.status=unavailable`,
 HTTP 200 (частичный отчёт).
 
@@ -577,7 +588,7 @@ dependency_cache(           -- v0.5.0
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |
 | **Токены провайдеров** | **`GITHUB_TOKEN`, `GITFLIC_TOKEN` (обязательны для mirror; без них `mirror_status=unavailable`, `mirror_expected` не влияет на UI-шум)** |
 | **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_HOST` (SDK default: UDS/npipe; в compose — `unix:///var/run/docker.sock`), `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30), `DOCKER_TIMEOUT_SECONDS` (default 3); только `GET`-операции** |
-| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — только `requirements.txt` и `package.json` в корне (+ относительные `-r` include)** |
+| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25) и `package.json` (Node, Sprint 26) в корне (+ относительные `-r` include)** |
 
 ---
 
@@ -613,11 +624,11 @@ dependency_cache(           -- v0.5.0
       монтируется `:ro`; проверка grep-аудитом.
 - [ ] Charts: recharts использует M3-токены, графики читаемы в light/dark,
       контраст WCAG AA.
-- [ ] Python: `requirements.txt` парсится (pins/ranges/includes/markers),
+- [x] Python: `requirements.txt` парсится (pins/ranges/includes/markers),
       устаревшие пакеты выводятся в карточке.
 - [ ] Node: `package.json` (`dependencies`/`devDependencies`) парсится,
       scoped/ignored/ranges классифицируются корректно.
-- [ ] Кэш зависимостей: TTL 24 ч, переживает перезапуск, rate-limit → partial/
+- [x] Кэш зависимостей: TTL 24 ч, переживает перезапуск, rate-limit → partial/
       `unavailable`, без 5xx.
 - [ ] Тесты: манифесты на реальных tmp-репозиториях; PyPI/npm — на fake-клиентах.
 - [ ] Релиз: docs-consistency audit, тег `v0.5.0` в GitHub и GitFlic, `SHA(main)`

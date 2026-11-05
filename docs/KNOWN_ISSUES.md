@@ -102,4 +102,6 @@
 
 **Workaround:** не открывать dependency-блок массово; использовать `refresh=true` только для конкретного репозитория; дождаться восстановления лимита.
 
-**План (Sprint 25–26):** TTL-кэш 24 ч (`dependency_cache`, переживает перезапуск), concurrency ≤ 4, backoff 0.5/1/2 с, stale-while-revalidate, partial results. `refresh=true` — только по явному действию пользователя.
+**Реализовано (Python, Sprint 25):** TTL-кэш 24 ч (`dependency_cache`, переживает перезапуск), concurrency ≤ 4, backoff 0.5/1/2 с, stale-while-revalidate, partial results. `refresh=true` — только по явному действию пользователя.
+
+**Осталось (Sprint 26):** распространить ту же стратегию на npm-клиент и `package.json`.

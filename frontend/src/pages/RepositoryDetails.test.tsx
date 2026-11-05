@@ -7,6 +7,7 @@ import {
   getActions,
   getCiStatus,
   getConflicts,
+  getDependencies,
   getDockerStatus,
   getLog,
   getMirror,
@@ -16,6 +17,7 @@ import {
 } from '../api/client'
 import type {
   DashboardRepository,
+  DependencyReport,
   DockerStatus,
   MirrorStatus,
   RepositoryStatus,
@@ -26,6 +28,7 @@ vi.mock('../api/client', () => ({
   getActions: vi.fn(),
   getCiStatus: vi.fn(),
   getConflicts: vi.fn(),
+  getDependencies: vi.fn(),
   getDockerStatus: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
@@ -92,6 +95,26 @@ const dockerUnavailable: DockerStatus = {
   checked_at: '2026-11-05T10:00:00Z',
 }
 
+const dependenciesNoManifest: DependencyReport = {
+  repository_id: 1,
+  checked_at: '2026-11-05T10:00:00Z',
+  ecosystems: [
+    {
+      ecosystem: 'python',
+      manifest: 'requirements.txt',
+      status: 'no_manifest',
+      source: 'none',
+      total: 0,
+      outdated: 0,
+      up_to_date: 0,
+      unknown: 0,
+      ignored: 0,
+      packages: [],
+      error: null,
+    },
+  ],
+}
+
 function renderDetails() {
   return render(
     <MemoryRouter initialEntries={['/repo/1']}>
@@ -125,6 +148,7 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getActions).mockResolvedValue([])
     vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
     vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)
+    vi.mocked(getDependencies).mockResolvedValue(dependenciesNoManifest)
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',
@@ -200,5 +224,65 @@ describe('RepositoryDetails actions', () => {
     expect(await screen.findByText('Docker not available')).toBeInTheDocument()
     expect(screen.getByText('Docker daemon not running')).toBeInTheDocument()
     expect(screen.getByText('Статус')).toBeInTheDocument()
+  })
+
+  it('shows the no-manifest dependency state', async () => {
+    renderDetails()
+
+    expect(await screen.findByText('requirements.txt не найден.')).toBeInTheDocument()
+    expect(screen.getByText('Нет манифеста')).toBeInTheDocument()
+  })
+
+  it('renders Python dependency counters and outdated packages', async () => {
+    vi.mocked(getDependencies).mockResolvedValue({
+      repository_id: 1,
+      checked_at: '2026-11-05T10:00:00Z',
+      ecosystems: [
+        {
+          ecosystem: 'python',
+          manifest: 'requirements.txt',
+          status: 'ok',
+          source: 'registry',
+          total: 2,
+          outdated: 1,
+          up_to_date: 1,
+          unknown: 0,
+          ignored: 0,
+          packages: [
+            {
+              name: 'fastapi',
+              declared: 'fastapi==0.115.6',
+              current: '0.115.6',
+              latest: '0.115.6',
+              status: 'current',
+              kind: 'exact',
+              severity: null,
+              manifest_line: 1,
+              manifest_section: null,
+            },
+            {
+              name: 'requests',
+              declared: 'requests>=2.31',
+              current: '2.31',
+              latest: '2.32.0',
+              status: 'outdated',
+              kind: 'range',
+              severity: 'minor',
+              manifest_line: 2,
+              manifest_section: null,
+            },
+          ],
+          error: null,
+        },
+      ],
+    })
+
+    renderDetails()
+
+    expect(await screen.findByTestId('dependencies-block')).toBeInTheDocument()
+    expect(await screen.findByText('1 устарели')).toBeInTheDocument()
+    expect(screen.getByText('requests')).toBeInTheDocument()
+    expect(screen.getByText(/2.32.0/)).toBeInTheDocument()
+    expect(screen.getByText('minor')).toBeInTheDocument()
   })
 })

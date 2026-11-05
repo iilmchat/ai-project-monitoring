@@ -9,11 +9,18 @@
 - feat(docker): DooD — `/var/run/docker.sock:ro`, `DOCKER_HOST`, `DOCKER_PATH_MAP`; ошибки Docker не дают 5xx (S24-003).
 - feat(ui): блок «Docker Containers» в деталях репозитория (S24-004).
 - test(docker): fake Docker client, path mapping, cache/refresh и API-контракт.
+- feat(deps): `dependency_cache` + миграция 006, TTL 24 ч, single-flight и stale-while-revalidate (S25-001).
+- feat(deps): безопасный парсер `requirements.txt` — pins, ranges, extras, markers, `-r` include (S25-002).
+- feat(deps): PyPI-клиент с timeout, retry/backoff на 429/5xx и partial results (S25-003).
+- feat(deps): `GET /repositories/{id}/dependencies` с фильтром `ecosystem` (S25-004).
+- feat(ui): блок «Зависимости» — счётчики, severity и ссылки на PyPI (S25-005).
+- test(deps): парсер, cache/single-flight/stale, API-контракт.
 
 ### Документация
 
 - docs(planning): план v0.5.0 — Dark Charts, Docker, зависимости Python/Node (S23-001..S23-003).
 - docs(docker): SPEC §3.14, ARCHITECTURE §10, ADR-0007, KI-009.
+- docs(deps): SPEC §3.15, ARCHITECTURE §11, ADR-0008, KI-010.
 
 ## [0.4.0] - 2026-11-05
 

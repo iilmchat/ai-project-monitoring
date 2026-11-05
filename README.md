@@ -107,9 +107,9 @@ pnpm --dir frontend dev
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.4.0** (2026-11-05); v0.5.0 — в разработке |
-| Спринты | 1–24 (Sprint 24 v0.5.0 завершён) |
-| Тесты backend | **131** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **14** (Vitest + Testing Library) |
+| Спринты | 1–25 (Sprint 25 v0.5.0 завершён) |
+| Тесты backend | **145** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **16** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 114.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
