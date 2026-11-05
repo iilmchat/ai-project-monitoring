@@ -9,6 +9,7 @@ import httpx
 import structlog
 
 from app.providers.base import BranchResult, ProviderRepo
+from app.providers.cache import TTLCache
 
 logger = structlog.get_logger(__name__)
 
@@ -33,10 +34,12 @@ class GitHubClient:
         *,
         timeout: float = 10.0,
         base_url: str = GITHUB_API,
+        cache_ttl_seconds: int = 60,
     ) -> None:
         self._token = token
         self._timeout = timeout
         self._base_url = base_url.rstrip("/")
+        self._cache = TTLCache(cache_ttl_seconds)
 
     @property
     def configured(self) -> bool:
@@ -58,6 +61,11 @@ class GitHubClient:
     async def get_branch(self, full_name: str, branch: str) -> BranchResult:
         if not self._token:
             return BranchResult(error="not_configured")
+
+        cache_key = f"github:{full_name}:{branch}"
+        cached = self._cache.get(cache_key)
+        if isinstance(cached, BranchResult):
+            return cached
 
         url = f"{self._base_url}/repos/{full_name}/branches/{branch}"
         try:
@@ -90,7 +98,9 @@ class GitHubClient:
         date = _parse_date(nested.get("committer", {}).get("date"))
         if not sha:
             return BranchResult(error="invalid_response")
-        return BranchResult(sha=str(sha), date=date)
+        result = BranchResult(sha=str(sha), date=date)
+        self._cache.set(cache_key, result)
+        return result
 
     async def get_branch_sha(self, full_name: str, branch: str) -> str | None:
         result = await self.get_branch(full_name, branch)
@@ -171,6 +181,10 @@ class GitHubClient:
         if not self._token:
             return []
 
+        cached = self._cache.get("github:list")
+        if isinstance(cached, list):
+            return cached
+
         repos: list[dict[str, object]] = []
         for page in range(1, 4):
             url = f"{self._base_url}/user/repos"
@@ -219,6 +233,7 @@ class GitHubClient:
                 )
             if len(batch) < 100:
                 break
+        self._cache.set("github:list", repos)
         return repos
 
 

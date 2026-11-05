@@ -168,3 +168,19 @@ export async function getActions(repositoryId: number, limit = 20): Promise<Acti
 export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
   return request<CIStatus>(`/repositories/${repositoryId}/ci-status`)
 }
+
+export async function bulkFetchAll(trackedOnly = true): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/repositories/actions/fetch_all', {
+    method: 'POST',
+    query: { tracked_only: trackedOnly },
+  })
+}
+
+export async function bulkSyncMirrorsAll(
+  trackedOnly = true,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/repositories/actions/sync_mirrors_all', {
+    method: 'POST',
+    query: { tracked_only: trackedOnly },
+  })
+}

@@ -8,6 +8,8 @@ import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import Dashboard from './Dashboard'
 
 vi.mock('../api/client', () => ({
+  bulkFetchAll: vi.fn(),
+  bulkSyncMirrorsAll: vi.fn(),
   getDashboard: vi.fn(),
   scan: vi.fn(),
   getScan: vi.fn(),
@@ -110,7 +112,7 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('summary-attention')).toHaveTextContent('1')
     expect(screen.getByTestId('summary-untracked')).toHaveTextContent('1')
 
-    expect(screen.getByRole('columnheader', { name: 'Репозиторий' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Репозиторий/ })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Ahead / Behind' })).toBeInTheDocument()
     expect(screen.getAllByText('current').length).toBeGreaterThan(0)
     expect(screen.getByText('untracked')).toBeInTheDocument()
@@ -127,5 +129,17 @@ describe('Dashboard', () => {
 
     expect(screen.queryByText('alpha')).not.toBeInTheDocument()
     expect(screen.getByText('beta')).toBeInTheDocument()
+  })
+
+  it('filters repositories by search query', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+
+    expect(await screen.findByText('beta')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Поиск по имени или пути…'), 'alpha')
+
+    expect(screen.getByText('alpha')).toBeInTheDocument()
+    expect(screen.queryByText('beta')).not.toBeInTheDocument()
   })
 })

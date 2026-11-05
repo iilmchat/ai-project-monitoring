@@ -9,6 +9,7 @@ import httpx
 import structlog
 
 from app.providers.base import BranchResult, ProviderRepo
+from app.providers.cache import TTLCache
 
 logger = structlog.get_logger(__name__)
 
@@ -33,10 +34,12 @@ class GitFlicClient:
         *,
         timeout: float = 10.0,
         base_url: str = GITFLIC_API,
+        cache_ttl_seconds: int = 60,
     ) -> None:
         self._token = token
         self._timeout = timeout
         self._base_url = base_url.rstrip("/")
+        self._cache = TTLCache(cache_ttl_seconds)
 
     @property
     def configured(self) -> bool:
@@ -55,6 +58,11 @@ class GitFlicClient:
     async def get_branch(self, full_name: str, branch: str) -> BranchResult:
         if not self._token:
             return BranchResult(error="not_configured")
+
+        cache_key = f"gitflic:{full_name}:{branch}"
+        cached = self._cache.get(cache_key)
+        if isinstance(cached, BranchResult):
+            return cached
 
         # GitFlic exposes branches as a list; select the requested branch.
         url = f"{self._base_url}/project/{full_name}/branches"
@@ -92,7 +100,9 @@ class GitFlicClient:
             sha = commit.get("sha") or commit.get("hash") or item.get("sha")
             date = _parse_date(commit.get("date") or item.get("date"))
             if sha:
-                return BranchResult(sha=str(sha), date=date)
+                result = BranchResult(sha=str(sha), date=date)
+                self._cache.set(cache_key, result)
+                return result
         return BranchResult(sha=None, found=False)
 
     async def get_branch_sha(self, full_name: str, branch: str) -> str | None:
@@ -111,6 +121,10 @@ class GitFlicClient:
     async def list_repos(self) -> list[dict[str, object]]:
         if not self._token:
             return []
+
+        cached = self._cache.get("gitflic:list")
+        if isinstance(cached, list):
+            return cached
 
         repos: list[dict[str, object]] = []
         url = f"{self._base_url}/projects"
@@ -168,6 +182,7 @@ class GitFlicClient:
                     "url": repo.url,
                 }
             )
+        self._cache.set("gitflic:list", repos)
         return repos
 
 

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
+  bulkFetchAll,
+  bulkSyncMirrorsAll,
   getDashboard,
   getScan,
   scan,
@@ -12,6 +14,8 @@ import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
 
 type Filter = 'all' | 'attention' | 'untracked' | 'mirror'
+type SortKey = 'name' | 'status' | 'ahead'
+type SortDirection = 'asc' | 'desc'
 
 const ATTENTION_STATES = new Set(['dirty', 'ahead', 'behind', 'diverged', 'no_upstream'])
 const MIRROR_OK = new Set(['in_sync', 'not_applicable'])
@@ -48,16 +52,25 @@ export default function Dashboard() {
   const [scanning, setScanning] = useState(false)
   const [busyRepository, setBusyRepository] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+  const [bulkPolling, setBulkPolling] = useState(false)
 
-  async function loadDashboard() {
-    setLoading(true)
+  async function loadDashboard(silent = false) {
+    if (!silent) {
+      setLoading(true)
+    }
     try {
       setDashboard(await getDashboard())
       setError(null)
     } catch {
       setError('Не удалось загрузить дашборд. Проверьте, запущен ли backend.')
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -85,6 +98,22 @@ export default function Dashboard() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!bulkPolling) {
+      return
+    }
+    const interval = window.setInterval(() => {
+      void getDashboard()
+        .then((data) => setDashboard(data))
+        .catch(() => undefined)
+    }, 2000)
+    const timeout = window.setTimeout(() => setBulkPolling(false), 30000)
+    return () => {
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+    }
+  }, [bulkPolling])
 
   async function handleScan() {
     setScanning(true)
@@ -118,21 +147,77 @@ export default function Dashboard() {
     }
   }
 
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDirection('asc')
+    }
+  }
+
+  function sortIndicator(key: SortKey): string {
+    if (sortKey !== key) {
+      return ''
+    }
+    return sortDirection === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  async function handleBulk(kind: 'fetch' | 'sync') {
+    setBulkMessage('Задача запущена в фоне…')
+    try {
+      if (kind === 'fetch') {
+        await bulkFetchAll()
+      } else {
+        await bulkSyncMirrorsAll()
+      }
+      setBulkPolling(true)
+    } catch {
+      setBulkMessage('Не удалось запустить задачу.')
+    }
+  }
+
   const repositories = useMemo(() => {
     if (!dashboard) {
       return []
     }
+    let items: DashboardRepository[]
     if (filter === 'attention') {
-      return dashboard.repositories.filter(needsAttention)
+      items = dashboard.repositories.filter(needsAttention)
+    } else if (filter === 'untracked') {
+      items = dashboard.repositories.filter((repository) => !repository.tracked)
+    } else if (filter === 'mirror') {
+      items = dashboard.repositories.filter(hasMirrorIssue)
+    } else {
+      items = dashboard.repositories
     }
-    if (filter === 'untracked') {
-      return dashboard.repositories.filter((repository) => !repository.tracked)
+
+    const needle = query.trim().toLowerCase()
+    if (needle) {
+      items = items.filter(
+        (repository) =>
+          displayName(repository).toLowerCase().includes(needle) ||
+          repository.path.toLowerCase().includes(needle),
+      )
     }
-    if (filter === 'mirror') {
-      return dashboard.repositories.filter(hasMirrorIssue)
-    }
-    return dashboard.repositories
-  }, [dashboard, filter])
+
+    const direction = sortDirection === 'asc' ? 1 : -1
+    return [...items].sort((left, right) => {
+      if (sortKey === 'status') {
+        const l = left.status?.state ?? ''
+        const r = right.status?.state ?? ''
+        return l.localeCompare(r) * direction
+      }
+      if (sortKey === 'ahead') {
+        const l = (left.status?.ahead ?? 0) - (right.status?.ahead ?? 0)
+        if (l !== 0) {
+          return l * direction
+        }
+        return ((left.status?.behind ?? 0) - (right.status?.behind ?? 0)) * direction
+      }
+      return displayName(left).localeCompare(displayName(right)) * direction
+    })
+  }, [dashboard, filter, query, sortKey, sortDirection])
 
   const summary = dashboard?.summary
 
@@ -158,6 +243,39 @@ export default function Dashboard() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleBulk('fetch')}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Fetch All
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulk('sync')}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Sync Mirrors
+          </button>
+        </div>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Поиск по имени или пути…"
+          className="w-full max-w-xs rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+        />
+      </div>
+
+      {bulkMessage && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+          {bulkMessage}
+          {bulkPolling ? ' Обновление статусов каждые 2 с…' : ''}
         </div>
       )}
 
@@ -213,11 +331,35 @@ export default function Dashboard() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Репозиторий</th>
+                  <th className="px-4 py-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('name')}
+                      className="hover:text-slate-800"
+                    >
+                      Репозиторий{sortIndicator('name')}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 font-medium">Ветка</th>
-                  <th className="px-4 py-3 font-medium">Статус</th>
+                  <th className="px-4 py-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('status')}
+                      className="hover:text-slate-800"
+                    >
+                      Статус{sortIndicator('status')}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 font-medium">Зеркало</th>
-                  <th className="px-4 py-3 font-medium">Ahead / Behind</th>
+                  <th className="px-4 py-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('ahead')}
+                      className="hover:text-slate-800"
+                    >
+                      Ahead / Behind{sortIndicator('ahead')}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 font-medium">Действия</th>
                 </tr>
               </thead>

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,7 @@ from app.services.action_service import (
     ConfirmationRequiredError,
     UnknownActionError,
 )
+from app.services.bulk_service import BulkService
 from app.services.compare_cache import CompareCache
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
@@ -64,6 +65,11 @@ def _mirror_service(request: Request) -> MirrorService:
 
 def _action_service(request: Request) -> ActionService:
     service: ActionService = request.app.state.action_service
+    return service
+
+
+def _bulk_service(request: Request) -> BulkService:
+    service: BulkService = request.app.state.bulk_service
     return service
 
 
@@ -427,6 +433,37 @@ async def run_mirror_action(
             detail=entry.error or entry.output or "action failed",
         )
     return ActionLogResponse.model_validate(entry)
+
+
+@router.post("/repositories/actions/fetch_all", status_code=status.HTTP_202_ACCEPTED)
+async def bulk_fetch_all(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    tracked_only: Annotated[bool, Query()] = True,
+) -> dict[str, object]:
+    background_tasks.add_task(_bulk_service(request).fetch_all, tracked_only)
+    return {
+        "status": "accepted",
+        "action": "fetch_all",
+        "tracked_only": tracked_only,
+    }
+
+
+@router.post(
+    "/repositories/actions/sync_mirrors_all",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def bulk_sync_mirrors(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    tracked_only: Annotated[bool, Query()] = True,
+) -> dict[str, object]:
+    background_tasks.add_task(_bulk_service(request).sync_mirrors_all, tracked_only)
+    return {
+        "status": "accepted",
+        "action": "sync_mirrors_all",
+        "tracked_only": tracked_only,
+    }
 
 
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])

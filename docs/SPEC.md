@@ -262,6 +262,19 @@
 
 ---
 
+## 3.11. Bulk actions
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true) | `202 {status:"accepted"}` |
+| POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?` | `202 {status:"accepted"}` |
+
+Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
+`fetch_all` делает `git fetch --all --prune`; `sync_mirrors_all` — `git push gitflic <branch>`
+для `mirror_status ∈ {behind_gitflic, missing_on_gitflic}` и пишет `action_log` (`actor=bulk`).
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(

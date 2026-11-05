@@ -18,6 +18,7 @@ from app.middleware import RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
 from app.services.action_service import ActionService
+from app.services.bulk_service import BulkService
 from app.services.compare_cache import CompareCache
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
@@ -53,10 +54,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notifications=notification_service,
     )
     github_client = GitHubClient(
-        resolved.github_token, timeout=resolved.provider_timeout_seconds
+        resolved.github_token,
+        timeout=resolved.provider_timeout_seconds,
+        cache_ttl_seconds=resolved.provider_cache_ttl_seconds,
     )
     gitflic_client = GitFlicClient(
-        resolved.gitflic_token, timeout=resolved.provider_timeout_seconds
+        resolved.gitflic_token,
+        timeout=resolved.provider_timeout_seconds,
+        cache_ttl_seconds=resolved.provider_cache_ttl_seconds,
     )
     mirror_service = MirrorService(
         session_factory,
@@ -71,6 +76,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notifications=notification_service,
     )
     action_service = ActionService(timeout_seconds=resolved.action_timeout_seconds)
+    bulk_service = BulkService(
+        session_factory,
+        concurrency=resolved.scan_concurrency,
+        fetch_timeout=resolved.fetch_timeout,
+        action_timeout=resolved.action_timeout_seconds,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -107,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.mirror_service = mirror_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
+    application.state.bulk_service = bulk_service
     application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(

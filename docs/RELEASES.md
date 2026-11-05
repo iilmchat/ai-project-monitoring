@@ -245,3 +245,22 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 107 passed
 - Frontend-тесты: 3 passed
 - Entry bundle: ~83 kB gzip
+
+---
+
+## Спринт 13: Bulk Actions & Caching (v0.3.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S13-001: `BulkService` — массовые fetch/sync с `asyncio.Semaphore(5)`, фоновые API
+- [x] S13-002: TTL-кэш провайдеров (`PROVIDER_CACHE_TTL_SECONDS=60`)
+- [x] S13-003: UI Fetch All / Sync Mirrors + polling прогресса
+- [x] S13-004: сортировка таблицы и поиск по имени/пути
+- [x] S13-005: тесты, SPEC §3.11, CHANGELOG, RELEASES
+
+### Метрики
+- Backend-тесты: 111 passed
+- Frontend-тесты: 4 passed
+- Entry bundle: ~83 kB gzip

@@ -106,8 +106,8 @@ pnpm --dir frontend dev
 |------------|----------|
 | Версия | **v0.2.0** (2026-11-05) |
 | Спринты | 1–12 (v0.2.0 «Observability & Mirror») |
-| Тесты backend | **107** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **3** (Vitest + Testing Library) |
+| Тесты backend | **111** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **4** (Vitest + Testing Library) |
 | Entry bundle | ~83 kB gzip (React 19 + Router) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |

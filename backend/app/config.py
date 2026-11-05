@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     mirror_poll_interval_seconds: int = 300
     mirror_status_ttl_seconds: int = 300
     provider_timeout_seconds: float = 10.0
+    provider_cache_ttl_seconds: int = 60
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     notify_on: str = (
