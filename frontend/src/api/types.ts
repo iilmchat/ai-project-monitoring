@@ -128,6 +128,22 @@ export interface CIStatus {
   aggregate: string
 }
 
+export interface AppSettings {
+  scan_roots: string
+  github_token: string
+  gitflic_token: string
+  webhook_secret: string
+  default_canonical_provider: string
+}
+
+export interface SettingsUpdate {
+  scan_roots?: string
+  github_token?: string
+  gitflic_token?: string
+  webhook_secret?: string
+  default_canonical_provider?: 'github' | 'gitflic'
+}
+
 export interface DashboardResponse {
   summary: DashboardSummary
   repositories: DashboardRepository[]

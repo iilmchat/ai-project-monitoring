@@ -282,3 +282,21 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 111 passed
 - Frontend-тесты: 5 passed
 - Entry bundle: 84.03 kB gzip; charts chunk (lazy): 114.34 kB gzip
+
+---
+
+## Спринт 15: Settings & Mass Migration (v0.3.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S15-001: `AppSetting` + миграция `005`, `SettingsService`, `GET/PATCH /settings`, маскировка токенов
+- [x] S15-002: массовая миграция `canonical_provider → gitflic` + 202 background API
+- [x] S15-003: страница `/settings`, ссылка в шапке, кнопка «Мигрировать на GitFlic» на дашборде
+- [x] S15-004: тесты settings/migration, SPEC/CHANGELOG/RELEASES
+
+### Метрики
+- Backend-тесты: 116 passed
+- Frontend-тесты: 5 passed
+- Entry bundle: 84.18 kB gzip

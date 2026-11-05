@@ -1,5 +1,6 @@
 import type {
   ActionLog,
+  AppSettings,
   CIStatus,
   CommitInfo,
   CompareResponse,
@@ -13,6 +14,7 @@ import type {
   RepositoryStatus,
   ScanStarted,
   ScanStatus,
+  SettingsUpdate,
 } from './types'
 
 const API_BASE = '/api/v1'
@@ -183,4 +185,18 @@ export async function bulkSyncMirrorsAll(
     method: 'POST',
     query: { tracked_only: trackedOnly },
   })
+}
+
+export async function migrateToGitflic(): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/repositories/actions/migrate_to_gitflic', {
+    method: 'POST',
+  })
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  return request<AppSettings>('/settings')
+}
+
+export async function updateSettings(payload: SettingsUpdate): Promise<AppSettings> {
+  return request<AppSettings>('/settings', { method: 'PATCH', body: payload })
 }

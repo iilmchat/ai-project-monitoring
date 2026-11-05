@@ -49,6 +49,10 @@ class GitFlicClient:
     def provider(self) -> str:
         return "gitflic"
 
+    def set_token(self, token: str) -> None:
+        self._token = token
+        self._cache.clear()
+
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self._token:

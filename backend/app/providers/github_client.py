@@ -49,6 +49,10 @@ class GitHubClient:
     def provider(self) -> str:
         return "github"
 
+    def set_token(self, token: str) -> None:
+        self._token = token
+        self._cache.clear()
+
     def _headers(self) -> dict[str, str]:
         headers = {
             "Accept": "application/vnd.github+json",

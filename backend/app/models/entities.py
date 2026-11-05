@@ -151,6 +151,21 @@ class WebhookEvent(Base):
         return f"WebhookEvent(provider={self.provider!r}, event_type={self.event_type!r})"
 
 
+class AppSetting(Base):
+    """Key/value application settings persisted in the database (S15-001)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"AppSetting(key={self.key!r})"
+
+
 class ActionLog(Base):
     """Audit trail for explicitly confirmed mutations (SPEC §3.7, S10-005)."""
 
@@ -200,6 +215,7 @@ class ScanRun(Base):
 
 __all__ = [
     "ActionLog",
+    "AppSetting",
     "Repository",
     "RepositoryMirrorStatus",
     "RepositoryStatus",

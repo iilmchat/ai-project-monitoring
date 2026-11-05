@@ -145,6 +145,44 @@ class BulkService:
         )
         return summary
 
+    async def migrate_to_gitflic(self) -> dict[str, Any]:
+        async with self._session_factory() as session:
+            repositories = (
+                await session.scalars(
+                    select(Repository).where(Repository.canonical_provider == "github")
+                )
+            ).all()
+            updated = 0
+            skipped = 0
+            for repository in repositories:
+                if not repository.gitflic_full_name:
+                    skipped += 1
+                    continue
+                repository.canonical_provider = "gitflic"
+                repository.mirror_policy = "gitflic_to_github"
+                mirror_row = await session.scalar(
+                    select(RepositoryMirrorStatus).where(
+                        RepositoryMirrorStatus.repository_id == repository.id
+                    )
+                )
+                if mirror_row is not None:
+                    await session.delete(mirror_row)
+                updated += 1
+            await session.commit()
+
+        summary = {
+            "updated": updated,
+            "skipped": skipped,
+            "total": len(repositories),
+        }
+        logger.info(
+            "bulk_migration_completed",
+            updated=updated,
+            skipped=skipped,
+            total=len(repositories),
+        )
+        return summary
+
     async def _branch(self, repository_id: int) -> str:
         async with self._session_factory() as session:
             row = await session.scalar(

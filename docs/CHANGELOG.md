@@ -10,6 +10,9 @@
 
 ### Добавлено
 
+- feat(settings): `app_settings` + `GET/PATCH /settings` с маскировкой токенов; значения подхватываются в конфиг при старте.
+- feat(settings-ui): страница `/settings` (SCAN_ROOTS, токены, webhook secret, default provider) и ссылка в шапке.
+- feat(migration): `POST /repositories/actions/migrate_to_gitflic` — массовый перевод canonical на GitFlic + отчёт.
 - feat(ui): тёмная тема (`darkMode: 'class'`, ThemeProvider + localStorage, переключатель в шапке).
 - feat(ui): аналитика дашборда — Pie Chart по состояниям и Bar Chart по `mirror_status` (recharts, lazy-загрузка).
 - feat(ui): кликабельные строки таблицы, hover, поиск/сортировка, dark-варианты бейджей и модалок.

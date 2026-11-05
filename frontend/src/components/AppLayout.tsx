@@ -26,6 +26,13 @@ export default function AppLayout() {
             <Link to="/" className="hover:text-primary">
               Дашборд
             </Link>
+            <Link
+              to="/settings"
+              className="inline-flex items-center gap-1 hover:text-primary"
+              title="Настройки"
+            >
+              <span aria-hidden="true">⚙</span> Настройки
+            </Link>
             <ThemeToggle />
           </nav>
         </div>

@@ -10,6 +10,7 @@ from app.services.mirror_service import MirrorService, MirrorSnapshot, classify_
 from app.services.notification_service import NotificationService
 from app.services.recommendation_service import Recommendation, generate_recommendations
 from app.services.remote_service import RemoteFetchResult, RemoteService
+from app.services.settings_service import SettingsService
 from app.services.status_service import (
     StatusCache,
     StatusService,
@@ -29,6 +30,7 @@ __all__ = [
     "RemoteFetchResult",
     "RemoteService",
     "ScanResult",
+    "SettingsService",
     "StatusCache",
     "StatusService",
     "StatusSnapshot",

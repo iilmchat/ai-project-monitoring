@@ -24,6 +24,7 @@ from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
 from app.services.remote_service import RemoteService
+from app.services.settings_service import SettingsService
 from app.services.status_service import StatusCache, StatusService
 
 logger = structlog.get_logger(__name__)
@@ -82,6 +83,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         fetch_timeout=resolved.fetch_timeout,
         action_timeout=resolved.action_timeout_seconds,
     )
+    settings_service = SettingsService(
+        session_factory,
+        resolved,
+        github_client=github_client,
+        gitflic_client=gitflic_client,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -92,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scan_roots=resolved.scan_root_paths,
         )
         mirror_scheduler.start()
+        await settings_service.load_into_config()
         try:
             yield
         finally:
@@ -119,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service
+    application.state.settings_service = settings_service
     application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(

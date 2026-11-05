@@ -6,6 +6,7 @@ import {
   bulkSyncMirrorsAll,
   getDashboard,
   getScan,
+  migrateToGitflic,
   scan,
   trackRepository,
 } from '../api/client'
@@ -166,13 +167,16 @@ export default function Dashboard() {
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
-  async function handleBulk(kind: 'fetch' | 'sync') {
+  async function handleBulk(kind: 'fetch' | 'sync' | 'migrate') {
     setBulkMessage('Задача запущена в фоне…')
     try {
       if (kind === 'fetch') {
         await bulkFetchAll()
-      } else {
+      } else if (kind === 'sync') {
         await bulkSyncMirrorsAll()
+      } else {
+        await migrateToGitflic()
+        setBulkMessage('Миграция на GitFlic запущена в фоне…')
       }
       setBulkPolling(true)
     } catch {
@@ -264,6 +268,13 @@ export default function Dashboard() {
             className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             Sync Mirrors
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulk('migrate')}
+            className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            Мигрировать на GitFlic
           </button>
         </div>
         <input

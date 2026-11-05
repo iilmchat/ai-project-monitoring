@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     provider_cache_ttl_seconds: int = 60
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
+    default_canonical_provider: str = "github"
     notify_on: str = (
         "history_rewritten,missing_on_gitflic,missing_on_github,behind_gitflic"
     )

@@ -11,6 +11,7 @@ vi.mock('../api/client', () => ({
   bulkFetchAll: vi.fn(),
   bulkSyncMirrorsAll: vi.fn(),
   getDashboard: vi.fn(),
+  migrateToGitflic: vi.fn(),
   scan: vi.fn(),
   getScan: vi.fn(),
   trackRepository: vi.fn(),

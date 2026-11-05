@@ -272,6 +272,27 @@
 Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
 `fetch_all` делает `git fetch --all --prune`; `sync_mirrors_all` — `git push gitflic <branch>`
 для `mirror_status ∈ {behind_gitflic, missing_on_gitflic}` и пишет `action_log` (`actor=bulk`).
+`migrate_to_gitflic` переводит `canonical_provider=github` (с `gitflic_full_name`) на `gitflic`
+и `mirror_policy=gitflic_to_github`.
+
+| POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
+
+`migrate_to_gitflic` переводит `canonical_provider=github` на `gitflic` при заданном
+`gitflic_full_name` и пишет отчёт `{updated, skipped, total}` в лог.
+
+---
+
+## 3.12. Settings
+
+| Метод | Путь | Тело / Ответ |
+|-------|------|--------------|
+| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider}` |
+| PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
+
+Токены и `webhook_secret` в ответе **маскируются** (`ghp_****1234`).
+Разрешённые ключи: `scan_roots`, `github_token`, `gitflic_token`, `webhook_secret`,
+`default_canonical_provider`. Значения хранятся в `app_settings`; при старте
+подхватываются в конфиг (fallback — `config.py`).
 
 ---
 
@@ -319,6 +340,15 @@ webhook_events(             -- NEW (R9)
   id, provider (github|gitflic), event_type,
   repository_id→repositories NULL,
   payload JSONB, received_at, processed_at, status
+)
+
+action_log(                 -- S10-005
+  id, repository_id→repositories NULL, action, command, status,
+  output, error, duration_ms, exit_code, actor, created_at
+)
+
+app_settings(               -- S15-001
+  key* TEXT PRIMARY KEY, value TEXT NULL, updated_at
 )
 ```
 

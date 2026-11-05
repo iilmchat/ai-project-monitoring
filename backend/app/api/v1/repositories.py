@@ -466,6 +466,18 @@ async def bulk_sync_mirrors(
     }
 
 
+@router.post(
+    "/repositories/actions/migrate_to_gitflic",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def bulk_migrate_to_gitflic(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    background_tasks.add_task(_bulk_service(request).migrate_to_gitflic)
+    return {"status": "accepted", "action": "migrate_to_gitflic"}
+
+
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])
 async def repository_log(
     repository_id: int,
