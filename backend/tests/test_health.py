@@ -11,7 +11,7 @@ async def test_health(client: AsyncClient, settings) -> None:
 
     payload = response.json()
     assert payload["status"] == "ok"
-    assert payload["version"] == "0.1.0"
+    assert payload["version"] == "0.2.0"
     assert payload["db_ok"] is True
     assert payload["scan_roots"] == settings.scan_root_paths
     assert "git_version" in payload

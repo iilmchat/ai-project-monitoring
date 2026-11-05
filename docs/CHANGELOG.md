@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+—
+
+## [0.2.0] - 2026-11-05
+
+Наблюдаемость, зеркалирование GitHub ↔ GitFlic и безопасные мутации.
+
 ### Добавлено
 
 - feat(ci): CI status GitHub Actions (`/repositories/{id}/ci-status`) + widget в UI; GitFlic — `not_supported`.

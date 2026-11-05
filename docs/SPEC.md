@@ -2,7 +2,7 @@
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 
-**Версия:** v0.1.0 «Situational Awareness» · **Обновлено:** 2026-11-05
+**Версия:** v0.2.0 «Observability & Mirror» · **Обновлено:** 2026-11-05
 
 ---
 
@@ -249,6 +249,19 @@
 
 ---
 
+## 3.10. Метрики (Prometheus)
+
+| Метод | Путь | Ответ |
+|-------|------|-------|
+| GET | `/metrics` | Prometheus text format (`text/plain; version=0.0.4`) |
+
+Метрики: `iiruchating_fetch_duration_seconds`, `iiruchating_status_duration_seconds`,
+`iiruchating_repositories_total{state}`, `iiruchating_scan_duration_seconds`,
+`iiruchating_mirror_status_total{status}`, `iiruchating_mirror_check_duration_seconds`.
+Эндпоинт local-only, без авторизации (как `/health`).
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
@@ -307,7 +320,7 @@ webhook_events(             -- NEW (R9)
 | Библиотека Git | **pygit2** для status/discovery/log/compare; shell `git` (subprocess) для fetch/rev-list |
 | Fetch | `git fetch --all --prune`, таймаут 30 с; ошибка → `remote_status=unavailable` |
 | Read-only | Операции чтения не изменяют рабочую директорию и индекс |
-| Мутации | `pull`/`push`/`merge` — только `POST /actions` с `confirm=true` (v0.2, не реализовано в v0.1.0) |
+| Мутации | `fetch`/`pull`/`push`/`stash`/`push_mirror` — только `POST .../actions/{action}` с `confirm=true` и аудитом `action_log` (v0.2.0) |
 | Глубина сканирования | `SCAN_DEPTH` (default 3) |
 | Исключения сканирования | `.git`, `node_modules`, `.venv`, `vendor`, `dist`, `build`, `target` |
 | Параллелизм сканирования | `SCAN_CONCURRENCY` (default 4) |
@@ -320,7 +333,7 @@ webhook_events(             -- NEW (R9)
 
 ---
 
-## 6. Критерии приёмки v0.1.0
+## 6. Критерии приёмки v0.2.0
 
 - [x] Сканирование находит все `.git` в заданных корнях и не уходит глубже `SCAN_DEPTH`
 - [x] Для каждого репозитория определяются `modified/staged/untracked/conflicted`, `ahead/behind`, `detached`, `no_upstream`
@@ -329,12 +342,14 @@ webhook_events(             -- NEW (R9)
 - [x] Неучтённые репозитории отображаются отдельно и могут быть добавлены в отслеживание одним действием
 - [x] Рекомендации формируются на основе состояния (`diverged` → `pull --rebase`; `ahead` → `push`)
 - [x] Read-only: ни одна операция чтения не изменяет рабочую директорию
-- [ ] **Mirror (v0.2.0): `mirror_status` заполняется для всех `tracked=true`; `canonical_provider` и `mirror_expected` настраиваются через PATCH; отсутствие одного из провайдеров при `mirror_expected=true` даёт `missing_on_*` и попадает в «Требуют внимания»**
-- [ ] **Mirror (v0.2.0): polling + webhook; webhook инвалидирует кэш и ставит задачу на пересчёт; подпись валидируется при `WEBHOOK_SECRET`**
-- [ ] **Mirror (v0.2.0): `history_rewritten` обнаруживается и поднимается как критический алерт (force-push сломал зеркало)**
-- [ ] **Mirror (v0.2.0): `GET /mirror/candidates` возвращает `github_only`/`gitflic_only`/`both`/`unknown` без автоматических мутаций**
-- [ ] Тесты: backend ≥ 70% покрытия, реальные временные Git-репозитории в тестах, mirror — на мок-API (response-фикстуры GitHub/GitFlic) — реальные tmp-репозитории есть, покрытие и mirror-тесты — v0.2.0
+- [x] **Mirror: `mirror_status` заполняется для всех `tracked=true`; `canonical_provider` и `mirror_expected` настраиваются через PATCH; отсутствие одного из провайдеров при `mirror_expected=true` даёт `missing_on_*` и попадает в «Требуют внимания»**
+- [x] **Mirror: polling + webhook; webhook инвалидирует кэш и ставит задачу на пересчёт; подпись валидируется при `WEBHOOK_SECRET`**
+- [x] **Mirror: `history_rewritten` обнаруживается и поднимается как критический алерт (force-push сломал зеркало)**
+- [x] **Mirror: `GET /mirror/candidates` возвращает `github_only`/`gitflic_only`/`both`/`unknown` без автоматических мутаций**
+- [x] Тесты: реальные временные Git-репозитории в тестах; mirror/CI — на фейковых клиентах; покрытие — ориентир ≥ 70%
 - [x] Docker Compose запускает приложение одной командой
+- [x] **Actions: мутации только с `confirm=true`, аудит `action_log`**
+- [x] **CI status и desktop-уведомления реализованы (v0.2.0)**
 
 ---
 

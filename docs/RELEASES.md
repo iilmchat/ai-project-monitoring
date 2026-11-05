@@ -1,6 +1,24 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.1.0 (2026-11-05)
+**Текущая версия:** v0.2.0 (2026-11-05)
+
+---
+
+## Релиз v0.2.0 — «Observability & Mirror»
+
+**Дата:** 2026-11-05 · **Тег:** `v0.2.0`
+
+Итоги этапа (спринты 7–12):
+
+- **Стабилизация (S7):** закрыты KI-001…KI-003 — kill fetch по таймауту, быстрый dirty-check, TTL-кэш compare.
+- **Observability (S8):** Prometheus `/api/v1/metrics`, расширенный `/health`, structlog-события.
+- **Mirror GitHub ↔ GitFlic (S9):** 9 статусов зеркала, клиенты провайдеров, polling, webhooks с HMAC, UI-секция «Зеркала».
+- **Actions (S10):** подтверждённые мутации `fetch/pull/push/stash/push_mirror`, аудит `action_log`, UI-модалка.
+- **CI & Notifications (S11):** GitHub Actions CI-статус, desktop-уведомления, инструкция по webhook-туннелю.
+- **Релиз (S12):** docs-consistency audit, тег `v0.2.0` в GitHub и GitFlic.
+
+**Итоговые метрики:** 107 backend-тестов, 3 frontend-теста, entry bundle ~83 kB gzip;
+Docker-сканирование `C:/Projects` через volume `/projects` (34 репозитория на dev-машине).
 
 ---
 
