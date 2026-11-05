@@ -77,7 +77,7 @@ iiruchating_scan_duration_seconds 2.4
 ```json
 {
   "status": "ok",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "git_version": "git version 2.55.0.windows.5",
   "scan_roots": ["C:/Projects"],
   "db_ok": true,

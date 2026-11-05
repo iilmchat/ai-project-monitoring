@@ -2,7 +2,7 @@
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 
-**Версия:** v0.2.0 «Observability & Mirror» · **Обновлено:** 2026-11-05
+**Версия:** v0.3.0 «Productivity & UI» · **Обновлено:** 2026-11-05
 
 ---
 
@@ -268,17 +268,13 @@
 |-------|------|-----------|-------|
 | POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true) | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?` | `202 {status:"accepted"}` |
+| POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
 
 Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
 `fetch_all` делает `git fetch --all --prune`; `sync_mirrors_all` — `git push gitflic <branch>`
 для `mirror_status ∈ {behind_gitflic, missing_on_gitflic}` и пишет `action_log` (`actor=bulk`).
-`migrate_to_gitflic` переводит `canonical_provider=github` (с `gitflic_full_name`) на `gitflic`
-и `mirror_policy=gitflic_to_github`.
-
-| POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
-
 `migrate_to_gitflic` переводит `canonical_provider=github` на `gitflic` при заданном
-`gitflic_full_name` и пишет отчёт `{updated, skipped, total}` в лог.
+`gitflic_full_name`, меняет `mirror_policy` и пишет отчёт `{updated, skipped, total}` в лог.
 
 ---
 
@@ -376,7 +372,7 @@ app_settings(               -- S15-001
 
 ---
 
-## 6. Критерии приёмки v0.2.0
+## 6. Критерии приёмки v0.3.0
 
 - [x] Сканирование находит все `.git` в заданных корнях и не уходит глубже `SCAN_DEPTH`
 - [x] Для каждого репозитория определяются `modified/staged/untracked/conflicted`, `ahead/behind`, `detached`, `no_upstream`
@@ -393,6 +389,9 @@ app_settings(               -- S15-001
 - [x] Docker Compose запускает приложение одной командой
 - [x] **Actions: мутации только с `confirm=true`, аудит `action_log`**
 - [x] **CI status и desktop-уведомления реализованы (v0.2.0)**
+- [x] **Bulk: массовые fetch/sync/migrate с ограничением concurrency и фоновыми API (v0.3.0)**
+- [x] **Settings: хранение в БД, маскировка токенов, применение без перезапуска (v0.3.0)**
+- [x] **UI: тёмная тема, графики состояний/зеркал, поиск и сортировка (v0.3.0)**
 
 ---
 

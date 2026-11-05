@@ -1,6 +1,24 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.2.0 (2026-11-05)
+**Текущая версия:** v0.3.0 (2026-11-05)
+
+---
+
+## Релиз v0.3.0 — «Productivity & UI»
+
+**Дата:** 2026-11-05 · **Тег:** `v0.3.0`
+
+Итоги этапа (спринты 13–16):
+
+- **Bulk Actions (S13):** массовые `fetch_all`/`sync_mirrors_all` с `asyncio.Semaphore(5)` и фоновыми API.
+- **Caching (S13):** TTL-кэш провайдеров (`PROVIDER_CACHE_TTL_SECONDS=60`).
+- **UX/UI (S14):** тёмная тема, Pie/Bar-графики на recharts (lazy), поиск/сортировка, кликабельные строки.
+- **Settings (S15):** `app_settings`, страница `/settings`, маскировка токенов, runtime-применение конфига.
+- **Migration (S15):** массовая миграция `canonical_provider` на GitFlic через фоновый API.
+- **Релиз (S16):** docs-consistency audit, тег `v0.3.0` в обоих провайдерах.
+
+**Итоговые метрики:** 116 backend-тестов, 5 frontend-тестов, entry ~84 kB gzip
+(графики — отдельный lazy-chunk).
 
 ---
 

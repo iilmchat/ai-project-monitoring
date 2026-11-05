@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         "history_rewritten,missing_on_gitflic,missing_on_github,behind_gitflic"
     )
     debug: bool = False
-    app_version: str = "0.2.0"
+    app_version: str = "0.3.0"
 
     @property
     def scan_root_paths(self) -> list[str]:
