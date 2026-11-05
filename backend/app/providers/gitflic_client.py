@@ -99,6 +99,15 @@ class GitFlicClient:
         result = await self.get_branch(full_name, branch)
         return result.sha
 
+    async def get_ci_status(self, full_name: str, branch: str) -> dict[str, object]:
+        """GitFlic CI is not exposed by the public API yet (v0.2.0)."""
+        return {
+            "provider": "gitflic",
+            "status": "not_supported",
+            "conclusion": None,
+            "url": None,
+        }
+
     async def list_repos(self) -> list[dict[str, object]]:
         if not self._token:
             return []

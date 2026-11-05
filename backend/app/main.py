@@ -21,6 +21,7 @@ from app.services.action_service import ActionService
 from app.services.compare_cache import CompareCache
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
+from app.services.notification_service import NotificationService
 from app.services.remote_service import RemoteService
 from app.services.status_service import StatusCache, StatusService
 
@@ -41,10 +42,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     status_cache = StatusCache(ttl_seconds=resolved.status_ttl_seconds)
     compare_cache = CompareCache(ttl_seconds=resolved.compare_ttl_seconds)
     remote_service = RemoteService(timeout_seconds=resolved.fetch_timeout)
+    notification_service = NotificationService(
+        enabled=resolved.notifications_enabled,
+        notify_on=set(resolved.notify_on_names),
+    )
     status_service = StatusService(
         status_cache,
         ttl_seconds=resolved.status_ttl_seconds,
         remote_service=remote_service,
+        notifications=notification_service,
     )
     github_client = GitHubClient(
         resolved.github_token, timeout=resolved.provider_timeout_seconds
@@ -62,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mirror_service,
         session_factory,
         interval_seconds=resolved.mirror_poll_interval_seconds,
+        notifications=notification_service,
     )
     action_service = ActionService(timeout_seconds=resolved.action_timeout_seconds)
 
@@ -100,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.mirror_service = mirror_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
+    application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

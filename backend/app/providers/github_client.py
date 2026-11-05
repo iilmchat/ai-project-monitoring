@@ -96,6 +96,77 @@ class GitHubClient:
         result = await self.get_branch(full_name, branch)
         return result.sha
 
+    async def get_ci_status(self, full_name: str, branch: str) -> dict[str, object]:
+        if not self._token:
+            return {
+                "provider": "github",
+                "status": "not_configured",
+                "conclusion": None,
+                "url": None,
+            }
+
+        url = f"{self._base_url}/repos/{full_name}/actions/runs"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    url,
+                    headers=self._headers(),
+                    params={"branch": branch, "per_page": 1},
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("provider_error", provider="github", error=str(exc))
+            return {
+                "provider": "github",
+                "status": "unavailable",
+                "conclusion": None,
+                "url": None,
+            }
+
+        if response.status_code in {403, 429}:
+            logger.warning(
+                "provider_rate_limit", provider="github", status_code=response.status_code
+            )
+            return {
+                "provider": "github",
+                "status": "unavailable",
+                "conclusion": None,
+                "url": None,
+            }
+        if response.status_code == 404:
+            return {
+                "provider": "github",
+                "status": "not_supported",
+                "conclusion": None,
+                "url": None,
+            }
+        if response.status_code >= 400:
+            logger.warning(
+                "provider_error", provider="github", status_code=response.status_code
+            )
+            return {
+                "provider": "github",
+                "status": "unavailable",
+                "conclusion": None,
+                "url": None,
+            }
+
+        payload: Any = response.json()
+        runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
+        if not runs:
+            return {
+                "provider": "github",
+                "status": "none",
+                "conclusion": None,
+                "url": None,
+            }
+        run = runs[0]
+        return {
+            "provider": "github",
+            "status": run.get("status") or "unknown",
+            "conclusion": run.get("conclusion"),
+            "url": run.get("html_url"),
+        }
+
     async def list_repos(self) -> list[dict[str, object]]:
         if not self._token:
             return []

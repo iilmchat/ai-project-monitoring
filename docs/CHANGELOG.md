@@ -4,7 +4,9 @@
 
 ### Добавлено
 
-- feat(actions): явные мутации с `confirm=true` — `pull`, `push`, `stash`, `push-mirror`; аудит `action_log`, `GET /admin/actions`; UI-кнопка «Выполнить» с модалкой подтверждения.
+- feat(ci): CI status GitHub Actions (`/repositories/{id}/ci-status`) + widget в UI; GitFlic — `not_supported`.
+- feat(notify): desktop-уведомления (plyer) для `history_rewritten`/`missing_on_*`/`behind_gitflic` и `remote_status=unavailable` (rate-limit 1/час); настройки `NOTIFICATIONS_ENABLED`/`NOTIFY_ON`.
+- feat(actions): явные мутации с `confirm=true` — `fetch`, `pull`, `push`, `stash`, `push_mirror`; аудит `action_log`, `GET /admin/actions`; UI-кнопка «Выполнить» с модалкой подтверждения.
 - feat(mirror): межпровайдерное зеркало GitHub ↔ GitFlic — `repository_mirror_status`, `webhook_events`, миграция `003`.
 - feat(mirror): клиенты GitHub/GitFlic (`get_branch`, `list_repos`, rate-limit → `unavailable`), `MirrorService` (9 статусов) и `MirrorScheduler` (polling 300 с).
 - feat(mirror): API `GET/POST /repositories/{id}/mirror`, `PATCH /mirror-policy`, `GET /mirror/candidates`, webhooks с HMAC.

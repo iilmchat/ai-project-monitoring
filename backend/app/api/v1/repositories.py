@@ -16,8 +16,9 @@ from app.git.pygit2_backend import (
     read_commits,
     read_local_status,
 )
-from app.models.entities import ActionLog, Repository
+from app.models.entities import ActionLog, Repository, RepositoryStatus
 from app.schemas.action import ActionLogResponse, ActionRequest
+from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
     MirrorPolicyUpdate,
@@ -64,6 +65,71 @@ def _mirror_service(request: Request) -> MirrorService:
 def _action_service(request: Request) -> ActionService:
     service: ActionService = request.app.state.action_service
     return service
+
+
+def _aggregate_ci(results: list[dict[str, object]]) -> str:
+    statuses = {str(item.get("status")) for item in results}
+    conclusions = {item.get("conclusion") for item in results}
+    if "failure" in conclusions or "timed_out" in conclusions:
+        return "failure"
+    if "cancelled" in conclusions:
+        return "cancelled"
+    if statuses & {"queued", "in_progress", "pending"}:
+        return "pending"
+    if "success" in conclusions and statuses <= {
+        "completed",
+        "success",
+        "none",
+        "not_supported",
+        "not_configured",
+    }:
+        return "success"
+    if statuses <= {"none", "not_supported", "not_configured"}:
+        return "none"
+    return "unknown"
+
+
+@router.get("/repositories/{repository_id}/ci-status", response_model=CIStatusResponse)
+async def repository_ci_status(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CIStatusResponse:
+    repository = await _get_repository(session, repository_id)
+    status_row = await session.scalar(
+        select(RepositoryStatus).where(
+            RepositoryStatus.repository_id == repository_id
+        )
+    )
+    branch = status_row.branch if status_row is not None and status_row.branch else "main"
+
+    async def lookup(full_name: str | None, provider: str) -> dict[str, object]:
+        if full_name is None:
+            return {
+                "provider": provider,
+                "status": "not_configured",
+                "conclusion": None,
+                "url": None,
+            }
+        client = (
+            request.app.state.github_client
+            if provider == "github"
+            else request.app.state.gitflic_client
+        )
+        result: dict[str, object] = await client.get_ci_status(full_name, branch)
+        return result
+
+    github, gitflic = await asyncio.gather(
+        lookup(repository.github_full_name, "github"),
+        lookup(repository.gitflic_full_name, "gitflic"),
+    )
+    return CIStatusResponse(
+        repository_id=repository_id,
+        branch=branch,
+        github=ProviderCIStatus.model_validate(github),
+        gitflic=ProviderCIStatus.model_validate(gitflic),
+        aggregate=_aggregate_ci([github, gitflic]),
+    )
 
 
 async def _get_repository(session: AsyncSession, repository_id: int) -> Repository:

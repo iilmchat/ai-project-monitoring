@@ -1,5 +1,6 @@
 import type {
   ActionLog,
+  CIStatus,
   CommitInfo,
   CompareResponse,
   DashboardResponse,
@@ -162,4 +163,8 @@ export async function getActions(repositoryId: number, limit = 20): Promise<Acti
   return request<ActionLog[]>(`/repositories/${repositoryId}/actions`, {
     query: { limit },
   })
+}
+
+export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
+  return request<CIStatus>(`/repositories/${repositoryId}/ci-status`)
 }

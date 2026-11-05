@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import {
   getActions,
+  getCiStatus,
   getLog,
   getMirror,
   getRecommendations,
@@ -17,6 +18,7 @@ import {
 } from '../api/client'
 import type {
   ActionLog,
+  CIStatus,
   CommitInfo,
   MirrorProviderStatus,
   MirrorStatus,
@@ -59,6 +61,7 @@ export default function RepositoryDetails() {
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [mirror, setMirror] = useState<MirrorStatus | null>(null)
+  const [ciStatus, setCiStatus] = useState<CIStatus | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -84,7 +87,7 @@ export default function RepositoryDetails() {
     let active = true
     void (async () => {
       try {
-        const [list, currentStatus, log, tips, mirrorStatus, actionHistory] =
+        const [list, currentStatus, log, tips, mirrorStatus, actionHistory, ci] =
           await Promise.all([
             getRepositories(0, 500),
             getStatus(repositoryId),
@@ -92,6 +95,7 @@ export default function RepositoryDetails() {
             getRecommendations(repositoryId),
             getMirror(repositoryId),
             getActions(repositoryId),
+            getCiStatus(repositoryId),
           ])
         if (!active) {
           return
@@ -103,6 +107,7 @@ export default function RepositoryDetails() {
         setRecommendations(tips)
         setMirror(mirrorStatus)
         setHistory(actionHistory)
+        setCiStatus(ci)
         if (found) {
           setPolicyCanonical(
             found.canonical_provider === 'gitflic' ? 'gitflic' : 'github',
@@ -225,19 +230,21 @@ export default function RepositoryDetails() {
       setActionPrompt(null)
       setActionConfirmed(false)
 
-      const [updatedStatus, log, tips, mirrorStatus, actionHistory] =
+      const [updatedStatus, log, tips, mirrorStatus, actionHistory, ci] =
         await Promise.all([
           refreshRepository(repositoryId, false),
           getLog(repositoryId, 10),
           getRecommendations(repositoryId),
           getMirror(repositoryId),
           getActions(repositoryId),
+          getCiStatus(repositoryId),
         ])
       setStatus(updatedStatus)
       setCommits(log)
       setRecommendations(tips)
       setMirror(mirrorStatus)
       setHistory(actionHistory)
+      setCiStatus(ci)
     } catch {
       setActionResult('Не удалось выполнить действие.')
     } finally {
@@ -352,6 +359,47 @@ export default function RepositoryDetails() {
                   </div>
                 )}
               </dl>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                CI Status
+              </h2>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${ciBadgeStyle(
+                  ciStatus?.aggregate,
+                )}`}
+              >
+                {ciStatus?.aggregate ?? 'unknown'}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {[ciStatus?.github, ciStatus?.gitflic].map((provider, index) => (
+                <div
+                  key={provider?.provider ?? index}
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
+                >
+                  <p className="font-semibold text-slate-700">
+                    {provider?.provider ?? (index === 0 ? 'GitHub' : 'GitFlic')}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    status: {provider?.status ?? '—'}
+                    {provider?.conclusion ? ` · ${provider.conclusion}` : ''}
+                  </p>
+                  {provider?.url && (
+                    <a
+                      href={provider.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
+                    >
+                      Открыть CI →
+                    </a>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -676,6 +724,21 @@ export default function RepositoryDetails() {
       )}
     </section>
   )
+}
+
+function ciBadgeStyle(aggregate: string | null | undefined): string {
+  switch (aggregate) {
+    case 'success':
+      return 'bg-emerald-100 text-emerald-800 ring-emerald-200'
+    case 'failure':
+      return 'bg-red-100 text-red-800 ring-red-200'
+    case 'cancelled':
+      return 'bg-slate-200 text-slate-700 ring-slate-300'
+    case 'pending':
+      return 'bg-amber-100 text-amber-800 ring-amber-200'
+    default:
+      return 'bg-slate-100 text-slate-600 ring-slate-200'
+  }
 }
 
 function ProviderSummary({

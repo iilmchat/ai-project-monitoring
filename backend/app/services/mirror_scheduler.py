@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.entities import Repository
 from app.services.mirror_service import MirrorService
+from app.services.notification_service import NotificationService
 
 logger = structlog.get_logger(__name__)
 
@@ -24,10 +25,13 @@ class MirrorScheduler:
         session_factory: async_sessionmaker[AsyncSession],
         *,
         interval_seconds: float = 300.0,
+        notifications: NotificationService | None = None,
     ) -> None:
         self._service = service
         self._session_factory = session_factory
         self._interval = max(interval_seconds, 1.0)
+        self._notifications = notifications
+        self._last_statuses: dict[int, str] = {}
         self._task: asyncio.Task[None] | None = None
 
     @property
@@ -77,7 +81,17 @@ class MirrorScheduler:
             if repository.github_full_name is None and repository.gitflic_full_name is None:
                 continue
             try:
-                await self._service.refresh_mirror_status(repository)
+                snapshot = await self._service.refresh_mirror_status(repository)
+                previous = self._last_statuses.get(repository.id)
+                if self._notifications is not None:
+                    await asyncio.to_thread(
+                        self._notifications.notify_mirror_status,
+                        repository.id,
+                        repository.path,
+                        snapshot.mirror_status,
+                        previous,
+                    )
+                self._last_statuses[repository.id] = snapshot.mirror_status
                 checked += 1
             except Exception:
                 logger.exception(

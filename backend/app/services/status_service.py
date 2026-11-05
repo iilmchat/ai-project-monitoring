@@ -16,6 +16,7 @@ from app.db.base import utcnow
 from app.git.command_backend import rev_list_counts
 from app.git.pygit2_backend import DirtyCounts, GitStatusError, LocalStatus, read_local_status
 from app.models.entities import Repository, RepositoryStatus
+from app.services.notification_service import NotificationService
 from app.services.remote_service import RemoteService
 
 logger = structlog.get_logger(__name__)
@@ -129,10 +130,12 @@ class StatusService:
         *,
         ttl_seconds: int,
         remote_service: RemoteService | None = None,
+        notifications: NotificationService | None = None,
     ) -> None:
         self._cache = cache
         self._ttl = max(ttl_seconds, 0)
         self._remote_service = remote_service
+        self._notifications = notifications
 
     async def get_status(
         self,
@@ -225,6 +228,17 @@ class StatusService:
                 repository_id=repository.id,
                 path=repository.path,
                 duration_ms=round(duration_seconds * 1000, 2),
+            )
+        if (
+            self._notifications is not None
+            and snapshot.remote_status == REMOTE_STATUS_UNAVAILABLE
+            and snapshot.state != "error"
+        ):
+            await asyncio.to_thread(
+                self._notifications.notify_remote_unavailable,
+                repository.id,
+                repository.path,
+                snapshot.error,
             )
         return snapshot
 

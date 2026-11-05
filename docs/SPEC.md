@@ -149,6 +149,7 @@
 | Метод | Путь | Параметры / тело | Ответ |
 |-------|------|------------------|-------|
 | GET | `/repositories/{id}/mirror` | `refresh?: bool (default false)` | `MirrorStatus` |
+| GET | `/repositories/{id}/ci-status` | — | `{branch, github, gitflic, aggregate}` |
 | POST | `/repositories/{id}/mirror/refresh` | — | `MirrorStatus` (принудительный пересчёт) |
 | GET | `/mirror/candidates` | `provider?` | `{github_only[], gitflic_only[], both[], unknown[]}` |
 | PATCH | `/repositories/{id}/mirror-policy` | `{canonical_provider?, mirror_expected?, mirror_policy?}` | `Repository` |

@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     mirror_status_ttl_seconds: int = 300
     provider_timeout_seconds: float = 10.0
     action_timeout_seconds: int = 60
+    notifications_enabled: bool = True
+    notify_on: str = (
+        "history_rewritten,missing_on_gitflic,missing_on_github,behind_gitflic"
+    )
     debug: bool = False
     app_version: str = "0.1.0"
 
@@ -50,6 +54,11 @@ class Settings(BaseSettings):
     def scan_ignore_names(self) -> list[str]:
         """SCAN_IGNORE as a list of directory names."""
         return _split_csv(self.scan_ignore)
+
+    @property
+    def notify_on_names(self) -> list[str]:
+        """NOTIFY_ON as a list of mirror statuses."""
+        return _split_csv(self.notify_on)
 
 
 def _split_csv(raw: str) -> list[str]:

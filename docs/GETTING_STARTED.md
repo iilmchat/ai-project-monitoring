@@ -128,3 +128,30 @@ $ghSha = (git ls-remote origin main).Split()[0]
 $gfSha = (git ls-remote gitflic main).Split()[0]
 if ($ghSha -eq $gfSha) { Write-Host "OK: mirror in_sync" }
 ```
+
+---
+
+## 8. Настройка Webhook (опционально)
+
+Webhook ускоряет реакцию на push (polling работает и без него). Для приёма
+событий из интернета нужен публичный туннель:
+
+```bash
+# вариант 1: cloudflared
+cloudflared tunnel --url http://localhost:8000
+
+# вариант 2: ngrok
+ngrok http 8000
+```
+
+Полученный URL указывается в настройках провайдера:
+
+| Провайдер | Payload URL | Secret | События |
+|-----------|-------------|--------|---------|
+| GitHub | `https://<your-url>/api/v1/webhooks/github` | `WEBHOOK_SECRET` из `.env` | push, branch |
+| GitFlic | `https://<your-url>/api/v1/webhooks/gitflic` | `WEBHOOK_SECRET` | push |
+
+Если `WEBHOOK_SECRET` задан, запросы без корректной HMAC-подписи
+(`X-Hub-Signature-256` для GitHub, `X-Gitflic-Signature` для GitFlic)
+отклоняются с 401. Webhook инвалидирует кэш зеркала; polling остаётся
+страховкой, если событие потерялось.

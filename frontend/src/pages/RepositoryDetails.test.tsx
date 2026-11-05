@@ -3,12 +3,21 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getActions, getLog, getMirror, getRecommendations, getRepositories, getStatus } from '../api/client'
+import {
+  getActions,
+  getCiStatus,
+  getLog,
+  getMirror,
+  getRecommendations,
+  getRepositories,
+  getStatus,
+} from '../api/client'
 import type { DashboardRepository, MirrorStatus, RepositoryStatus } from '../api/types'
 import RepositoryDetails from './RepositoryDetails'
 
 vi.mock('../api/client', () => ({
   getActions: vi.fn(),
+  getCiStatus: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
   getRecommendations: vi.fn(),
@@ -97,6 +106,23 @@ describe('RepositoryDetails actions', () => {
     ])
     vi.mocked(getMirror).mockResolvedValue(mirror)
     vi.mocked(getActions).mockResolvedValue([])
+    vi.mocked(getCiStatus).mockResolvedValue({
+      repository_id: 1,
+      branch: 'main',
+      github: {
+        provider: 'github',
+        status: 'completed',
+        conclusion: 'success',
+        url: null,
+      },
+      gitflic: {
+        provider: 'gitflic',
+        status: 'not_supported',
+        conclusion: null,
+        url: null,
+      },
+      aggregate: 'success',
+    })
   })
 
   it('opens the confirmation modal from a recommendation', async () => {

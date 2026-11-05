@@ -102,11 +102,28 @@ export interface ActionLog {
   repository_id: number | null
   action: string
   command: string
-  status: 'success' | 'failed' | string
+  status: 'success' | 'error' | string
   exit_code: number | null
   output: string | null
+  error: string | null
+  duration_ms: number
   actor: string
   created_at: string
+}
+
+export interface ProviderCIStatus {
+  provider: string
+  status: string
+  conclusion: string | null
+  url: string | null
+}
+
+export interface CIStatus {
+  repository_id: number
+  branch: string
+  github: ProviderCIStatus
+  gitflic: ProviderCIStatus
+  aggregate: string
 }
 
 export interface DashboardResponse {

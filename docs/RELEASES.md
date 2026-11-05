@@ -209,3 +209,21 @@
 - Backend-тесты: 98 passed
 - Frontend-тесты: 3 passed
 - Docker: scanning host `C:/Projects` через volume `/projects`
+
+---
+
+## Спринт 11: CI-статус, уведомления, webhook-proxy (v0.2.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S11-001: `GET /repositories/{id}/ci-status` + GitHub Actions клиент + UI-виджет
+- [x] S11-002: desktop-уведомления (`plyer`) с настройками и rate-limit
+- [x] S11-003: документация webhook-туннеля (cloudflared/ngrok)
+- [x] S11-004: инструкция по подключению webhook в GitHub/GitFlic
+
+### Метрики
+- Backend-тесты: 107 passed
+- Frontend-тесты: 3 passed
+- Entry bundle: ~83 kB gzip
