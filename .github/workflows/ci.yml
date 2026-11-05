@@ -1,0 +1,25 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+  workflow_dispatch:
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Verify required docs exist
+        run: |
+          for f in README.md AGENTS.md CONTRIBUTING.md SECURITY.md LICENSE TODO.md \
+                   docs/SPEC.md docs/ARCHITECTURE.md docs/RULES.md \
+                   docs/TESTING.md docs/MONITORING.md; do
+            test -f "$f" || { echo "MISSING: $f"; exit 1; }
+          done
+          
+      - name: Check no secrets in diff
+        run: |
+          if git log -p | grep -iE "ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9]{20,}"; then
+            echo "SECRET DETECTED"; exit 1
+          fi
