@@ -33,12 +33,36 @@
 git clone https://github.com/iilmchat/iiruchating.git
 cd iiruchating
 cp .env.example .env            # укажите SCAN_ROOTS, GITHUB_TOKEN (опционально)
-
-docker compose up -d            # backend + frontend
 ```
 
-- Веб-интерфейс: <http://127.0.0.1:8000>
-- API: <http://127.0.0.1:8000/api/v1/health>
+### Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+- Веб-интерфейс: <http://127.0.0.1:3000>
+- API (напрямую): <http://127.0.0.1:8000/api/v1/health>
+
+Backend собирается из `backend/Dockerfile` (Python 3.12, `libgit2`, `git`),
+frontend — из `frontend/Dockerfile` (Node 20 build → nginx). SQLite хранится
+в `./data` (volume), nginx проксирует `/api` на сервис `backend`.
+Чтобы сканирование видело локальные проекты, добавьте volume в
+`docker-compose.yml` (пример закомментирован) или задайте `SCAN_ROOTS`.
+
+### Локально без Docker
+
+```bash
+# backend
+cd backend && python -m venv venv && .\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+
+# frontend
+pnpm --dir frontend install
+pnpm --dir frontend dev
+```
 
 Подробно — [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 

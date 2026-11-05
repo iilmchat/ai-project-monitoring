@@ -17,6 +17,7 @@ from app.git.pygit2_backend import (
     read_local_status,
 )
 from app.models.entities import Repository
+from app.schemas.recommendation import RecommendationResponse
 from app.schemas.repository import (
     CommitInfoResponse,
     CompareResponse,
@@ -25,6 +26,7 @@ from app.schemas.repository import (
     RepositoryRead,
     RepositoryStatusResponse,
 )
+from app.services.recommendation_service import generate_recommendations
 from app.services.status_service import StatusService
 
 router = APIRouter(tags=["repositories"])
@@ -119,6 +121,26 @@ async def refresh_repository_status(
     should_fetch = payload.fetch if payload is not None else True
     snapshot = await _status_service(request).refresh(session, repository, fetch=should_fetch)
     return RepositoryStatusResponse.model_validate(snapshot)
+
+
+@router.get(
+    "/repositories/{repository_id}/recommendations",
+    response_model=list[RecommendationResponse],
+)
+async def repository_recommendations(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[RecommendationResponse]:
+    repository = await _get_repository(session, repository_id)
+    snapshot = await _status_service(request).get_status(
+        session, repository, use_cache=True, fetch=False
+    )
+    status_response = RepositoryStatusResponse.model_validate(snapshot)
+    return [
+        RecommendationResponse.model_validate(item)
+        for item in generate_recommendations(status_response)
+    ]
 
 
 @router.get("/repositories/{repository_id}/compare", response_model=CompareResponse)

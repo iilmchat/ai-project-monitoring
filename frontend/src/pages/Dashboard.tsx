@@ -138,7 +138,7 @@ export default function Dashboard() {
           type="button"
           onClick={() => void handleScan()}
           disabled={scanning}
-          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
         >
           {scanning ? 'Сканирование…' : 'Сканировать'}
         </button>
@@ -175,7 +175,7 @@ export default function Dashboard() {
                 onClick={() => setFilter(item.id)}
                 className={`rounded-full px-3 py-1 text-sm font-medium transition ${
                   filter === item.id
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-primary text-white'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -210,7 +210,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <Link
                         to={`/repo/${repository.id}`}
-                        className="font-medium text-slate-900 hover:text-blue-700"
+                        className="font-medium text-slate-900 hover:text-primary"
                       >
                         {displayName(repository)}
                       </Link>
@@ -233,7 +233,7 @@ export default function Dashboard() {
                       {repository.tracked ? (
                         <Link
                           to={`/repo/${repository.id}`}
-                          className="text-sm font-medium text-blue-700 hover:underline"
+                          className="text-sm font-medium text-primary hover:underline"
                         >
                           Детали
                         </Link>

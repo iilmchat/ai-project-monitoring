@@ -2,6 +2,7 @@ import type {
   CommitInfo,
   CompareResponse,
   DashboardResponse,
+  Recommendation,
   Repository,
   RepositoryListResponse,
   RepositoryStatus,
@@ -104,4 +105,8 @@ export async function getLog(repositoryId: number, limit = 20): Promise<CommitIn
   return request<CommitInfo[]>(`/repositories/${repositoryId}/log`, {
     query: { limit },
   })
+}
+
+export async function getRecommendations(repositoryId: number): Promise<Recommendation[]> {
+  return request<Recommendation[]>(`/repositories/${repositoryId}/recommendations`)
 }

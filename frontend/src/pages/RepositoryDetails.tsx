@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
-import { getLog, getRepositories, getStatus, refreshRepository } from '../api/client'
-import type { CommitInfo, Repository, RepositoryStatus } from '../api/types'
+import {
+  getLog,
+  getRecommendations,
+  getRepositories,
+  getStatus,
+  refreshRepository,
+} from '../api/client'
+import type {
+  CommitInfo,
+  Recommendation,
+  Repository,
+  RepositoryStatus,
+} from '../api/types'
 import StatusBadge from '../components/StatusBadge'
 
 function formatDate(value: string | null | undefined): string {
@@ -21,6 +32,8 @@ export default function RepositoryDetails() {
   const [repository, setRepository] = useState<Repository | null>(null)
   const [status, setStatus] = useState<RepositoryStatus | null>(null)
   const [commits, setCommits] = useState<CommitInfo[]>([])
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
   const [loading, setLoading] = useState(!invalidId)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,10 +45,11 @@ export default function RepositoryDetails() {
     let active = true
     void (async () => {
       try {
-        const [list, currentStatus, log] = await Promise.all([
+        const [list, currentStatus, log, tips] = await Promise.all([
           getRepositories(0, 500),
           getStatus(repositoryId),
           getLog(repositoryId, 10),
+          getRecommendations(repositoryId),
         ])
         if (!active) {
           return
@@ -43,6 +57,7 @@ export default function RepositoryDetails() {
         setRepository(list.items.find((item) => item.id === repositoryId) ?? null)
         setStatus(currentStatus)
         setCommits(log)
+        setRecommendations(tips)
         setError(null)
       } catch {
         if (active) {
@@ -65,6 +80,7 @@ export default function RepositoryDetails() {
       const updated = await refreshRepository(repositoryId, true)
       setStatus(updated)
       setCommits(await getLog(repositoryId, 10))
+      setRecommendations(await getRecommendations(repositoryId))
       setError(null)
     } catch {
       setError('Не удалось обновить статус репозитория.')
@@ -73,11 +89,24 @@ export default function RepositoryDetails() {
     }
   }
 
+  async function handleCopy(command: string) {
+    try {
+      await navigator.clipboard.writeText(command)
+      setCopiedCommand(command)
+      window.setTimeout(
+        () => setCopiedCommand((current) => (current === command ? null : current)),
+        2000,
+      )
+    } catch {
+      setError('Не удалось скопировать команду в буфер обмена.')
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link to="/" className="text-sm font-medium text-blue-700 hover:underline">
+          <Link to="/" className="text-sm font-medium text-primary hover:underline">
             ← Назад на дашборд
           </Link>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -88,7 +117,7 @@ export default function RepositoryDetails() {
           type="button"
           onClick={() => void handleRefresh()}
           disabled={refreshing}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
         >
           {refreshing ? 'Обновление…' : 'Обновить'}
         </button>
@@ -175,6 +204,38 @@ export default function RepositoryDetails() {
                 )}
               </dl>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Рекомендации
+            </h2>
+            {recommendations.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-500">Рекомендаций нет.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {recommendations.map((item) => (
+                  <li
+                    key={`${item.action}-${item.command}`}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800">{item.reason}</p>
+                      <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">
+                        {item.command}
+                      </code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy(item.command)}
+                      className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      {copiedCommand === item.command ? 'Скопировано' : 'Копировать'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm">

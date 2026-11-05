@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    image: iiruchating-backend:dev
+    ports:
+      - "8000:8000"
+    volumes:
+      # SQLite database lives on the host and survives container rebuilds.
+      - ./data:/app/data
+      # Mount project roots here so discovery can see them, e.g.:
+      # - ${SCAN_ROOTS:-C:/Projects}:/repos:ro
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/data/iiruchating.db
+      SCAN_ROOTS: ${SCAN_ROOTS:-C:/Projects}
+      SCAN_DEPTH: ${SCAN_DEPTH:-3}
+      DEBUG: ${DEBUG:-false}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITFLIC_TOKEN: ${GITFLIC_TOKEN:-}
+      FETCH_TIMEOUT: ${FETCH_TIMEOUT:-30}
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    image: iiruchating-frontend:dev
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

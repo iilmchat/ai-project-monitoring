@@ -81,6 +81,13 @@ export interface CompareResponse {
   commits: CommitInfo[]
 }
 
+export interface Recommendation {
+  action: string
+  reason: string
+  command: string
+  category: string
+}
+
 export interface ScanStarted {
   scan_id: number
   started_at: string

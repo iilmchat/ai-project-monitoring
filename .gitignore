@@ -37,3 +37,6 @@ Thumbs.db
 
 # Tools
 .wheelhouse/
+
+# Temp
+.tmp/
