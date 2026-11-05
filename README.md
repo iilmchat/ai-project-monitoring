@@ -10,7 +10,7 @@
 
 Разработчик с 20+ проектами на диске каждое утро/вечер делает ручной обход: `git status`, `git log`, `git fetch`, `git merge`… Это забывается, а забытое = потерянная работа или неожиданный merge-конфликт. **IIRuchating** сканирует локальные директории, находит все `.git`-репозитории, снимает **локальное состояние** (uncommitted, unpushed, ahead/behind) и **сравнивает** его с удалённым репозиторием (GitHub/GitFlic) — без внесения изменений. Список отслеживаемых проектов управляется, а новые (неучтённые) репозитории автоматически подсвечиваются.
 
-**Стек:** Python 3.12 · FastAPI · SQLite (или PostgreSQL) · pygit2 / GitPython · React 19 (Vite, TS) · Docker Compose.
+**Стек:** Python 3.12 · FastAPI · SQLite (или PostgreSQL) · pygit2 + git CLI · React 19 (Vite, TS) · Docker Compose.
 
 ---
 
@@ -30,7 +30,7 @@
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/iilmchat/iiruchating.git
+git clone https://github.com/iilmchat/ai-project-monitoring.git
 cd iiruchating
 cp .env.example .env            # укажите SCAN_ROOTS, GITHUB_TOKEN (опционально)
 ```
@@ -68,6 +68,16 @@ pnpm --dir frontend dev
 
 ---
 
+## Интерфейс
+
+- **Дашборд** — карточки сводки (всего / чистые / требуют внимания / не отслеживаются), кнопка «Сканировать» и таблица репозиториев: ветка, цветной бейдж состояния, `ahead/behind`, действия.
+- **Фильтры** — «Все», «Требуют внимания» (`dirty`, `ahead`, `behind`, `diverged`, `no_upstream`), «Не отслеживаются».
+- **Страница репозитория** — путь, ветка, upstream, счётчики изменений, `remote_status`, последние коммиты и блок «Рекомендации» с готовыми командами.
+- **Копирование** — кнопка «Копировать» кладёт команду в буфер обмена; приложение **ничего не выполняет** автоматически.
+- **Бренд** — фирменная иконка, палитра M3 и шрифты Inter/Manrope из бренд-бука IIRuChating.
+
+---
+
 ## Документация
 
 | Документ | Назначение |
@@ -88,10 +98,11 @@ pnpm --dir frontend dev
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.1.0** (2026-11-05) |
-| Спринты | 1–6 (MVP) |
-| Тесты backend | ~80 (pytest, реальный Git + временные репозитории) |
-| Тесты frontend | ~30 (Vitest + Testing Library) |
-| Покрытие | backend ≥ 70%, frontend ≥ 60% |
+| Спринты | 1–6 (MVP завершён) |
+| Тесты backend | **59** (pytest, реальные tmp-репозитории) |
+| Тесты frontend | **2** (Vitest + Testing Library) |
+| Entry bundle | 83.3 kB gzip (React 19 + Router) |
+| Покрытие | не измерялось в v0.1.0 (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
 ---

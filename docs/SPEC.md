@@ -40,9 +40,9 @@
 
 | Метод | Путь | Ответ |
 |-------|------|-------|
-| GET | `/health` | `{status, version, git_version, scan_roots, db_ok, providers: {github, gitflic}}` |
+| GET | `/health` | `{status, version, git_version, scan_roots, db_ok}` |
 
-`providers.*`: `{configured: bool, reachable: bool, rate_remaining: int?, last_check_at: iso}` — статус токена и доступности API (кэш 60 с, аналогично `ai-teacher_python`).
+`providers.*: {configured, reachable, rate_remaining, last_check_at}` — запланировано на v0.2.0 (mirror).
 
 ### 3.2. Discovery / Сканирование
 
@@ -51,7 +51,7 @@
 | POST | `/scan` | `{roots?: string[], depth?: int, force?: bool}` | `{scan_id, started_at}` (async) |
 | GET | `/scan/{scan_id}` | — | `{status, found, added, skipped, errors[]}` |
 | GET | `/scan/latest` | — | последний скан |
-| GET | `/repositories` | `status?`, `tracked?`, `skip`, `limit` | `Repository[]` |
+| GET | `/repositories` | `tracked?`, `skip`, `limit` | `Repository[]` |
 
 - Глубина — `SCAN_DEPTH` (default 3); исключения — `SCAN_IGNORE` (`.venv`, `node_modules`, `vendor`, `dist`, `build`).
 - Для каждого найденного `.git` создаётся/обновляется запись `Repository`; новые — `tracked=false`.
@@ -63,7 +63,7 @@
 |-------|------|------|-------|
 | POST | `/repositories/{id}/track` | — | 200 `Repository` (tracked=true) |
 | POST | `/repositories/{id}/untrack` | — | 200 `Repository` (tracked=false) |
-| PATCH | `/repositories/{id}` | `{alias?, tags?, canonical_provider?, mirror_expected?, mirror_policy?}` | `Repository` |
+| PATCH | `/repositories/{id}` | `{alias?, tags?, canonical_provider?, mirror_expected?, mirror_policy?}` | `Repository` (mirror-поля — v0.2.0) |
 
 ### 3.4. Статус репозитория (локальный)
 
@@ -87,14 +87,14 @@
   "behind": 5,
   "state": "diverged",
   "dirty": {"modified": 3, "staged": 1, "untracked": 2, "conflicted": 0},
-  "stash_count": 1,
   "detached": false,
-  "last_fetch_at": "2026-11-05T08:00:00Z",
   "remote_status": "ok",
-  "recommendations": ["pull --rebase", "commit or stash changes"],
+  "error": null,
   "checked_at": "2026-11-05T08:00:05Z"
 }
 ```
+
+Рекомендации отдаются отдельным эндпоинтом `/repositories/{id}/recommendations` (§3.7).
 
 **Состояния `state` (локальные, канонические):**
 
@@ -124,7 +124,7 @@
 |-------|------|-----------|-------|
 | GET | `/dashboard` | `tracked_only?` | `{summary, repositories[]}` |
 
-`summary`: `{total, clean, needs_attention, untracked, stale, errors, mirror_issues}`.
+`summary`: `{total, clean, needs_attention, untracked, stale, errors}` (mirror-счётчики — v0.2.0).
 
 **Секция «Не отслеживаются»** — `tracked=false`. **Секция «Зеркала»** — `mirror_status != in_sync | not_applicable`, см. §3.8.
 
@@ -132,7 +132,7 @@
 
 | Метод | Путь | Ответ |
 |-------|------|-------|
-| GET | `/repositories/{id}/recommendations` | `{actions: [{action, reason, command, category}]}` |
+| GET | `/repositories/{id}/recommendations` | `[{action, reason, command, category}]` |
 
 `category ∈ {local, mirror}` — рекомендации по локальному состоянию и по зеркалам разделены. Рекомендации **не выполняются автоматически**.
 
@@ -285,7 +285,7 @@ webhook_events(             -- NEW (R9)
 
 | Параметр | Значение |
 |----------|----------|
-| Библиотека Git | **pygit2** для status/discovery; shell/GitPython для fetch/compare |
+| Библиотека Git | **pygit2** для status/discovery/log/compare; shell `git` (subprocess) для fetch/rev-list |
 | Fetch | `git fetch --all --prune`, таймаут 30 с; ошибка → `remote_status=unavailable` |
 | Read-only | Операции чтения не изменяют рабочую директорию и индекс |
 | Мутации | `pull`/`push`/`merge` — только `POST /actions` с `confirm=true` (v0.2, не реализовано в v0.1.0) |
@@ -302,19 +302,19 @@ webhook_events(             -- NEW (R9)
 
 ## 6. Критерии приёмки v0.1.0
 
-- [ ] Сканирование находит все `.git` в заданных корнях и не уходит глубже `SCAN_DEPTH`
-- [ ] Для каждого репозитория определяются `modified/staged/untracked/conflicted`, `ahead/behind`, `detached`, `no_upstream`
-- [ ] `fetch` выполняется перед сравнением; при недоступности remote — `remote_status=unavailable`, без падения
-- [ ] Дашборд показывает сводку и список репозиториев с фильтром «требуют внимания»
-- [ ] Неучтённые репозитории отображаются отдельно и могут быть добавлены в отслеживание одним действием
-- [ ] Рекомендации формируются на основе состояния (`diverged` → `pull --rebase`; `ahead` → `push`)
-- [ ] Read-only: ни одна операция чтения не изменяет рабочую директорию
-- [ ] **Mirror: `mirror_status` заполняется для всех `tracked=true`; `canonical_provider` и `mirror_expected` настраиваются через PATCH; отсутствие одного из провайдеров при `mirror_expected=true` даёт `missing_on_*` и попадает в «Требуют внимания»**
-- [ ] **Mirror: polling + webhook; webhook инвалидирует кэш и ставит задачу на пересчёт; подпись валидируется при `WEBHOOK_SECRET`**
-- [ ] **Mirror: `history_rewritten` обнаруживается и поднимается как критический алерт (force-push сломал зеркало)**
-- [ ] **Mirror: `GET /mirror/candidates` возвращает `github_only`/`gitflic_only`/`both`/`unknown` без автоматических мутаций**
-- [ ] Тесты: backend ≥ 70% покрытия, реальные временные Git-репозитории в тестах, mirror — на мок-API (response-фикстуры GitHub/GitFlic)
-- [ ] Docker Compose запускает приложение одной командой
+- [x] Сканирование находит все `.git` в заданных корнях и не уходит глубже `SCAN_DEPTH`
+- [x] Для каждого репозитория определяются `modified/staged/untracked/conflicted`, `ahead/behind`, `detached`, `no_upstream`
+- [x] `fetch` выполняется перед сравнением; при недоступности remote — `remote_status=unavailable`, без падения
+- [x] Дашборд показывает сводку и список репозиториев с фильтром «требуют внимания»
+- [x] Неучтённые репозитории отображаются отдельно и могут быть добавлены в отслеживание одним действием
+- [x] Рекомендации формируются на основе состояния (`diverged` → `pull --rebase`; `ahead` → `push`)
+- [x] Read-only: ни одна операция чтения не изменяет рабочую директорию
+- [ ] **Mirror (v0.2.0): `mirror_status` заполняется для всех `tracked=true`; `canonical_provider` и `mirror_expected` настраиваются через PATCH; отсутствие одного из провайдеров при `mirror_expected=true` даёт `missing_on_*` и попадает в «Требуют внимания»**
+- [ ] **Mirror (v0.2.0): polling + webhook; webhook инвалидирует кэш и ставит задачу на пересчёт; подпись валидируется при `WEBHOOK_SECRET`**
+- [ ] **Mirror (v0.2.0): `history_rewritten` обнаруживается и поднимается как критический алерт (force-push сломал зеркало)**
+- [ ] **Mirror (v0.2.0): `GET /mirror/candidates` возвращает `github_only`/`gitflic_only`/`both`/`unknown` без автоматических мутаций**
+- [ ] Тесты: backend ≥ 70% покрытия, реальные временные Git-репозитории в тестах, mirror — на мок-API (response-фикстуры GitHub/GitFlic) — реальные tmp-репозитории есть, покрытие и mirror-тесты — v0.2.0
+- [x] Docker Compose запускает приложение одной командой
 
 ---
 
@@ -325,8 +325,8 @@ webhook_events(             -- NEW (R9)
 | Python | 3.12 |
 | FastAPI / Pydantic | 0.115+ / 2.10+ |
 | pygit2 | 1.15+ (libgit2) |
-| GitPython | 3.1+ (для операций fetch/compare) |
-| GitHub REST API | v3 (2022-11-28) |
-| GitFlic REST API | актуальная (см. docs.gitflic.ru) |
+| git CLI | 2.40+ (fetch/rev-list) |
+| GitHub REST API | v3 (2022-11-28) — v0.2.0 |
+| GitFlic REST API | актуальная (см. docs.gitflic.ru) — v0.2.0 |
 | SQLite / PostgreSQL | 3.45+ / 17 |
-| React / Vite / TypeScript | 19 / 6 / 5.8 |
+| React / Vite / TypeScript | 19 / 8 / 7 |

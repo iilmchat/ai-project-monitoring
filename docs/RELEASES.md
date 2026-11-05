@@ -4,6 +4,24 @@
 
 ---
 
+## Релиз v0.1.0 — MVP «Situational Awareness»
+
+**Дата:** 2026-11-05 · **Тег:** `v0.1.0`
+
+Что вошло в MVP:
+
+- **Discovery** — поиск `.git` в `SCAN_ROOTS` с ограничением глубины и ignore-списком; запись `scan_runs`.
+- **Status** — pygit2-снимок: ветка, upstream, detached, `modified/staged/untracked/conflicted`, `ahead/behind`.
+- **Fetch** — `git fetch --all --prune` с таймаутом, graceful `remote_status=unavailable`, пересчёт через `rev-list`.
+- **Dashboard** — сводка, фильтры, список репозиториев, track/untrack, детали с коммитами.
+- **Recommendations** — команды по состоянию (commit/stash, rebase, push, pull, set-upstream) с копированием в UI; ничего не выполняется автоматически.
+- **Docker** — Compose: backend (Python 3.12 + libgit2 + Alembic) и frontend (Node 20 build → nginx), SQLite-volume.
+- **Brand** — палитра M3, Inter/Manrope, логотип из бренд-бука.
+
+**Итоговые метрики:** 59 backend-тестов, 2 frontend-теста, entry bundle 83.3 kB gzip.
+
+---
+
 ## Спринт 1: Discovery & Data Model
 
 **Период:** 2026-11-03 — 2026-11-04
@@ -16,7 +34,7 @@
 - [x] S1-004: Тесты discovery на tmp-репозиториях
 
 ### Метрики
-- Backend-тесты: 28 passed
+- Backend-тесты: 11 passed
 - Найдено репозиториев в тестовом дереве: 100% корректно
 
 ---
@@ -33,8 +51,8 @@
 - [x] S2-004: Тесты на всех состояниях (8 сценариев)
 
 ### Метрики
-- Backend-тесты: 52 passed
-- Покрытие: 74%
+- Backend-тесты: 30 passed
+- Все 8 состояний покрыты тестами на реальных tmp-репозиториях
 
 ---
 
@@ -47,12 +65,12 @@
 - [x] S3-001: `git fetch --all --prune` с таймаутом
 - [x] S3-002: `rev-list --left-right --count` → `ahead/behind`
 - [x] S3-003: `remote_status` (ok/unavailable/stale)
-- [x] S3-004: GitHub Compare API (опционально, с токеном)
+- [x] S3-004: `GET /repositories/{id}/compare` и `/log` (pygit2)
 - [x] S3-005: Тесты с bare-repo как remote
 
 ### Метрики
-- Backend-тесты: 68 passed
-- Fetch на 10 репозиториях: < 2 с (локально)
+- Backend-тесты: 37 passed
+- Fetch на локальных репозиториях: < 2 с
 
 ---
 
@@ -69,8 +87,9 @@
 - [x] S4-005: Кнопка «Обновить» + кэш `STATUS_TTL_SECONDS`
 
 ### Метрики
-- Frontend-тесты: 30 passed
-- Entry bundle: 68 kB gzip
+- Backend-тесты: 41 passed
+- Frontend-тесты: 2 passed
+- Entry bundle: 83.3 kB gzip
 
 ---
 
@@ -86,8 +105,9 @@
 - [x] S5-004: Docker Compose + `.env.example`
 
 ### Метрики
-- Backend-тесты: 80 passed
-- Покрытие: 71%
+- Backend-тесты: 59 passed
+- Read-only аудит: 10 проверок passed
+- Docker: `docker compose up -d --build`, UI на порту 3000
 
 ---
 
@@ -98,14 +118,14 @@
 
 ### Задачи
 - [x] S6-001: Финальные проверки (ruff, mypy, pytest, typecheck, lint, test, build)
-- [x] S6-002: Документация (README, SPEC, ARCHITECTURE, USER_GUIDE, GETTING_STARTED, RULES)
-- [x] S6-003: Тег `v0.1.0`
+- [x] S6-002: Документация (README, SPEC, ARCHITECTURE, USER_GUIDE, GETTING_STARTED, RELEASES, CHANGELOG)
+- [x] S6-003: Docs-consistency audit
+- [x] S6-004: Тег `v0.1.0` + зеркалирование в GitFlic
 
 ### Метрики
 | Показатель | Значение |
 |------------|----------|
-| Backend-тесты | 80 passed |
-| Frontend-тесты | 30 passed |
-| Покрытие backend | 71% |
-| Покрытие frontend | 62% |
-| Entry bundle | 68 kB gzip |
+| Backend-тесты | 59 passed |
+| Frontend-тесты | 2 passed |
+| Entry bundle | 83.3 kB gzip |
+| Docker | build + up проверены (UI :3000, API :8000) |

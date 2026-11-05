@@ -20,7 +20,7 @@ FastAPI (backend)
   └─ /api/v1/health
   │
   ├─ Discovery Service          — рекурсивный поиск .git/, исключения, глубина
-  ├─ Git Abstraction Layer      — pygit2 (status) + shell/GitPython (fetch, compare, log)
+  ├─ Git Abstraction Layer      — pygit2 (status, log, compare) + shell git (fetch, rev-list)
   ├─ Status Service             — локальная модель (current/behind/ahead/diverged/dirty/...)
   ├─ Remote Comparator          — fetch + rev-list (в пределах провайдера)
   ├─ Mirror Service (R8)        — GitHub ↔ GitFlic: API-клиенты, сравнение HEAD SHA
@@ -99,8 +99,8 @@ SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
 **Fetch** (`git fetch --all --prune`, таймаут 30 с) — обязателен; ошибка → `remote_status=unavailable`; **не изменяет** рабочую директорию и локальные ветки.
 
 **Compare** — два пути:
-1. **Локальный** (всегда): `git rev-list --left-right --count HEAD...@{u}`.
-2. **Провайдерский** (опционально): Compare API GitHub (для обогащения — авторы, сообщения).
+1. **Локальный** (v0.1.0): `git rev-list --left-right --count HEAD...@{u}` и pygit2.
+2. **Провайдерский** (v0.2.0, опционально): Compare API GitHub (для обогащения — авторы, сообщения); в v0.1.0 не используется.
 
 ---
 
@@ -200,9 +200,9 @@ Webhook **не заменяет** polling: если webhook не настрое�
 |---------|------------|
 | `repositories` | путь, alias, tracked, remote_url, provider, **mirror-политика** |
 | `repository_status` | последний снимок локального статуса |
-| **`repository_mirror_status`** | **последний снимок межпровайдерного состояния (R8)** |
+| **`repository_mirror_status`** | **последний снимок межпровайдерного состояния (R8) — v0.2.0** |
 | `scan_runs` | история сканирований |
-| **`webhook_events`** | **события от GitHub/GitFlic (R9)** |
+| **`webhook_events`** | **события от GitHub/GitFlic (R9) — v0.2.0** |
 
 Кэш локального статуса: `STATUS_TTL_SECONDS=60`. Кэш mirror-статуса: `MIRROR_STATUS_TTL_SECONDS=300`.
 

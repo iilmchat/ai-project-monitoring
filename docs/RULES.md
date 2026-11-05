@@ -33,7 +33,7 @@
 
 **Git-специфика:**
 - `pygit2` — для `status()` и discovery (быстро, без subprocess).
-- `fetch`/`compare` — через `subprocess` (`git`) или GitPython, с таймаутом и обработкой ошибок.
+- `fetch`/`compare` — через `subprocess` (`git`) с таймаутом и обработкой ошибок.
 - Никогда не парсить человекочитаемый вывод `git status` — только `--porcelain` или libgit2.
 
 ---

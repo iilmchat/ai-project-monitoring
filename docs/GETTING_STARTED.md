@@ -4,18 +4,18 @@
 
 | Инструмент | Версия |
 |------------|--------|
-| Python | 3.12 |
-| Node.js | 20+ |
+| Python | 3.12 (локально допустим 3.11 — KI-004) |
+| Node.js | 20+ (для Vite 8 — 20.19+) |
 | pnpm | 10+ |
 | Docker Desktop | актуальный |
-| Git | 2.40+ (для fetch/compare) |
+| Git | 2.40+ (для fetch/rev-list) |
 
 ---
 
 ## 2. Клонирование и настройка
 
 ```bash
-git clone https://github.com/iilmchat/iiruchating.git
+git clone https://github.com/iilmchat/ai-project-monitoring.git
 cd iiruchating
 cp .env.example .env
 ```
@@ -26,7 +26,7 @@ cp .env.example .env
 SCAN_ROOTS=/home/user/projects,/home/user/work
 SCAN_DEPTH=3
 SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
-GITHUB_TOKEN=<your-github-pat>          # опционально, для Compare API GitHub
+GITHUB_TOKEN=<your-github-pat>          # опционально (зарезервировано для v0.2.0)
 STATUS_TTL_SECONDS=60
 DATABASE_URL=sqlite+aiosqlite:///./data/iiruchating.db
 ```
@@ -39,10 +39,16 @@ DATABASE_URL=sqlite+aiosqlite:///./data/iiruchating.db
 docker compose up -d --build
 ```
 
-- Frontend: <http://127.0.0.1:8000>
+- Frontend (UI): <http://127.0.0.1:3000>
 - API: <http://127.0.0.1:8000/api/v1/health>
 
-SQLite-файл сохраняется в `./data/` (volume).
+SQLite-файл сохраняется в `./data/` (volume). Backend при старте выполняет
+`alembic upgrade head`. Nginx проксирует `/api` на сервис `backend`.
+
+Чтобы сканирование видело локальные проекты, добавьте volume в
+`docker-compose.yml` (пример закомментирован) или задайте `SCAN_ROOTS`.
+
+Остановить: `docker compose down`.
 
 ---
 
@@ -55,6 +61,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate        # Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -62,11 +69,11 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-pnpm install --allow-build=esbuild
+pnpm install
 pnpm dev
 ```
 
-Vite проксирует `/api` на `127.0.0.1:8000`.
+UI: <http://127.0.0.1:5173>. Vite проксирует `/api` на `127.0.0.1:8000`.
 
 ---
 

@@ -4,24 +4,29 @@
 
 —
 
-## [0.1.0] — 2026-11-05
+## [0.1.0] - 2026-11-05
 
-Первый MVP: сканирование, локальный статус, сравнение с удалённым, дашборд, read-only.
+Первый MVP: сканирование, локальный статус, сравнение с удалённым, дашборд и рекомендации. Read-only.
 
 ### Добавлено
 
-- **Discovery:** рекурсивный поиск `.git/` в `SCAN_ROOTS` с `SCAN_DEPTH` и `SCAN_IGNORE`; параллельное сканирование (`SCAN_CONCURRENCY`); запись `scan_runs`.
-- **Git-абстракция:** `pygit2` для `status()` и discovery; shell/GitPython для `fetch` и `compare`; таймауты и обработка ошибок.
-- **Канонический статус:** `current / behind / ahead / diverged / dirty / no_upstream / detached / error`; `ahead/behind` только после `fetch`.
-- **API:** `/scan`, `/repositories`, `/repositories/{id}/status`, `/compare`, `/dashboard`, `/recommendations`; track/untrack.
-- **Remote Comparator:** `git fetch --all --prune` + `rev-list --left-right --count`; опционально GitHub Compare API.
-- **Рекомендации:** генерация команд на основе состояния (без выполнения).
-- **Frontend:** дашборд со сводкой, фильтры, секция «Не отслеживаются», детали репозитория, кнопка «Обновить».
-- **Docker:** `docker-compose.yml`; SQLite-volume.
-- **Тесты:** ~80 backend (реальные tmp-репозитории), ~30 frontend.
+- **Discovery:** рекурсивный поиск `.git` в `SCAN_ROOTS` с `SCAN_DEPTH` и `SCAN_IGNORE` (case-insensitive, без входа в `.git`); запись истории в `scan_runs`; проверка глубины и вложенных репозиториев.
+- **Data model:** SQLAlchemy 2.0 модели `Repository`, `RepositoryStatus`, `ScanRun`; Alembic-миграции `001` (таблицы) и `002` (поля git-статуса).
+- **Git-абстракция:** `pygit2` для status/discovery/log/compare; shell `git` (subprocess, `asyncio.to_thread`) для `fetch --all --prune` и `rev-list`.
+- **Канонический статус:** `current / behind / ahead / diverged / dirty / no_upstream / detached / error`; приоритет `detached → no_upstream → dirty → diverged → ahead → behind → current`; `ahead/behind` по локальным refs и после fetch.
+- **Remote:** таймаут `FETCH_TIMEOUT`; ошибка/таймаут fetch → `remote_status=unavailable` без 500; успех → `ok`; без fetch → `stale`.
+- **API (`/api/v1`):** `GET /health`, `POST /scan`, `GET /scan/{id}`, `GET /scan/latest`, `GET /repositories` (+ пагинация), `POST /repositories/{id}/track|untrack`, `GET /repositories/{id}/status|compare|log|recommendations`, `POST /repositories/{id}/refresh`, `GET /dashboard`.
+- **Кэш статуса:** in-memory TTL + свежесть `checked_at` из БД (`STATUS_TTL_SECONDS=60`); `POST /refresh` обходит кэш.
+- **Рекомендации:** `commit/stash`, `pull --rebase`, `push`, `pull`, `set-upstream` — только текст, без выполнения.
+- **Frontend:** React 19 + Vite 8 + TypeScript, Tailwind; дашборд со сводкой и фильтрами «Все / Требуют внимания / Не отслеживаются», скан, таблица, track; страница деталей с коммитами и блоком «Рекомендации» (кнопка «Копировать»).
+- **Бренд:** логотип, favicon, палитра M3 и шрифты Inter/Manrope.
+- **Docker:** `backend/Dockerfile` (Python 3.12, libgit2, Alembic перед запуском), `frontend/Dockerfile` (Node 20 → nginx), `docker-compose.yml`, SPA-fallback и прокси `/api`.
+- **Тесты:** 59 backend (реальные tmp-репозитории, bare-remote), 2 frontend (Vitest + Testing Library), read-only аудит кода.
 
 ### Ограничения
 
-- Мутации (`pull`/`push`) не реализованы — только рекомендации.
-- GitFlic Compare API не поддержан в v0.1 (локальное сравнение работает).
+- Мутации (`pull`/`push`) не реализованы — только рекомендации (ADR-0003).
+- Mirror GitHub ↔ GitFlic (`mirror_status`, polling, webhook) — v0.2.0.
+- GitHub/GitFlic Compare API не используется; сравнение локальное (pygit2).
 - История статусов не ведётся (только последний снимок).
+- Покрытие кода в v0.1.0 не измерялось (`pytest-cov` не подключён).
