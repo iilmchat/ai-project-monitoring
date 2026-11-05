@@ -14,6 +14,8 @@ from pathlib import Path
 import pygit2
 from pygit2.enums import FileStatus, SortMode
 
+from app.git.command_backend import is_repo_dirty_fast
+
 _INDEX_CHANGES = (
     FileStatus.INDEX_NEW
     | FileStatus.INDEX_MODIFIED
@@ -111,7 +113,7 @@ def read_local_status(path: str | Path) -> LocalStatus:
         upstream = _upstream_name(repo, branch) if branch and not detached else None
         head_sha, head_subject, head_date, head_oid = _head_info(repo, unborn=unborn)
         ahead, behind = _ahead_behind(repo, head_oid, upstream)
-        dirty = _dirty_counts(repo)
+        dirty = _dirty_counts(repo, target)
     except (KeyError, OSError, ValueError, pygit2.GitError) as exc:
         raise GitStatusError(f"cannot read repository status at {target}: {exc}") from exc
 
@@ -197,7 +199,11 @@ def _ahead_behind(
     return int(ahead), int(behind)
 
 
-def _dirty_counts(repo: pygit2.Repository) -> DirtyCounts:
+def _dirty_counts(repo: pygit2.Repository, path: str | Path) -> DirtyCounts:
+    # KI-002: avoid a full working-tree walk when tracked files are clean.
+    if not is_repo_dirty_fast(path):
+        return DirtyCounts()
+
     modified = 0
     staged = 0
     untracked = 0

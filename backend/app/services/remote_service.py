@@ -47,13 +47,23 @@ class RemoteService:
             )
             return RemoteFetchResult(ok=True, duration_ms=result.duration_ms)
 
-        logger.warning(
-            "fetch_failed",
-            path=str(repository_path),
-            duration_ms=result.duration_ms,
-            timed_out=result.timed_out,
-            error=result.error,
-        )
+        if result.timed_out:
+            logger.warning(
+                "fetch_timed_out",
+                path=str(repository_path),
+                timeout_seconds=self._timeout,
+                message=(
+                    f"Fetch timed out after {self._timeout:g}s. "
+                    "Consider increasing FETCH_TIMEOUT"
+                ),
+            )
+        else:
+            logger.warning(
+                "fetch_failed",
+                path=str(repository_path),
+                duration_ms=result.duration_ms,
+                error=result.error,
+            )
         return RemoteFetchResult(
             ok=False,
             duration_ms=result.duration_ms,

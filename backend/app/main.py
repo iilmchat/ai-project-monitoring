@@ -14,6 +14,7 @@ from app.config import Settings
 from app.db.session import build_engine, build_session_factory
 from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
+from app.services.compare_cache import CompareCache
 from app.services.remote_service import RemoteService
 from app.services.status_service import StatusCache, StatusService
 
@@ -32,6 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = build_engine(resolved.database_url)
     session_factory = build_session_factory(engine)
     status_cache = StatusCache(ttl_seconds=resolved.status_ttl_seconds)
+    compare_cache = CompareCache(ttl_seconds=resolved.compare_ttl_seconds)
     remote_service = RemoteService(timeout_seconds=resolved.fetch_timeout)
     status_service = StatusService(
         status_cache,
@@ -63,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.engine = engine
     application.state.session_factory = session_factory
     application.state.status_cache = status_cache
+    application.state.compare_cache = compare_cache
     application.state.remote_service = remote_service
     application.state.status_service = status_service
     application.add_middleware(RequestLoggingMiddleware)

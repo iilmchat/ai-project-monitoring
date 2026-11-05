@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
-—
+### Изменено
+
+- perf: fast dirty check (KI-002) — `git status --porcelain -uno` перед `pygit2.status()`; чистый tracked-статус не грузит CPU.
+- feat: compare cache (KI-003) — TTL-кэш `GET /repositories/{id}/compare` (60 с, инвалидация на refresh).
+- fix: fetch timeout cleanup (KI-001) — таймаут fetch убивает процесс (`proc.kill()`), логирует подсказку увеличить `FETCH_TIMEOUT`.
 
 ## [0.1.0] - 2026-11-05
 

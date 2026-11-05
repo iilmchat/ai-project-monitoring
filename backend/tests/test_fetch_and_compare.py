@@ -166,6 +166,12 @@ async def test_compare_api(
     base_sha = _run_git(local, "rev-parse", "HEAD").stdout.strip()
     new_sha = _commit(local, "local.txt", "local\n", "local commit")
 
+    # The compare cache (KI-003) is invalidated by an explicit refresh.
+    await client.post(
+        f"/api/v1/repositories/{repository_id}/refresh",
+        json={"fetch": False},
+    )
+
     ahead = await client.get(f"/api/v1/repositories/{repository_id}/compare")
     assert ahead.status_code == 200
     body = ahead.json()

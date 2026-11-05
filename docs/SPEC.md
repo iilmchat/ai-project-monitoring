@@ -293,6 +293,7 @@ webhook_events(             -- NEW (R9)
 | Исключения сканирования | `.git`, `node_modules`, `.venv`, `vendor`, `dist`, `build`, `target` |
 | Параллелизм сканирования | `SCAN_CONCURRENCY` (default 4) |
 | Кэш локального статуса | `STATUS_TTL_SECONDS` (default 60) |
+| **Кэш compare** | **`COMPARE_TTL_SECONDS` (default 60; ключ `repo_id, base, head`)** |
 | **Кэш mirror-статуса** | **`MIRROR_STATUS_TTL_SECONDS` (default 300)** |
 | **Интервал polling** | **`MIRROR_POLL_INTERVAL_SECONDS` (default 300; замедление при rate-limit)** |
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |

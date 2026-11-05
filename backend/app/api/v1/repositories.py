@@ -26,6 +26,7 @@ from app.schemas.repository import (
     RepositoryRead,
     RepositoryStatusResponse,
 )
+from app.services.compare_cache import CompareCache
 from app.services.recommendation_service import generate_recommendations
 from app.services.status_service import StatusService
 
@@ -35,6 +36,11 @@ router = APIRouter(tags=["repositories"])
 def _status_service(request: Request) -> StatusService:
     service: StatusService = request.app.state.status_service
     return service
+
+
+def _compare_cache(request: Request) -> CompareCache:
+    cache: CompareCache = request.app.state.compare_cache
+    return cache
 
 
 async def _get_repository(session: AsyncSession, repository_id: int) -> Repository:
@@ -120,6 +126,7 @@ async def refresh_repository_status(
     repository = await _get_repository(session, repository_id)
     should_fetch = payload.fetch if payload is not None else True
     snapshot = await _status_service(request).refresh(session, repository, fetch=should_fetch)
+    _compare_cache(request).invalidate(repository_id)
     return RepositoryStatusResponse.model_validate(snapshot)
 
 
@@ -146,6 +153,7 @@ async def repository_recommendations(
 @router.get("/repositories/{repository_id}/compare", response_model=CompareResponse)
 async def compare_repository(
     repository_id: int,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     base: Annotated[str | None, Query()] = None,
     head: Annotated[str | None, Query()] = None,
@@ -163,17 +171,24 @@ async def compare_repository(
     if resolved_base is None:
         return CompareResponse(ahead=0, behind=0, status="unavailable", commits=[])
 
+    resolved_head = head or "HEAD"
+    cache = _compare_cache(request)
+    cached = cache.get(repository.id, resolved_base, resolved_head)
+    if cached is not None:
+        return CompareResponse.model_validate(cached)
+
     try:
         result = await asyncio.to_thread(
             compare_refs,
             repository.path,
             resolved_base,
-            head or "HEAD",
+            resolved_head,
             10,
         )
     except GitStatusError:
         return CompareResponse(ahead=0, behind=0, status="unavailable", commits=[])
 
+    cache.set(repository.id, resolved_base, resolved_head, result)
     return CompareResponse.model_validate(result)
 
 

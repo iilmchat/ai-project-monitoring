@@ -242,9 +242,9 @@
 
 | KI | Severity | Спринт закрытия | Статус |
 |----|----------|-----------------|--------|
-| KI-001 (fetch timeout) | Med | S7-001 | Open |
-| KI-002 (status на больших деревьях) | Low | S7-002 | Open |
-| KI-003 (GitHub Compare rate-limit) | Med | S7-003 | Open |
+| KI-001 (fetch timeout) | Med | S7-001 | Resolved |
+| KI-002 (status на больших деревьях) | Low | S7-002 | Resolved |
+| KI-003 (GitHub Compare rate-limit) | Med | S7-003 | Resolved |
 
 Новые KI, обнаруженные в спринтах, добавляются в `docs/KNOWN_ISSUES.md` и в эту таблицу.
 

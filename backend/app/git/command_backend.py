@@ -12,6 +12,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+FAST_STATUS_TIMEOUT = 2.0
+
 
 @dataclass(frozen=True, slots=True)
 class CommandResult:
@@ -49,25 +55,19 @@ def run_git(
     cwd: str | Path,
     timeout: float,
 ) -> CommandResult:
-    """Run ``git <args>`` in ``cwd`` without blocking the event loop."""
+    """Run ``git <args>`` in ``cwd`` without blocking the event loop.
+
+    Uses ``Popen.communicate(timeout=...)`` so that a timed-out Git process is
+    explicitly killed and reaped instead of being left running (KI-001).
+    """
     try:
-        completed = subprocess.run(
+        process: subprocess.Popen[str] = subprocess.Popen(
             ["git", *args],
             cwd=str(cwd),
-            capture_output=True,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             env=_git_env(),
-        )
-    except subprocess.TimeoutExpired:
-        return CommandResult(
-            ok=False,
-            exit_code=-1,
-            stdout="",
-            stderr="",
-            timed_out=True,
-            error=f"git {' '.join(args)} timed out after {timeout:g}s",
         )
     except OSError as exc:
         return CommandResult(
@@ -78,19 +78,61 @@ def run_git(
             error=f"failed to start git: {exc}",
         )
 
-    ok = completed.returncode == 0
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
+        return CommandResult(
+            ok=False,
+            exit_code=-1,
+            stdout=stdout or "",
+            stderr=stderr or "",
+            timed_out=True,
+            error=f"git {' '.join(args)} timed out after {timeout:g}s",
+        )
+
+    ok = process.returncode == 0
     error = None
     if not ok:
-        error = completed.stderr.strip() or completed.stdout.strip() or (
-            f"git exited with code {completed.returncode}"
+        error = stderr.strip() or stdout.strip() or (
+            f"git exited with code {process.returncode}"
         )
     return CommandResult(
         ok=ok,
-        exit_code=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        exit_code=process.returncode,
+        stdout=stdout,
+        stderr=stderr,
         error=error,
     )
+
+
+def is_repo_dirty_fast(
+    repository_path: str | Path,
+    timeout: float = FAST_STATUS_TIMEOUT,
+) -> bool:
+    """Cheap dirty probe: ``git status --porcelain -uno`` (KI-002).
+
+    ``-uno`` skips untracked files, which is what makes this fast on huge
+    working trees. A timeout/error is treated as "dirty" so the caller falls
+    back to the detailed pygit2 path instead of reporting a false clean state.
+    """
+    result = run_git(
+        ["status", "--porcelain", "-uno"],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+    if result.timed_out:
+        logger.warning(
+            "fast_status_timed_out",
+            path=str(repository_path),
+            timeout=timeout,
+            message="Fast dirty check timed out; falling back to pygit2 status",
+        )
+        return True
+    if not result.ok:
+        return True
+    return bool(result.stdout.strip())
 
 
 def fetch_all(repository_path: str | Path, timeout: float) -> FetchResult:
@@ -138,9 +180,11 @@ def rev_list_counts(
 
 
 __all__ = [
+    "FAST_STATUS_TIMEOUT",
     "CommandResult",
     "FetchResult",
     "fetch_all",
+    "is_repo_dirty_fast",
     "rev_list_counts",
     "run_git",
 ]

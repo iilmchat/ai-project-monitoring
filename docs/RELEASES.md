@@ -129,3 +129,20 @@
 | Frontend-тесты | 2 passed |
 | Entry bundle | 83.3 kB gzip |
 | Docker | build + up проверены (UI :3000, API :8000) |
+
+---
+
+## Спринт 7: Стабилизация и технический долг (v0.2.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S7-001 (KI-001): таймаут fetch убивает процесс и логирует подсказку увеличить `FETCH_TIMEOUT`
+- [x] S7-002 (KI-002): быстрый dirty-check `git status --porcelain -uno` перед `pygit2.status()`
+- [x] S7-003 (KI-003): TTL-кэш `GET /repositories/{id}/compare` (60 с, инвалидация на refresh)
+- [x] S7-004: документация (`FETCH_TIMEOUT`, `COMPARE_TTL_SECONDS`, KNOWN_ISSUES, CHANGELOG)
+
+### Метрики
+- Backend-тесты: 66 passed
+- KI-001…KI-003: **Resolved**
