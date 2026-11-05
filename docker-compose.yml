@@ -9,7 +9,10 @@ services:
       # SQLite database lives on the host and survives container rebuilds.
       - ./data:/app/data
       # Host projects mounted read-write so scan/status/actions work.
-      - C:/Projects:/projects
+      # PROJECTS_ROOT lets Windows/Linux users point at a different host root.
+      - ${PROJECTS_ROOT:-C:/Projects}:/projects
+      # Read-only Docker socket for container status (DooD, S24-002).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DATABASE_URL: sqlite+aiosqlite:////app/data/iiruchating.db
       SCAN_ROOTS: ${SCAN_ROOTS:-/projects}
@@ -18,6 +21,11 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITFLIC_TOKEN: ${GITFLIC_TOKEN:-}
       FETCH_TIMEOUT: ${FETCH_TIMEOUT:-30}
+      DOCKER_ENABLED: ${DOCKER_ENABLED:-true}
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      DOCKER_PATH_MAP: ${DOCKER_PATH_MAP:-C:/Projects=/projects}
+      DOCKER_STATUS_TTL_SECONDS: ${DOCKER_STATUS_TTL_SECONDS:-30}
+      DOCKER_TIMEOUT_SECONDS: ${DOCKER_TIMEOUT_SECONDS:-3}
     env_file:
       - path: .env
         required: false

@@ -13,7 +13,13 @@ import {
 } from 'recharts'
 
 import type { DashboardSummary } from '../api/types'
+import { useTheme } from '../theme/ThemeContext'
 
+/**
+ * Brand series colours. They intentionally stay the same in both themes:
+ * state semantics must remain recognisable, while axes/grid/tooltip surfaces
+ * switch with the M3 theme tokens below.
+ */
 const STATE_COLORS: Record<string, string> = {
   current: '#10B981',
   dirty: '#F59E0B',
@@ -38,6 +44,33 @@ const MIRROR_COLORS: Record<string, string> = {
   unavailable: '#64748B',
 }
 
+const DEFAULT_SERIES_COLOR = '#8B5CF6'
+
+interface ChartTheme {
+  surface: string
+  onSurface: string
+  grid: string
+  gridOpacity: number
+  tooltipBorder: string
+}
+
+const CHART_THEMES: Record<'light' | 'dark', ChartTheme> = {
+  light: {
+    surface: '#FEF7FF',
+    onSurface: '#1D1A23',
+    grid: '#1D1A23',
+    gridOpacity: 0.12,
+    tooltipBorder: '#CBC3D7',
+  },
+  dark: {
+    surface: '#15121B',
+    onSurface: '#FFFFFF',
+    grid: '#FFFFFF',
+    gridOpacity: 0.18,
+    tooltipBorder: '#494454',
+  },
+}
+
 interface TooltipPayloadItem {
   name?: string
   value?: number
@@ -47,22 +80,34 @@ interface TooltipPayloadItem {
 function ChartTooltip({
   active,
   payload,
+  theme,
 }: {
   active?: boolean
   payload?: TooltipPayloadItem[]
+  theme: ChartTheme
 }) {
   if (!active || !payload?.length) {
     return null
   }
   const item = payload[0]
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+    <div
+      className="rounded-md border px-3 py-2 text-xs shadow"
+      style={{
+        backgroundColor: theme.surface,
+        borderColor: theme.tooltipBorder,
+        color: theme.onSurface,
+      }}
+    >
       {item.payload?.name ?? item.name}: {item.payload?.value ?? item.value}
     </div>
   )
 }
 
 export default function DashboardCharts({ summary }: { summary: DashboardSummary }) {
+  const { resolved } = useTheme()
+  const theme = CHART_THEMES[resolved]
+
   const stateData = [
     ...Object.entries(summary.by_state).map(([name, value]) => ({ name, value })),
     { name: 'untracked', value: summary.untracked },
@@ -74,49 +119,98 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
 
   return (
     <div data-testid="dashboard-charts" className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div
+        className="rounded-xl border p-4 shadow-sm"
+        style={{ backgroundColor: theme.surface, borderColor: theme.tooltipBorder }}
+      >
+        <h2
+          className="text-sm font-semibold uppercase tracking-wide"
+          style={{ color: theme.onSurface }}
+        >
           Обзор состояния
         </h2>
         <div className="mt-3 h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={stateData} dataKey="value" nameKey="name" outerRadius="80%">
+              <Pie
+                data={stateData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius="80%"
+                isAnimationActive={false}
+              >
                 {stateData.map((entry) => (
                   <Cell
                     key={entry.name}
-                    fill={STATE_COLORS[entry.name] ?? '#8B5CF6'}
+                    fill={STATE_COLORS[entry.name] ?? DEFAULT_SERIES_COLOR}
                   />
                 ))}
               </Pie>
-              <Tooltip content={<ChartTooltip />} />
-              <Legend />
+              <Tooltip content={<ChartTooltip theme={theme} />} />
+              <Legend
+                wrapperStyle={{ color: theme.onSurface, fontSize: 12 }}
+                formatter={(value: string) => (
+                  <span style={{ color: theme.onSurface }}>{value}</span>
+                )}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div
+        className="rounded-xl border p-4 shadow-sm"
+        style={{ backgroundColor: theme.surface, borderColor: theme.tooltipBorder }}
+      >
+        <h2
+          className="text-sm font-semibold uppercase tracking-wide"
+          style={{ color: theme.onSurface }}
+        >
           Состояние зеркал
         </h2>
         <div className="mt-3 h-64">
           {mirrorData.length === 0 ? (
-            <p className="pt-16 text-center text-sm text-slate-500 dark:text-slate-400">
+            <p
+              className="pt-16 text-center text-sm"
+              style={{ color: theme.onSurface }}
+            >
               Нет данных о зеркалах.
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={mirrorData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.3} />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={theme.grid}
+                  opacity={theme.gridOpacity}
+                />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 10, fill: theme.onSurface }}
+                  stroke={theme.onSurface}
+                  interval={0}
+                  angle={-15}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: theme.onSurface }}
+                  stroke={theme.onSurface}
+                />
+                <Tooltip
+                  content={<ChartTooltip theme={theme} />}
+                  cursor={{ fill: theme.onSurface, opacity: 0.06 }}
+                />
+                <Legend
+                  wrapperStyle={{ color: theme.onSurface, fontSize: 12 }}
+                  formatter={(value: string) => (
+                    <span style={{ color: theme.onSurface }}>{value}</span>
+                  )}
+                />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {mirrorData.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={MIRROR_COLORS[entry.name] ?? '#8B5CF6'}
+                      fill={MIRROR_COLORS[entry.name] ?? DEFAULT_SERIES_COLOR}
                     />
                   ))}
                 </Bar>

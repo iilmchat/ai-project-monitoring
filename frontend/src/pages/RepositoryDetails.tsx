@@ -6,6 +6,7 @@ import {
   getActions,
   getCiStatus,
   getConflicts,
+  getDockerStatus,
   getLog,
   getMirror,
   getRecommendations,
@@ -22,6 +23,9 @@ import type {
   CIStatus,
   CommitInfo,
   ConflictsResponse,
+  DockerContainer,
+  DockerPort,
+  DockerStatus,
   MirrorProviderStatus,
   MirrorStatus,
   Recommendation,
@@ -66,6 +70,8 @@ export default function RepositoryDetails() {
   const [mirror, setMirror] = useState<MirrorStatus | null>(null)
   const [ciStatus, setCiStatus] = useState<CIStatus | null>(null)
   const [conflicts, setConflicts] = useState<ConflictsResponse | null>(null)
+  const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
+  const [dockerRefreshing, setDockerRefreshing] = useState(false)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -91,17 +97,27 @@ export default function RepositoryDetails() {
     let active = true
     void (async () => {
       try {
-        const [list, currentStatus, log, tips, mirrorStatus, actionHistory, ci, conflictData] =
-          await Promise.all([
-            getRepositories(0, 500),
-            getStatus(repositoryId),
-            getLog(repositoryId, 10),
-            getRecommendations(repositoryId),
-            getMirror(repositoryId),
-            getActions(repositoryId),
-            getCiStatus(repositoryId),
-            getConflicts(repositoryId),
-          ])
+        const [
+          list,
+          currentStatus,
+          log,
+          tips,
+          mirrorStatus,
+          actionHistory,
+          ci,
+          conflictData,
+          docker,
+        ] = await Promise.all([
+          getRepositories(0, 500),
+          getStatus(repositoryId),
+          getLog(repositoryId, 10),
+          getRecommendations(repositoryId),
+          getMirror(repositoryId),
+          getActions(repositoryId),
+          getCiStatus(repositoryId),
+          getConflicts(repositoryId),
+          getDockerStatus(repositoryId).catch(() => null),
+        ])
         if (!active) {
           return
         }
@@ -114,6 +130,7 @@ export default function RepositoryDetails() {
         setHistory(actionHistory)
         setCiStatus(ci)
         setConflicts(conflictData)
+        setDockerStatus(docker)
         if (found) {
           setPolicyCanonical(
             found.canonical_provider === 'gitflic' ? 'gitflic' : 'github',
@@ -178,6 +195,18 @@ export default function RepositoryDetails() {
     }
   }
 
+  async function handleDockerRefresh() {
+    setDockerRefreshing(true)
+    try {
+      setDockerStatus(await getDockerStatus(repositoryId, true))
+      setError(null)
+    } catch {
+      setError('Не удалось обновить статус Docker.')
+    } finally {
+      setDockerRefreshing(false)
+    }
+  }
+
   function openPolicy() {
     setPolicyCanonical(repository?.canonical_provider === 'gitflic' ? 'gitflic' : 'github')
     setPolicyExpected(repository?.mirror_expected ?? true)
@@ -236,16 +265,25 @@ export default function RepositoryDetails() {
       setActionPrompt(null)
       setActionConfirmed(false)
 
-      const [updatedStatus, log, tips, mirrorStatus, actionHistory, ci, conflictData] =
-        await Promise.all([
-          refreshRepository(repositoryId, false),
-          getLog(repositoryId, 10),
-          getRecommendations(repositoryId),
-          getMirror(repositoryId),
-          getActions(repositoryId),
-          getCiStatus(repositoryId),
-          getConflicts(repositoryId),
-        ])
+      const [
+        updatedStatus,
+        log,
+        tips,
+        mirrorStatus,
+        actionHistory,
+        ci,
+        conflictData,
+        docker,
+      ] = await Promise.all([
+        refreshRepository(repositoryId, false),
+        getLog(repositoryId, 10),
+        getRecommendations(repositoryId),
+        getMirror(repositoryId),
+        getActions(repositoryId),
+        getCiStatus(repositoryId),
+        getConflicts(repositoryId),
+        getDockerStatus(repositoryId).catch(() => null),
+      ])
       setStatus(updatedStatus)
       setCommits(log)
       setRecommendations(tips)
@@ -253,6 +291,7 @@ export default function RepositoryDetails() {
       setHistory(actionHistory)
       setCiStatus(ci)
       setConflicts(conflictData)
+      setDockerStatus(docker)
     } catch {
       setActionResult('Не удалось выполнить действие.')
     } finally {
@@ -436,6 +475,96 @@ export default function RepositoryDetails() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="docker-block"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Docker Containers
+              </h2>
+              <div className="flex items-center gap-2">
+                <DockerBadge status={dockerStatus?.status} />
+                <button
+                  type="button"
+                  onClick={() => void handleDockerRefresh()}
+                  disabled={dockerRefreshing}
+                  className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {dockerRefreshing ? 'Обновление…' : 'Обновить'}
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {dockerStatus === null ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Не удалось получить статус Docker.
+                </p>
+              ) : (
+                <>
+                  {dockerStatus.status === 'unavailable' && (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                      {dockerStatus.error ?? 'Docker daemon not running'}
+                    </p>
+                  )}
+                  {dockerStatus.status === 'not_found' && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Контейнеры для этого репозитория не найдены.
+                    </p>
+                  )}
+                  {dockerStatus.containers.length > 0 && (
+                    <ul className="space-y-3">
+                      {dockerStatus.containers.map((container) => (
+                        <li
+                          key={container.id || container.name}
+                          className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p
+                                className="truncate font-mono text-sm font-semibold text-slate-800 dark:text-slate-100"
+                                title={container.name}
+                              >
+                                {container.name}
+                              </p>
+                              <p
+                                className="truncate text-xs text-slate-500 dark:text-slate-400"
+                                title={container.image}
+                              >
+                                {container.image || '—'}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                container.state === 'running'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                  : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              {container.status}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                            compose: {container.compose_project ?? '—'}
+                            {container.compose_service
+                              ? ` / ${container.compose_service}`
+                              : ''}
+                          </p>
+                          <p className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+                            {formatContainerPorts(container)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                    Проверено: {formatDate(dockerStatus.checked_at)}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -760,6 +889,43 @@ export default function RepositoryDetails() {
       )}
     </section>
   )
+}
+
+function DockerBadge({ status }: { status: DockerStatus['status'] | undefined }) {
+  const config =
+    status === 'running'
+      ? { label: 'Running', className: 'bg-emerald-100 text-emerald-800 ring-emerald-200' }
+      : status === 'stopped'
+        ? { label: 'Stopped', className: 'bg-slate-100 text-slate-600 ring-slate-200' }
+        : status === 'unavailable'
+          ? { label: 'Docker not available', className: 'bg-amber-100 text-amber-800 ring-amber-200' }
+          : status === 'not_found'
+            ? { label: 'Not found', className: 'bg-slate-100 text-slate-500 ring-slate-200' }
+            : { label: 'Unknown', className: 'bg-slate-100 text-slate-500 ring-slate-200' }
+
+  return (
+    <span
+      data-testid="docker-status"
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${config.className}`}
+    >
+      {config.label}
+    </span>
+  )
+}
+
+function formatPort(port: DockerPort): string {
+  const target = `${port.container_port ?? '?'}/${port.protocol}`
+  if (port.host_port === null) {
+    return target
+  }
+  return `${port.host_ip ?? '0.0.0.0'}:${port.host_port}->${target}`
+}
+
+function formatContainerPorts(container: DockerContainer): string {
+  if (container.ports.length === 0) {
+    return 'нет опубликованных портов'
+  }
+  return container.ports.map(formatPort).join(', ')
 }
 
 function ciBadgeStyle(aggregate: string | null | undefined): string {

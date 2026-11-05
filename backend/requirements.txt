@@ -9,6 +9,7 @@ pydantic-settings==2.7.0
 pygit2==1.15.1
 structlog==24.4.0
 prometheus_client==0.21.1
+docker==7.1.0
 
 # Tests
 pytest==8.3.4

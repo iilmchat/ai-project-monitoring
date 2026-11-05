@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(ui): M3-тема для recharts — оси, сетка, тултипы и легенды используют surface/on-surface, light/dark переключается без reload (S24-001).
+- feat(docker): read-only Docker SDK интеграция — `GET /repositories/{id}/docker`, статусы `running/stopped/not_found/unavailable`, порты, health и compose-labels (S24-002).
+- feat(docker): DooD — `/var/run/docker.sock:ro`, `DOCKER_HOST`, `DOCKER_PATH_MAP`; ошибки Docker не дают 5xx (S24-003).
+- feat(ui): блок «Docker Containers» в деталях репозитория (S24-004).
+- test(docker): fake Docker client, path mapping, cache/refresh и API-контракт.
+
 ### Документация
 
 - docs(planning): план v0.5.0 — Dark Charts, Docker, зависимости Python/Node (S23-001..S23-003).
+- docs(docker): SPEC §3.14, ARCHITECTURE §10, ADR-0007, KI-009.
 
 ## [0.4.0] - 2026-11-05
 

@@ -52,11 +52,31 @@ SQLite-файл сохраняется в `./data/` (volume). Backend при с�
 `alembic upgrade head`. Nginx проксирует `/api` на сервис `backend`.
 
 Каталог с проектами монтируется в контейнер: по умолчанию
-`C:/Projects:/projects`, а `SCAN_ROOTS=/projects`. Если ваши репозитории
-лежат в другом месте, измените путь в `docker-compose.yml` (`volumes`) и
-`SCAN_ROOTS` — иначе сканирование найдёт 0 репозиториев.
+`${PROJECTS_ROOT:-C:/Projects}:/projects`, а `SCAN_ROOTS=/projects`. Если ваши
+репозитории лежат в другом месте, задайте `PROJECTS_ROOT` и
+`DOCKER_PATH_MAP=<host-root>=/projects` (или измените `volumes`/`SCAN_ROOTS`) —
+иначе сканирование найдёт 0 репозиториев.
 
 Остановить: `docker compose down`.
+
+### Docker-статус контейнеров (v0.5.0)
+
+Backend монтирует Docker-сокет хоста read-only и показывает статус контейнеров
+проекта в деталях репозитория:
+
+- В `docker-compose.yml`: `/var/run/docker.sock:/var/run/docker.sock:ro`,
+  `DOCKER_HOST=unix:///var/run/docker.sock`.
+- `DOCKER_PATH_MAP` переводит host-пути compose-проектов в пути backend-контейнера.
+  Для стандартного mount `C:/Projects:/projects` значение по умолчанию —
+  `C:/Projects=/projects`. Если проекты лежат в другом месте, задайте
+  `PROJECTS_ROOT` (источник volume) и пару
+  `DOCKER_PATH_MAP=<host-root>=/projects`.
+- На Windows при локальном запуске (без Docker) оставьте `DOCKER_HOST` пустым:
+  Docker SDK выберет named pipe `\\.\pipe\docker_engine`.
+- Проверка: `curl http://127.0.0.1:8000/api/v1/repositories/1/docker`.
+- Если Docker Desktop не запущен или доступ к сокету запрещён, API вернёт
+  `status: "unavailable"` и текст ошибки; остальной дашборд продолжит работать.
+  Подробности — KI-009.
 
 ---
 

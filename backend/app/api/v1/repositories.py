@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.db.base import utcnow
 from app.db.session import get_session
 from app.git.command_backend import get_conflicts
 from app.git.pygit2_backend import (
@@ -37,6 +38,7 @@ from app.schemas.action import (
     BulkActionRequest,
 )
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
+from app.schemas.docker import DockerStatusResponse
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
     MirrorPolicyUpdate,
@@ -61,6 +63,7 @@ from app.services.action_service import (
 from app.services.bulk_service import BulkService
 from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
+from app.services.docker_service import DockerService
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
 from app.services.status_service import StatusService
@@ -80,6 +83,11 @@ def _compare_cache(request: Request) -> CompareCache:
 
 def _mirror_service(request: Request) -> MirrorService:
     service: MirrorService = request.app.state.mirror_service
+    return service
+
+
+def _docker_service(request: Request) -> DockerService:
+    service: DockerService = request.app.state.docker_service
     return service
 
 
@@ -148,6 +156,28 @@ async def _get_repository(session: AsyncSession, repository_id: int) -> Reposito
             detail=f"repository {repository_id} not found",
         )
     return repository
+
+
+@router.get(
+    "/repositories/{repository_id}/docker",
+    response_model=DockerStatusResponse,
+)
+async def repository_docker_status(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    refresh: Annotated[bool, Query()] = False,
+) -> DockerStatusResponse:
+    repository = await _get_repository(session, repository_id)
+    result = await _docker_service(request).get_container_status(
+        repository.path,
+        refresh=refresh,
+    )
+    return DockerStatusResponse(
+        repository_id=repository_id,
+        checked_at=utcnow(),
+        **result.model_dump(),
+    )
 
 
 @router.get("/repositories", response_model=RepositoryListResponse)

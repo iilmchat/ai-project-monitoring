@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # pygit2 needs libgit2; the git CLI is used for fetch/rev-list.
+# Docker access uses the Python docker SDK from requirements.txt (no docker CLI).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgit2-dev git gcc \
     && rm -rf /var/lib/apt/lists/* \

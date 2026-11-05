@@ -1,7 +1,8 @@
 # ARCHITECTURE — как устроен IIRuchating
 
-Документ описывает **текущее** устройство системы; разделы с пометкой
-«v0.5.0 (план)» фиксируют проектное решение до реализации.
+Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
+реализован в Sprint 24; разделы с пометкой «v0.5.0 (план)» фиксируют проектное
+решение до реализации.
 
 ---
 
@@ -28,7 +29,7 @@ FastAPI (backend)
   ├─ Mirror Service (R8)        — GitHub ↔ GitFlic: API-клиенты, сравнение HEAD SHA
   ├─ Mirror Scheduler (R9)      — polling раз в N минут + webhook-инвалидация
   ├─ Recommendation Service     — команды по состоянию (local + mirror)
-  ├─ Docker Service (v0.5.0)    — read-only Docker Engine API (UDS) / docker ps fallback
+  ├─ Docker Service (v0.5.0)    — read-only docker SDK (UDS/npipe), container status
   ├─ Dependency Service         — requirements.txt / package.json → PyPI / npm
   └─ SQLite (или PostgreSQL)    — repositories, repository_status, repository_mirror_status,
                                   scan_runs, webhook_events, dependency_cache
@@ -47,12 +48,8 @@ app/services/*          бизнес-логика:
                           mirror_service          ← NEW (R8)
                           mirror_scheduler        ← NEW (R9)
                           recommendation_service
-                          docker_service          ← NEW (v0.5.0)
+                          docker_service          ← NEW (v0.5.0; docker SDK + matcher)
                           dependency_service      ← NEW (v0.5.0)
-app/docker/*            Docker-абстракция:        ← NEW (v0.5.0)
-                          engine_api (UDS)
-                          cli_backend (docker ps)
-                          matcher (repository ↔ containers)
 app/providers/*         клиенты внешних API:
                           github_client (REST v3)
                           gitflic_client (REST)
@@ -70,7 +67,7 @@ app/errors.py           доменные исключения
 - Сервисы не используют `HTTPException` — только доменные ошибки.
 - Git-операции не выполняются в HTTP-слое.
 - Внешние API — **только** через `app/providers/*` (единая обработка rate-limit, retry, токенов).
-- Docker — только через `app/docker/*`; никаких прямых вызовов демона из роутеров.
+- Docker — только через `DockerService`; никаких прямых вызовов демона из роутеров.
 - Манифесты зависимостей читает `DependencyService`; `pip`/`npm`/`pnpm` не запускаются.
 - Read-only операции не вызывают мутирующих Git-команд, lifecycle-операций Docker
   и установки пакетов.
@@ -316,9 +313,9 @@ DashboardCharts.tsx
 ### 9.6. Docker и зависимости (v0.5.0)
 
 - **Docker:** блок в деталях/карточке показывает `state`, `health`, image,
-  compose service и опубликованные порты. `available=false` — отдельное
-  состояние с причиной (`permission_denied`, `timeout`, `disabled`) и ссылкой
-  на KI-009; карточка репозитория остаётся работоспособной.
+  compose service и опубликованные порты. `status=unavailable` — отдельное
+  состояние с причиной (`Docker daemon not running`, `permission denied`,
+  `disabled`) и ссылкой на KI-009; карточка репозитория остаётся работоспособной.
 - **Зависимости:** блок группирует Python/Node, показывает счётчики и список
   `declared → latest` с severity. Ошибка одного ecosystem не скрывает другой.
 - Оба блока загружаются лениво и не участвуют в первичном запросе `/dashboard`.
@@ -335,18 +332,19 @@ DashboardCharts.tsx
 - Backend-образ: Python 3.12 + libgit2 + git; Docker CLI в образ не ставится.
 - Webhook-эндпоинты: для локального приёма webhook от GitHub/GitFlic нужен публичный URL. Варианты: (а) reverse-proxy с basic-auth + allowlist IP провайдера, (б) `ngrok`/`cloudflared` для dev, (в) только polling (webhook опционален). Решение фиксируется в ADR-0006 (TODO).
 
-### 10.2. Docker-интеграция v0.5.0 (план)
+### 10.2. Docker-интеграция v0.5.0 (Sprint 24)
 
 **Цель.** Показать в карточке репозитория, запущен ли его контейнер, на каком
 порту и в каком состоянии — без управления контейнерами.
 
 ```
 Браузер → FastAPI /repositories/{id}/docker
-              → DockerService
-                  ├─ DockerEngineAPI (httpx over UDS: /var/run/docker.sock)
-                  └─ DockerCliBackend (docker ps --format json) — Windows/dev fallback
-              → matcher (compose labels → repository.path)
-              → normalize → DockerStatus
+              → DockerService.get_container_status(repo_path)
+                  → asyncio.to_thread(...)
+                      → docker SDK (DockerClient.from_env / base_url)
+                          → Docker Engine API over UDS / npipe
+                  → matcher: bind mounts + compose labels + DOCKER_PATH_MAP
+                  → normalize → DockerStatus
 ```
 
 **Монтирование сокета (Docker Compose):**
@@ -360,57 +358,75 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DOCKER_ENABLED: "true"
-      DOCKER_MODE: auto
+      DOCKER_HOST: unix:///var/run/docker.sock
       DOCKER_PATH_MAP: ${DOCKER_PATH_MAP:-C:/Projects=/projects}
       DOCKER_STATUS_TTL_SECONDS: "30"
+      DOCKER_TIMEOUT_SECONDS: "3"
 ```
 
 Для Docker Desktop с Linux-контейнерами путь внутри контейнера — тот же
-`/var/run/docker.sock`. На Windows при локальном `uvicorn` UDS недоступен:
-`DOCKER_MODE=cli` использует `docker ps --format '{{json .}}'`.
+`/var/run/docker.sock`. На Windows при локальном `uvicorn` `DOCKER_HOST` можно
+не задавать: Docker SDK выберет named pipe `\\.\pipe\docker_engine`.
+Если ни UDS, ни npipe недоступны, сервис возвращает `status=unavailable`, а не
+падает.
 
 **Path mapping.** Backend видит проекты как `/projects/<repo>`, а label
-`com.docker.compose.project.working_dir` содержит host-путь
-(`C:/Projects/<repo>`). `DOCKER_PATH_MAP` применяется к label перед сравнением
-с `repository.path`. Без маппинга точное сравнение путей пропускается, и
-matcher использует `compose_project`/имя контейнера (`match` показывает правило).
-
-**Режимы:**
-
-| `DOCKER_MODE` | Поведение |
-|---------------|-----------|
-| `auto` | socket, если доступен; иначе CLI; иначе `available=false` |
-| `socket` | только Engine API; ошибка → `unavailable` |
-| `cli` | только `docker ps`; ошибка → `unavailable` |
-| `disabled` | не обращаться к Docker; `source=disabled` |
+`com.docker.compose.project.working_dir` и bind-mount `Source` содержат
+host-путь (`C:/Projects/<repo>`). `DOCKER_PATH_MAP` переводит host-префикс в
+container-префикс перед сравнением с `repository.path`; суффикс сохраняет
+регистр, потому что Linux-пути регистрозависимы. Без маппинга path-сравнение
+пропускается, и matcher использует `compose_project`/имя контейнера
+(`match` показывает правило).
 
 **Поток:**
 
-1. Проверить `DOCKER_ENABLED` и кэш (30 с).
-2. Получить контейнеры (`GET /containers/json?all=1` или `docker ps -a --format ...`).
-3. Сопоставить с `repository.path` по compose-labels (с `DOCKER_PATH_MAP`),
-   затем по project/имени.
-4. Нормализовать: `state`, `health`, порты, compose metadata.
-5. Обновить кэш, вернуть `DockerStatus`.
+1. Проверить `DOCKER_ENABLED` и кэш (`DOCKER_STATUS_TTL_SECONDS=30`).
+2. В worker-thread: `docker.from_env(timeout=...)` или
+   `DockerClient(base_url=DOCKER_HOST)`.
+3. `client.ping()`, затем `client.containers.list(all=True)`.
+4. Сопоставить с `repository.path`: bind `Source`/`Destination`, compose
+   `working_dir`, compose project, имя контейнера/образа.
+5. Нормализовать `state`, `health`, порты, compose metadata.
+6. Закрыть клиент, обновить кэш, вернуть `DockerStatus`.
 
-**Почему не Docker SDK.** `docker` Python SDK — новая зависимость (нужен ADR).
-`httpx` уже используется провайдерами; UDS-транспорт покрывает контейнерный
-сценарий. Для Windows named pipe (`\\.\pipe\docker_engine`) CLI-fallback проще
-и не требует новых зависимостей. Если понадобится npipe из Python — ADR-0007.
+**Маппинг статуса:**
+
+| Найдено | `status` |
+|---------|----------|
+| нет совпадений | `not_found` |
+| есть `running`/`restarting` | `running` |
+| есть, но все остальные | `stopped` |
+| disabled / `DockerException` / connection error | `unavailable` |
+
+**Почему Docker SDK.** Выбран `docker==7.1.0` (ADR-0007): он даёт `Mounts`,
+`Labels`, `Ports`, `DockerException` и сам поддерживает UDS/npipe. Синхронные
+вызовы выполняются в `asyncio.to_thread`. Docker CLI в образ не ставится;
+SDK устанавливается из `requirements.txt`. Тесты используют fake-клиент, поэтому
+реальный демон для `pytest` не нужен.
+
+**Конфигурация:**
+
+| Переменная | Назначение |
+|------------|------------|
+| `DOCKER_ENABLED` | `false` — не обращаться к Docker (`status=unavailable`) |
+| `DOCKER_HOST` | Явный endpoint; пусто — SDK default (UDS/npipe) |
+| `DOCKER_PATH_MAP` | `host=container[,host2=container2]` |
+| `DOCKER_STATUS_TTL_SECONDS` | TTL кэша (default 30) |
+| `DOCKER_TIMEOUT_SECONDS` | Таймаут SDK (default 3) |
 
 **Безопасность:**
 
 - Docker socket = root-эквивалент на хосте. `:ro` на bind-mount **не**
   ограничивает Docker API: через сокет всё равно можно запускать контейнеры.
-- Приложение использует только `GET`-эндпоинты; lifecycle-операции запрещены
-  на уровне кода и grep-аудита.
+- Приложение использует только `ping()` и `containers.list(all=True)`;
+  lifecycle-операции запрещены на уровне кода и grep-аудита.
 - Сокет не проксируется наружу; API остаётся local-only.
 - `DOCKER_ENABLED=false` — аварийный выключатель.
 - В ответ не попадает сырой JSON Docker: только нормализованные поля.
 
 **Windows-ограничения:** см. KI-009. Docker Desktop должен быть запущен;
 доступ к named pipe может требовать прав администратора/членства в `docker-users`.
-При `permission_denied` UI показывает причину, а не 500.
+При `permission denied` UI показывает причину, а не 500.
 
 ---
 

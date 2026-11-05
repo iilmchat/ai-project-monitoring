@@ -6,6 +6,7 @@ import type {
   CompareResponse,
   ConflictsResponse,
   DashboardResponse,
+  DockerStatus,
   HeatmapData,
   MirrorCandidates,
   MirrorPolicyUpdate,
@@ -175,6 +176,15 @@ export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
 
 export async function getConflicts(repositoryId: number): Promise<ConflictsResponse> {
   return request<ConflictsResponse>(`/repositories/${repositoryId}/conflicts`)
+}
+
+export async function getDockerStatus(
+  repositoryId: number,
+  refresh = false,
+): Promise<DockerStatus> {
+  return request<DockerStatus>(`/repositories/${repositoryId}/docker`, {
+    query: { refresh },
+  })
 }
 
 export async function getHeatmap(days = 365): Promise<HeatmapData> {

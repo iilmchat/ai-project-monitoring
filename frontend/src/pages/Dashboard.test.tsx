@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { bulkFetchAll, getDashboard, getHeatmap } from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import { useTableStore } from '../store/useTableStore'
+import { ThemeProvider } from '../theme/ThemeContext'
 import Dashboard from './Dashboard'
 
 vi.mock('../api/client', () => ({
@@ -108,9 +109,11 @@ const dashboard: DashboardResponse = {
 
 function renderDashboard() {
   return render(
-    <MemoryRouter>
-      <Dashboard />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
@@ -224,9 +227,11 @@ describe('Dashboard', () => {
   })
 
   it('applies filters from URL search params', async () => {    render(
-      <MemoryRouter initialEntries={['/?status=dirty']}>
-        <Dashboard />
-      </MemoryRouter>,
+      <ThemeProvider>
+        <MemoryRouter initialEntries={['/?status=dirty']}>
+          <Dashboard />
+        </MemoryRouter>
+      </ThemeProvider>,
     )
 
     expect(await screen.findByText('beta')).toBeInTheDocument()

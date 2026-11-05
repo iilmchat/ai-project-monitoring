@@ -7,19 +7,26 @@ import {
   getActions,
   getCiStatus,
   getConflicts,
+  getDockerStatus,
   getLog,
   getMirror,
   getRecommendations,
   getRepositories,
   getStatus,
 } from '../api/client'
-import type { DashboardRepository, MirrorStatus, RepositoryStatus } from '../api/types'
+import type {
+  DashboardRepository,
+  DockerStatus,
+  MirrorStatus,
+  RepositoryStatus,
+} from '../api/types'
 import RepositoryDetails from './RepositoryDetails'
 
 vi.mock('../api/client', () => ({
   getActions: vi.fn(),
   getCiStatus: vi.fn(),
   getConflicts: vi.fn(),
+  getDockerStatus: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
   getRecommendations: vi.fn(),
@@ -77,6 +84,14 @@ const mirror: MirrorStatus = {
   checked_at: '2026-11-05T10:00:00Z',
 }
 
+const dockerUnavailable: DockerStatus = {
+  repository_id: 1,
+  status: 'unavailable',
+  containers: [],
+  error: 'Docker daemon not running',
+  checked_at: '2026-11-05T10:00:00Z',
+}
+
 function renderDetails() {
   return render(
     <MemoryRouter initialEntries={['/repo/1']}>
@@ -109,6 +124,7 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getMirror).mockResolvedValue(mirror)
     vi.mocked(getActions).mockResolvedValue([])
     vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
+    vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',
@@ -140,5 +156,49 @@ describe('RepositoryDetails actions', () => {
       screen.getByText(/Я понимаю, что действие изменит репозиторий/),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Отмена' })).toBeInTheDocument()
+  })
+
+  it('renders running Docker containers and published ports', async () => {
+    vi.mocked(getDockerStatus).mockResolvedValue({
+      repository_id: 1,
+      status: 'running',
+      containers: [
+        {
+          id: 'abc123',
+          name: 'web-1',
+          image: 'nginx:latest',
+          state: 'running',
+          status: 'running (healthy)',
+          health: 'healthy',
+          ports: [
+            {
+              host_ip: '0.0.0.0',
+              host_port: 8080,
+              container_port: 80,
+              protocol: 'tcp',
+            },
+          ],
+          compose_project: 'app',
+          compose_service: 'web',
+          match: 'mount_source',
+        },
+      ],
+      error: null,
+      checked_at: '2026-11-05T10:00:00Z',
+    })
+
+    renderDetails()
+
+    expect(await screen.findByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('web-1')).toBeInTheDocument()
+    expect(screen.getByText(/8080->80\/tcp/)).toBeInTheDocument()
+  })
+
+  it('shows Docker unavailable error without breaking details', async () => {
+    renderDetails()
+
+    expect(await screen.findByText('Docker not available')).toBeInTheDocument()
+    expect(screen.getByText('Docker daemon not running')).toBeInTheDocument()
+    expect(screen.getByText('Статус')).toBeInTheDocument()
   })
 })

@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     mirror_status_ttl_seconds: int = 300
     provider_timeout_seconds: float = 10.0
     provider_cache_ttl_seconds: int = 60
+    docker_enabled: bool = True
+    docker_host: str = ""
+    docker_path_map: str = ""
+    docker_status_ttl_seconds: int = 30
+    docker_timeout_seconds: float = 3.0
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

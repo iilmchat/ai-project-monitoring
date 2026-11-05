@@ -2,9 +2,10 @@
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Разделы с пометкой «v0.5.0, план» — проектные контракты следующего релиза,
-ещё не реализованные в текущей версии.
+ещё не реализованные в текущей версии. Docker-контракт §3.14 реализован в
+Sprint 24; dependency-контракт §3.15 остаётся планом до Sprint 25–26.
 
-**Версия:** v0.4.0 (текущая) · v0.5.0 «Insights & Integrations» (план) · **Обновлено:** 2026-11-06
+**Версия:** v0.4.0 (текущая) · v0.5.0 «Insights & Integrations» (в разработке) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -313,10 +314,10 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-### 3.14. Docker-интеграция (v0.5.0, план)
+### 3.14. Docker-интеграция (v0.5.0, Sprint 24)
 
 Read-only срез runtime-состояния проекта. Эндпоинт **не управляет** контейнерами:
-разрешены только `GET`-операции к Docker Engine API или `docker ps`.
+Docker SDK вызывает только `ping()` и `containers.list(all=True)`.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -327,62 +328,70 @@ Read-only срез runtime-состояния проекта. Эндпоинт *
 ```json
 {
   "repository_id": 1,
-  "available": true,
-  "source": "socket",
+  "status": "running",
   "containers": [
     {
-      "id": "3f2a1b4c",
-      "name": "ai-project-monitoring-backend-1",
-      "image": "iiruchating-backend:dev",
+      "id": "3f2a1b4c9d10",
+      "name": "app-web-1",
+      "image": "nginx:latest",
       "state": "running",
-      "status": "Up 2 hours (healthy)",
+      "status": "running (healthy)",
       "health": "healthy",
       "ports": [
-        {"host_ip": "127.0.0.1", "host_port": 8000, "container_port": 8000, "protocol": "tcp"}
+        {"host_ip": "0.0.0.0", "host_port": 8080, "container_port": 80, "protocol": "tcp"}
       ],
-      "compose_project": "ai-project-monitoring",
-      "compose_service": "backend",
-      "match": "compose_workdir",
-      "started_at": "2026-11-06T08:00:00Z"
+      "compose_project": "app",
+      "compose_service": "web",
+      "match": "mount_source"
     }
   ],
-  "ports": [8000],
-  "checked_at": "2026-11-06T10:00:00Z",
-  "error": null
+  "error": null,
+  "checked_at": "2026-11-06T10:00:00Z"
 }
 ```
 
 **Поля:**
 
-- `available` — Docker-демон включён (`DOCKER_ENABLED=true`) и доступен.
-- `source ∈ {socket, cli, disabled, unavailable}` — откуда получен срез.
-- `state ∈ {running, exited, created, paused, restarting, dead, removing}`.
-- `health ∈ {healthy, unhealthy, starting, none}`; `none` — healthcheck отсутствует.
-- `match ∈ {compose_workdir, compose_project, name, none}` — правило сопоставления.
-- `ports[]` — только опубликованные порты; `ports` на верхнем уровне — уникальные
-  `host_port` всех контейнеров.
-- `error` — `{code, message}` или `null`. Коды: `disabled`, `docker_not_found`,
-  `permission_denied`, `timeout`, `daemon_unavailable`, `parse_error`.
+- `status ∈ {running, stopped, not_found, unavailable}`:
+  - `running` — хотя бы один найденный контейнер в состоянии `running`/`restarting`;
+  - `stopped` — контейнеры найдены, но ни один не running;
+  - `not_found` — Docker доступен, но совпадений с репозиторием нет;
+  - `unavailable` — Docker отключён, демон недоступен или произошла ошибка.
+- `containers[]` — только контейнеры, сопоставленные с репозиторием.
+- `state` — состояние Docker (`running`, `exited`, `created`, `paused`,
+  `restarting`, `dead`, `removing`).
+- `status` — человекочитаемая строка состояния; при наличии healthcheck
+  содержит `(<health>)`.
+- `health ∈ {healthy, unhealthy, starting, null}`; `null` — healthcheck отсутствует.
+- `ports[]` — порты контейнера. `host_port=null` означает, что порт не опубликован
+  на хосте.
+- `compose_project` / `compose_service` — значения labels Docker Compose (или `null`).
+- `match ∈ {mount_source, mount_destination, compose_workdir, compose_project,
+  name, image}` — правило, по которому контейнер сопоставлен с репозиторием.
+- `error` — строка причины для `unavailable`; иначе `null`. Типовые значения:
+  `Docker daemon not running`, `Docker daemon permission denied`,
+  `Docker integration is disabled`.
 
 **Сопоставление repository ↔ containers:**
 
-1. label `com.docker.compose.project.working_dir` == `repository.path` после
-   нормализации путей (разделители, case-insensitive на Windows) и применения
+1. bind-mount `Source` == `repository.path` после нормализации путей и применения
    `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`);
-2. label `com.docker.compose.project` == slug имени каталога репозитория;
-3. имя контейнера содержит slug (fallback, `match=name`).
+2. bind-mount `Destination` == `repository.path` (после того же маппинга);
+3. label `com.docker.compose.project.working_dir` == `repository.path`;
+4. label `com.docker.compose.project` == slug имени каталога репозитория;
+5. имя контейнера или имя образа содержит slug.
 
 Если path mapping не задан и пути находятся в разных namespace (backend в
-контейнере, проект на хосте), шаг 1 пропускается; используются шаги 2–3.
+контейнере, проект на хосте), path-сравнение пропускается; используются
+compose project/имя. Named volumes не считаются bind-mount'ом репозитория.
 
-Контейнеры без совпадения не возвращаются; несколько контейнеров одного
-compose-проекта возвращаются все. Если Docker доступен, но совпадений нет:
-`available=true`, `containers=[]`, `error=null` (UI показывает «не найдено»).
+Несколько контейнеров одного compose-проекта возвращаются все; при отсутствии
+совпадений — `status=not_found`, `containers=[]`, `error=null`.
 
 **Кэш и ошибки:** `DOCKER_STATUS_TTL_SECONDS` (default 30); `refresh=true`
-обходит кэш. Недоступность Docker, таймаут или permission denied **не** дают 5xx:
-`available=false`, `error.code` заполнен. `checked_at` — момент фактической
-проверки; при отдаче из кэша он не обновляется.
+обходит кэш. `DockerException` и ошибки соединения **не** дают 5xx:
+`status=unavailable`, `error` заполнен, HTTP 200. `checked_at` — момент
+формирования ответа; при отдаче из кэша данные могут быть не новее TTL.
 
 **Ограничения:** start/stop/restart/pause/exec/logs отсутствуют; сырой JSON
 Docker API наружу не отдаётся, только нормализованная схема выше.
@@ -567,7 +576,7 @@ dependency_cache(           -- v0.5.0
 | **Интервал polling** | **`MIRROR_POLL_INTERVAL_SECONDS` (default 300; замедление при rate-limit)** |
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |
 | **Токены провайдеров** | **`GITHUB_TOKEN`, `GITFLIC_TOKEN` (обязательны для mirror; без них `mirror_status=unavailable`, `mirror_expected` не влияет на UI-шум)** |
-| **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_MODE=auto\|socket\|cli\|disabled`, `DOCKER_HOST`, `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30); только `GET`-операции** |
+| **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_HOST` (SDK default: UDS/npipe; в compose — `unix:///var/run/docker.sock`), `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30), `DOCKER_TIMEOUT_SECONDS` (default 3); только `GET`-операции** |
 | **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — только `requirements.txt` и `package.json` в корне (+ относительные `-r` include)** |
 
 ---
@@ -598,7 +607,8 @@ dependency_cache(           -- v0.5.0
 ### 6.2. v0.5.0 (план)
 
 - [ ] Docker: `GET /repositories/{id}/docker` возвращает контейнеры проекта,
-      порты и health; недоступный Docker → `available=false`, без 5xx.
+      порты и health; `status ∈ {running, stopped, not_found, unavailable}`,
+      недоступный Docker → `status=unavailable`, без 5xx.
 - [ ] Docker read-only: в коде нет start/stop/restart/exec/logs; сокет
       монтируется `:ro`; проверка grep-аудитом.
 - [ ] Charts: recharts использует M3-токены, графики читаемы в light/dark,
@@ -626,6 +636,7 @@ dependency_cache(           -- v0.5.0
 | GitHub REST API | v3 (2022-11-28) — v0.2.0 |
 | GitFlic REST API | актуальная (см. docs.gitflic.ru) — v0.2.0 |
 | SQLite / PostgreSQL | 3.45+ / 17 |
+| Docker SDK (docker-py) | 7.1.0 (Docker Engine API 1.40+) |
 | React / Vite / TypeScript | 19 / 8 / 7 |
 
 ---
@@ -727,7 +738,7 @@ dependency_cache(           -- v0.5.0
 **Docker:**
 
 - В карточке/деталях: бейдж состояния, health, image, compose service, порты.
-- `available=false` → «Docker недоступен» + ссылка на KI-009; блок не ломает карточку.
+- `status=unavailable` → «Docker недоступен» + ссылка на KI-009; блок не ломает карточку.
 - Только просмотр; кнопок start/stop/restart/logs нет.
 - «Обновить» вызывает `?refresh=true`.
 

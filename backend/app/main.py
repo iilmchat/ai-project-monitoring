@@ -21,6 +21,7 @@ from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
+from app.services.docker_service import DockerService
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
@@ -80,6 +81,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ttl_seconds=resolved.provider_cache_ttl_seconds,
         concurrency=resolved.scan_concurrency,
     )
+    docker_service = DockerService(
+        enabled=resolved.docker_enabled,
+        host=resolved.docker_host or None,
+        path_map=resolved.docker_path_map,
+        timeout_seconds=resolved.docker_timeout_seconds,
+        cache_ttl_seconds=resolved.docker_status_ttl_seconds,
+    )
     mirror_scheduler = MirrorScheduler(
         mirror_service,
         session_factory,
@@ -135,6 +143,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.gitflic_client = gitflic_client
     application.state.mirror_service = mirror_service
     application.state.ci_service = ci_service
+    application.state.docker_service = docker_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

@@ -84,13 +84,13 @@
 
 ## KI-009 · Accepted · Med · docker · Docker socket требует прав/настройки на Windows
 
-**Описание:** Docker-интеграция v0.5.0 обращается к демону через `/var/run/docker.sock` (в контейнере) или `docker ps` (fallback). На Windows Docker Desktop использует named pipe `\\.\pipe\docker_engine`; локальный backend без контейнера не может открыть UDS. Доступ к pipe может требовать прав администратора или членства в группе `docker-users`; в корпоративных окружениях Docker Desktop может быть запрещён.
+**Описание:** Docker-интеграция v0.5.0 использует Python Docker SDK. В контейнере SDK обращается к `/var/run/docker.sock`, на Windows при локальном запуске — к named pipe `\\.\pipe\docker_engine`. Доступ к pipe может требовать прав администратора или членства в группе `docker-users`; в корпоративных окружениях Docker Desktop может быть запрещён.
 
-**Влияние:** без сокета/CLI блок Docker показывает `available=false` (`permission_denied` / `docker_not_found`); остальной дашборд работает. Важно: монтирование сокета `:ro` **не** делает Docker API read-only — сокет даёт root-эквивалент на хосте.
+**Влияние:** без сокета/npipe блок Docker показывает `status=unavailable` и строку `error` (`Docker daemon not running` / `Docker daemon permission denied`); остальной дашборд работает. Важно: монтирование сокета `:ro` **не** делает Docker API read-only — сокет даёт root-эквивалент на хосте.
 
-**Workaround:** запустить Docker Desktop; для локального Windows использовать `DOCKER_MODE=cli`; при необходимости добавить пользователя в `docker-users`; в контейнере — `DOCKER_MODE=socket` + `:ro` mount + `DOCKER_PATH_MAP=C:/Projects=/projects`; при запрете Docker — `DOCKER_ENABLED=false`.
+**Workaround:** запустить Docker Desktop; для локального Windows не задавать `DOCKER_HOST` (SDK выберет npipe); при необходимости добавить пользователя в `docker-users`; в контейнере — `DOCKER_HOST=unix:///var/run/docker.sock` + `:ro` mount + `DOCKER_PATH_MAP=C:/Projects=/projects`; при запрете Docker — `DOCKER_ENABLED=false`.
 
-**План (Sprint 24):** auto-детект socket/CLI, graceful `available=false`, инструкция в `docs/GETTING_STARTED.md`, ADR-0007.
+**План (Sprint 24):** SDK auto (UDS/npipe), graceful `status=unavailable`, инструкция в `docs/GETTING_STARTED.md`, ADR-0007.
 
 ---
 

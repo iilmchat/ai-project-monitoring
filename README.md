@@ -54,9 +54,9 @@ frontend — из `frontend/Dockerfile` (Node 20 build → nginx). SQLite хра
 в `./data` (volume), nginx проксирует `/api` на сервис `backend`.
 
 Для сканирования в Docker каталог с проектами монтируется в контейнер:
-по умолчанию в `docker-compose.yml` указано `C:/Projects:/projects`, а
-`SCAN_ROOTS=/projects`. Если проекты лежат в другом месте — измените путь
-в `volumes` и `SCAN_ROOTS` (или задайте в `.env`). Без этого volume
+по умолчанию `${PROJECTS_ROOT:-C:/Projects}:/projects`, а `SCAN_ROOTS=/projects`.
+Если проекты лежат в другом месте — задайте `PROJECTS_ROOT` (источник volume)
+и `DOCKER_PATH_MAP=<host-root>=/projects` в `.env`. Без этого volume
 сканирование найдёт 0 репозиториев.
 
 ### Локально без Docker
@@ -106,17 +106,17 @@ pnpm --dir frontend dev
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.4.0** (2026-11-05) |
-| Спринты | 1–22 (v0.4.0 «UX & Advanced Monitoring») |
-| Тесты backend | **121** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **11** (Vitest + Testing Library) |
-| Entry bundle | 85.6 kB gzip (+ lazy charts 114 kB) |
+| Версия | **v0.4.0** (2026-11-05); v0.5.0 — в разработке |
+| Спринты | 1–24 (Sprint 24 v0.5.0 завершён) |
+| Тесты backend | **131** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **14** (Vitest + Testing Library) |
+| Entry bundle | 85.6 kB gzip (+ lazy charts 114.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
 ### Roadmap
 
-**v0.5.0 «Insights & Integrations»** (планирование, [`TODO_V0.5.md`](TODO_V0.5.md)):
+**v0.5.0 «Insights & Integrations»** (в разработке, [`TODO_V0.5.md`](TODO_V0.5.md)):
 
 - **Dark Charts:** M3-палитра для `recharts` (оси, тултипы, легенды) в светлой и тёмной темах.
 - **Docker:** read-only статус контейнеров проекта (running/exited, порт, health) в карточке репозитория.

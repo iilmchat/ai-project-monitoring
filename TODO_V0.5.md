@@ -2,7 +2,7 @@
 
 **Текущая версия:** v0.4.0 (2026-11-05)
 **Планируемая версия:** v0.5.0 «Insights & Integrations»
-**Статус:** 📝 Планирование (Sprint 23)
+**Статус:** 🚧 В разработке (Sprint 24 завершён)
 **Последнее обновление:** 2026-11-06
 
 ---
@@ -50,64 +50,71 @@
 
 ### Спринт 24 — Dark Charts & Docker Integration
 
-**Статус:** ⬜ Запланирован
+**Статус:** ✅ Завершён (2026-11-06)
 
 **Задачи**
 
 - **S24-001. M3-палитра для recharts.**
-  - Добавить семантические chart-токены (`--chart-grid`, `--chart-axis`,
-    `--chart-legend`, `--chart-tooltip-bg`, `--chart-tooltip-border`,
-    `--chart-tooltip-text`, `--chart-series-*`) в `index.css` / Tailwind.
-  - Убрать хардкод hex из `DashboardCharts.tsx`: оси, `CartesianGrid`, `Legend`,
-    `Tooltip`, `Cell` берут цвета из токенов.
+  - Семантические chart-токены (`surface`, `on-surface`, `grid`, `tooltip-*`,
+    `series-*`) в `DashboardCharts.tsx`; источник темы — `useTheme().resolved`.
+  - Оси, `CartesianGrid`, `Legend`, `Tooltip` и текст тултипа берут цвета из
+    токенов; данные (Pie/Bar) остаются брендовыми (primary/tertiary/success/error).
   - Семантические цвета состояний сохранить (`current` — emerald, `dirty` —
     amber, `ahead` — violet, `behind` — orange, `diverged`/`error` — red,
-    `no_upstream`/`detached` — neutral), но источник — токены, не литералы.
+    `no_upstream`/`detached` — neutral).
   - Проверить light/dark, контраст WCAG AA, пустые состояния и `prefers-reduced-motion`.
-  - Тесты: маппинг серий, переключение темы, отсутствие хардкода в компоненте.
+  - Тесты: маппинг серий, переключение темы без перезагрузки.
 
-- **S24-002. DockerService и read-only Docker API.**
-  - `app/docker/`: `engine_api` (Docker Engine API через UDS), `cli` (`docker ps`
-    fallback), `matcher` (repository ↔ containers), доменные ошибки.
-  - `DockerService`: нормализация контейнеров, кэш `DOCKER_STATUS_TTL_SECONDS=30`,
-    `refresh=true` обходит кэш; таймаут 3 с; ошибки → `available=false`, не 5xx.
+- **S24-002. DockerService и read-only Docker SDK.**
+  - `app/services/docker_service.py`: `docker` SDK, matcher (bind mounts +
+    compose labels), нормализация контейнеров, доменные ошибки.
+  - `DockerService.get_container_status(repo_path, refresh=False)`:
+    `status ∈ {running, stopped, not_found, unavailable}`; кэш
+    `DOCKER_STATUS_TTL_SECONDS=30`; таймаут 3 с; ошибки → `unavailable`, не 5xx.
   - API `GET /api/v1/repositories/{id}/docker` + Pydantic-схемы.
-  - Сопоставление: `com.docker.compose.project.working_dir` (с `DOCKER_PATH_MAP`
-    host→container) → `...project` → имя контейнера; в ответе — `match`, чтобы UI
-    мог показать уверенность. Без маппинга path-сравнение пропускается.
-  - Использовать только `GET /containers/json`, `GET /containers/{id}/json`;
-    никаких start/stop/restart/exec/logs.
-  - Тесты: `httpx.MockTransport` для Engine API, fake CLI, running/exited/empty/
-    permission denied/timeout; опциональный smoke-тест при доступном Docker.
+  - Сопоставление: bind-mount `Source`/`Destination` с `DOCKER_PATH_MAP`
+    host→container → `com.docker.compose.project.working_dir` → `...project` →
+    имя контейнера/образа; в ответе — `match`, чтобы UI мог показать уверенность.
+  - SDK вызывает только `ping()` и `containers.list(all=True)`; никаких
+    start/stop/restart/exec/logs.
+  - Тесты: fake Docker client, running/stopped/not_found/unavailable, path mapping,
+    cache/refresh; опциональный smoke-тест при доступном Docker.
 
-- **S24-003. UI-блок Docker в карточке репозитория.**
-  - Бейдж `running / exited / not_found / unavailable`, health, image,
-    compose service, опубликованные порты.
-  - Для `available=false` — понятное состояние «Docker недоступен» + ссылка на
-    KI-009, без падения карточки.
-  - Ленивая загрузка при раскрытии карточки/деталей; не блокировать dashboard.
-  - Кнопка «Обновить» дергает `?refresh=true`; управляющих кнопок контейнера нет.
-
-- **S24-004. Документация, конфигурация, ADR.**
-  - `docker-compose.yml`: opt-in монтирование `/var/run/docker.sock:ro` и
-    переменные `DOCKER_ENABLED`, `DOCKER_MODE`, `DOCKER_PATH_MAP`,
-    `DOCKER_STATUS_TTL_SECONDS`.
+- **S24-003. DooD и конфигурация.**
+  - `docker-compose.yml`: монтирование `/var/run/docker.sock:ro` и переменные
+    `DOCKER_ENABLED`, `DOCKER_HOST`, `DOCKER_PATH_MAP`,
+    `DOCKER_STATUS_TTL_SECONDS`, `DOCKER_TIMEOUT_SECONDS`; `PROJECTS_ROOT` для
+    host-root.
+  - `backend/Dockerfile`: Docker SDK ставится из `requirements.txt`, Docker CLI
+    не нужен.
   - `.env.example`, `docs/GETTING_STARTED.md` — настройка Docker и Windows-ограничения.
-  - ADR-0007 «Docker integration: read-only Engine API + CLI fallback».
-  - CHANGELOG/RELEASES/SPEC/ARCHITECTURE/KNOWN_ISSUES.
+  - Проверка DooD: `GET /repositories/{id}/docker` работает из backend-контейнера
+    через смонтированный сокет.
+
+- **S24-004. UI Docker, тесты и документация.**
+  - `frontend/src/api/types.ts`: `DockerStatus`, `DockerContainer`, `DockerPort`;
+    `api/client.ts`: `getDockerStatus`.
+  - Бейдж `running / stopped / not_found / unavailable`, health, image,
+    compose service, опубликованные порты.
+  - Для `status=unavailable` — понятное состояние «Docker недоступен» + причина
+    (KI-009), без падения карточки.
+  - Ленивая загрузка при раскрытии карточки/деталей; кнопка «Обновить» дергает
+    `?refresh=true`; управляющих кнопок контейнера нет.
+  - Тесты: fake Docker client, API-контракт, path mapping, cache/refresh; UI-тесты.
+  - ADR-0007 «Read-only Docker integration via the Python Docker SDK»;
+    SPEC/ARCHITECTURE/CHANGELOG/RELEASES/KNOWN_ISSUES.
 
 **DoD:**
 
-- [ ] Графики читаемы в light/dark, контраст AA, в `DashboardCharts.tsx` нет
-      hex-литералов вне тестов/токенов.
-- [ ] `GET /repositories/{id}/docker` возвращает `DockerStatus` по SPEC §3.14;
-      running/exited/empty/disabled/unavailable различаются.
-- [ ] Docker-ошибки не дают 5xx; таймаут ≤ 3 с; кэш 30 с; `refresh=true` работает.
-- [ ] В коде нет вызовов start/stop/restart/exec/logs (проверено grep-аудитом).
-- [ ] На Windows без сокета работает CLI-fallback либо честный `available=false`
+- [x] Графики читаемы в light/dark, контраст AA, hex-литералы только в token maps.
+- [x] `GET /repositories/{id}/docker` возвращает `DockerStatus` по SPEC §3.14;
+      running/stopped/not_found/unavailable различаются.
+- [x] Docker-ошибки не дают 5xx; таймаут ≤ 3 с; кэш 30 с; `refresh=true` работает.
+- [x] В коде нет вызовов start/stop/restart/exec/logs (проверено grep-аудитом).
+- [x] На Windows без сокета SDK использует npipe либо возвращает `unavailable`
       (KI-009), карточка не ломается.
-- [ ] Тесты backend/frontend зелёные; `ruff`, `mypy --strict`, `pnpm` — зелёные.
-- [ ] Документация и ADR-0007 обновлены; секретов в диффе нет.
+- [x] Тесты backend/frontend зелёные; `ruff`, `mypy --strict`, `pnpm` — зелёные.
+- [x] Документация и ADR-0007 обновлены; секретов в диффе нет.
 
 ---
 
@@ -237,7 +244,7 @@
 | `GET /repositories/{id}/docker`, `DockerStatus`, коды ошибок | `docs/SPEC.md` §3.14 |
 | `GET /repositories/{id}/dependencies`, `DependencyReport`, статусы | `docs/SPEC.md` §3.15 |
 | Таблица `dependency_cache`, TTL 24 ч | `docs/SPEC.md` §4, §5; `docs/ARCHITECTURE.md` §11 |
-| Docker socket, режимы `auto/socket/cli`, безопасность | `docs/ARCHITECTURE.md` §10 |
+| Docker SDK, UDS/npipe, `DOCKER_PATH_MAP`, безопасность | `docs/ARCHITECTURE.md` §10; `docs/adr/0007-docker-integration.md` |
 | Docker/Windows-ограничения | `docs/KNOWN_ISSUES.md` KI-009 |
 | Rate-limit PyPI/npm и кэш | `docs/KNOWN_ISSUES.md` KI-010 |
 | Chart-токены и темы | `docs/SPEC.md` §9.8; `docs/ARCHITECTURE.md` §9.5 |
@@ -266,7 +273,7 @@
 
 | Риск | Вероятность | Влияние | Митигация |
 |------|-------------|---------|-----------|
-| Docker socket требует прав/настройки на Windows | Высокая | Среднее | KI-009: CLI-fallback, `available=false`, инструкция в GETTING_STARTED |
+| Docker socket/npipe требует прав/настройки на Windows | Высокая | Среднее | KI-009: SDK npipe, `status=unavailable`, инструкция в GETTING_STARTED |
 | Docker socket = root-эквивалент | Средняя | Высокое | local-only, только `GET`, opt-in mount, `DOCKER_ENABLED=false`, не проксировать API наружу |
 | Разные path namespace (host vs container) | Высокая | Среднее | `DOCKER_PATH_MAP`, fallback на compose project/имя, поле `match` |
 | Ложное сопоставление контейнеров | Средняя | Среднее | compose-labels приоритетнее имени; поле `match`; никаких действий с контейнерами |

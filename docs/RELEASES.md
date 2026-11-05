@@ -4,6 +4,34 @@
 
 ---
 
+## Спринт 24: Dark Charts & Docker Integration (v0.5.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S24-001: M3-тема для recharts — оси, сетка, тултипы и легенды используют
+  `surface`/`on-surface`, light/dark переключается без перезагрузки.
+- [x] S24-002: `DockerService` на Python Docker SDK — read-only `ping` +
+  `containers.list(all=True)`, `DockerStatus` (`running/stopped/not_found/unavailable`),
+  кэш 30 с, `DOCKER_PATH_MAP`.
+- [x] S24-003: DooD — `/var/run/docker.sock:ro`, `DOCKER_HOST`, конфигурация
+  `PROJECTS_ROOT`; ошибки Docker не дают 5xx.
+- [x] S24-004: UI-блок «Docker Containers» с бейджами, портами и ошибками;
+  типы `DockerStatus` во frontend.
+- [x] Тесты, SPEC §3.14, ARCHITECTURE §10, ADR-0007, CHANGELOG, KI-009.
+
+### Метрики
+
+- Backend: **131 passed** (включая 10 Docker-тестов на fake SDK).
+- Frontend: **14 passed**; entry bundle **85.59 kB gzip**, `RepositoryDetails`
+  — 5.45 kB, `DashboardCharts` — 114.55 kB gzip (lazy).
+- Docker smoke: `GET /repositories/26/docker` → `running`, backend/frontend
+  контейнеры, порты 8000/3000; `GET /repositories/1/docker` → `not_found`
+  (у репозитория нет контейнеров).
+
+---
+
 ## Релиз v0.4.0 — «UX & Advanced Monitoring»
 
 **Дата:** 2026-11-05 · **Тег:** `v0.4.0`

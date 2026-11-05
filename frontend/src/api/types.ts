@@ -140,6 +140,36 @@ export interface ConflictsResponse {
   files: string[]
 }
 
+export type DockerStatusValue = 'running' | 'stopped' | 'not_found' | 'unavailable'
+
+export interface DockerPort {
+  host_ip: string | null
+  host_port: number | null
+  container_port: number | null
+  protocol: string
+}
+
+export interface DockerContainer {
+  id: string
+  name: string
+  image: string
+  state: string
+  status: string
+  health: string | null
+  ports: DockerPort[]
+  compose_project: string | null
+  compose_service: string | null
+  match: string
+}
+
+export interface DockerStatus {
+  repository_id: number
+  status: DockerStatusValue
+  containers: DockerContainer[]
+  error: string | null
+  checked_at: string
+}
+
 export type HeatmapData = Record<string, number>
 
 export interface AppSettings {
