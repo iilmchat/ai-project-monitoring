@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.services.discovery_service import DiscoveryService, ScanResult
+from app.services.remote_service import RemoteFetchResult, RemoteService
 from app.services.status_service import (
     StatusCache,
     StatusService,
@@ -12,6 +13,8 @@ from app.services.status_service import (
 
 __all__ = [
     "DiscoveryService",
+    "RemoteFetchResult",
+    "RemoteService",
     "ScanResult",
     "StatusCache",
     "StatusService",

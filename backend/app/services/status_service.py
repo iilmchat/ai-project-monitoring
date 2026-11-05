@@ -12,8 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import utcnow
+from app.git.command_backend import rev_list_counts
 from app.git.pygit2_backend import DirtyCounts, GitStatusError, LocalStatus, read_local_status
 from app.models.entities import Repository, RepositoryStatus
+from app.services.remote_service import RemoteService
 
 logger = structlog.get_logger(__name__)
 
@@ -32,6 +34,7 @@ CANONICAL_STATES: frozenset[str] = frozenset(
 
 REMOTE_STATUS_STALE = "stale"
 REMOTE_STATUS_UNAVAILABLE = "unavailable"
+REMOTE_STATUS_OK = "ok"
 
 
 def classify_state(
@@ -119,9 +122,16 @@ class StatusCache:
 class StatusService:
     """Compute, cache and persist local repository status."""
 
-    def __init__(self, cache: StatusCache, *, ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        cache: StatusCache,
+        *,
+        ttl_seconds: int,
+        remote_service: RemoteService | None = None,
+    ) -> None:
         self._cache = cache
         self._ttl = max(ttl_seconds, 0)
+        self._remote_service = remote_service
 
     async def get_status(
         self,
@@ -129,6 +139,7 @@ class StatusService:
         repository: Repository,
         *,
         use_cache: bool = True,
+        fetch: bool = True,
     ) -> StatusSnapshot:
         """Return status, using the memory/DB cache when it is fresh."""
         if use_cache:
@@ -141,20 +152,53 @@ class StatusService:
                 self._cache.set(snapshot)
                 return snapshot
 
-        return await self.refresh(session, repository)
+        return await self.refresh(session, repository, fetch=fetch)
 
     async def refresh(
         self,
         session: AsyncSession,
         repository: Repository,
+        *,
+        fetch: bool = True,
     ) -> StatusSnapshot:
-        """Recompute status from disk, persist it and update the cache."""
+        """Recompute status from disk, persist it and update the cache.
+
+        When ``fetch`` is enabled and the branch has an upstream, a best-effort
+        ``git fetch --all --prune`` runs first. Fetch failures do not raise:
+        ``remote_status`` becomes ``unavailable`` while ``ahead``/``behind``
+        are still computed from the locally known tracking refs.
+        """
         try:
             local = await asyncio.to_thread(read_local_status, repository.path)
         except GitStatusError as exc:
             snapshot = _error_snapshot(repository, str(exc))
         else:
-            snapshot = _snapshot_from_local(repository, local)
+            ahead = local.ahead
+            behind = local.behind
+            remote_status = REMOTE_STATUS_STALE
+
+            if fetch and local.upstream is not None and self._remote_service is not None:
+                fetch_result = await self._remote_service.fetch(repository.path)
+                if fetch_result.ok:
+                    remote_status = REMOTE_STATUS_OK
+                    counts = await asyncio.to_thread(
+                        rev_list_counts, repository.path, local.upstream
+                    )
+                    if counts is not None:
+                        ahead, behind = counts
+                    else:
+                        refreshed = await asyncio.to_thread(read_local_status, repository.path)
+                        ahead, behind = refreshed.ahead, refreshed.behind
+                else:
+                    remote_status = REMOTE_STATUS_UNAVAILABLE
+
+            snapshot = _snapshot_from_local(
+                repository,
+                local,
+                ahead=ahead,
+                behind=behind,
+                remote_status=remote_status,
+            )
 
         await self._store(session, snapshot)
         await session.commit()
@@ -206,13 +250,20 @@ class StatusService:
         return (utcnow() - moment).total_seconds() < self._ttl
 
 
-def _snapshot_from_local(repository: Repository, local: LocalStatus) -> StatusSnapshot:
+def _snapshot_from_local(
+    repository: Repository,
+    local: LocalStatus,
+    *,
+    ahead: int,
+    behind: int,
+    remote_status: str,
+) -> StatusSnapshot:
     dirty = local.dirty
     state = classify_state(
         detached=local.detached,
         has_upstream=local.upstream is not None,
-        ahead=local.ahead,
-        behind=local.behind,
+        ahead=ahead,
+        behind=behind,
         dirty_total=dirty.total,
     )
     return StatusSnapshot(
@@ -224,11 +275,11 @@ def _snapshot_from_local(repository: Repository, local: LocalStatus) -> StatusSn
         head_subject=local.head_subject,
         head_date=local.head_date,
         upstream=local.upstream,
-        ahead=local.ahead,
-        behind=local.behind,
+        ahead=ahead,
+        behind=behind,
         dirty=dirty,
         detached=local.detached,
-        remote_status=REMOTE_STATUS_STALE,
+        remote_status=remote_status,
         error=None,
         checked_at=utcnow(),
     )

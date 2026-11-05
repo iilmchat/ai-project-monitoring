@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pygit2
-from pygit2.enums import FileStatus
+from pygit2.enums import FileStatus, SortMode
 
 _INDEX_CHANGES = (
     FileStatus.INDEX_NEW
@@ -65,6 +65,36 @@ class LocalStatus:
     behind: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class CommitInfo:
+    """Single commit metadata (SPEC §3.5)."""
+
+    sha: str
+    subject: str
+    author: str
+    date: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class CompareResult:
+    """Comparison between two refs (SPEC §3.5)."""
+
+    ahead: int
+    behind: int
+    status: str
+    commits: list[CommitInfo]
+
+
+def _open_repository(path: str | Path) -> pygit2.Repository:
+    target = Path(path)
+    if not target.exists():
+        raise GitStatusError(f"repository path does not exist: {target}")
+    try:
+        return pygit2.Repository(str(target))
+    except (OSError, ValueError, pygit2.GitError) as exc:
+        raise GitStatusError(f"cannot open repository at {target}: {exc}") from exc
+
+
 def read_local_status(path: str | Path) -> LocalStatus:
     """Open the repository at ``path`` and read its status.
 
@@ -72,13 +102,7 @@ def read_local_status(path: str | Path) -> LocalStatus:
     Git repository (including broken ``.git`` directories).
     """
     target = Path(path)
-    if not target.exists():
-        raise GitStatusError(f"repository path does not exist: {target}")
-
-    try:
-        repo = pygit2.Repository(str(target))
-    except (OSError, ValueError, pygit2.GitError) as exc:
-        raise GitStatusError(f"cannot open repository at {target}: {exc}") from exc
+    repo = _open_repository(target)
 
     try:
         unborn = repo.head_is_unborn
@@ -198,4 +222,88 @@ def _dirty_counts(repo: pygit2.Repository) -> DirtyCounts:
     )
 
 
-__all__ = ["DirtyCounts", "GitStatusError", "LocalStatus", "read_local_status"]
+def _commit_info(commit: pygit2.Commit) -> CommitInfo:
+    message = str(commit.message or "")
+    lines = message.strip().splitlines()
+    subject = lines[0] if lines else ""
+    author = str(commit.author.name or "")
+    date = datetime.fromtimestamp(commit.author.time, tz=UTC)
+    return CommitInfo(sha=str(commit.id), subject=subject, author=author, date=date)
+
+
+def read_commits(path: str | Path, rev: str = "HEAD", limit: int = 20) -> list[CommitInfo]:
+    """Return up to ``limit`` newest commits reachable from ``rev``."""
+    repo = _open_repository(path)
+    if limit <= 0:
+        return []
+    try:
+        start = repo.revparse_single(rev).peel(pygit2.Commit)
+    except (KeyError, ValueError, pygit2.GitError) as exc:
+        raise GitStatusError(f"cannot resolve {rev!r} in {path}: {exc}") from exc
+
+    commits: list[CommitInfo] = []
+    for commit in repo.walk(start.id, SortMode.TIME):
+        commits.append(_commit_info(commit))
+        if len(commits) >= limit:
+            break
+    return commits
+
+
+def compare_refs(
+    path: str | Path,
+    base: str,
+    head: str = "HEAD",
+    limit: int = 10,
+) -> CompareResult:
+    """Compare ``head`` against ``base`` (both within the same repository)."""
+    repo = _open_repository(path)
+    try:
+        base_commit = repo.revparse_single(base).peel(pygit2.Commit)
+        head_commit = repo.revparse_single(head).peel(pygit2.Commit)
+    except (KeyError, ValueError, pygit2.GitError) as exc:
+        raise GitStatusError(f"cannot resolve refs {base!r}..{head!r}: {exc}") from exc
+
+    try:
+        ahead, behind = repo.ahead_behind(head_commit.id, base_commit.id)
+    except (KeyError, ValueError, pygit2.GitError) as exc:
+        raise GitStatusError(f"cannot compare {base!r}..{head!r}: {exc}") from exc
+
+    ahead_count = int(ahead)
+    behind_count = int(behind)
+    if ahead_count and behind_count:
+        status = "diverged"
+    elif ahead_count:
+        status = "ahead"
+    elif behind_count:
+        status = "behind"
+    else:
+        status = "identical"
+
+    commits: list[CommitInfo] = []
+    if ahead_count > 0 and limit > 0:
+        walker = repo.walk(head_commit.id, SortMode.TIME)
+        walker.hide(base_commit.id)
+        for commit in walker:
+            commits.append(_commit_info(commit))
+            if len(commits) >= limit:
+                break
+
+    return CompareResult(
+        ahead=ahead_count,
+        behind=behind_count,
+        status=status,
+        commits=commits,
+    )
+
+
+__all__ = [
+    "CommitInfo",
+    "CompareResult",
+    "DirtyCounts",
+    "GitStatusError",
+    "LocalStatus",
+    "compare_refs",
+    "read_commits",
+    "read_local_status",
+]
+

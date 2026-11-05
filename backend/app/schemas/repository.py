@@ -60,3 +60,31 @@ class RepositoryStatusResponse(BaseModel):
     remote_status: str = "stale"
     error: str | None = None
     checked_at: datetime
+
+
+class RefreshRequest(BaseModel):
+    """Body for ``POST /repositories/{id}/refresh``."""
+
+    fetch: bool = True
+
+
+class CommitInfoResponse(BaseModel):
+    """Commit metadata (SPEC §3.5)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    sha: str
+    subject: str
+    author: str
+    date: datetime
+
+
+class CompareResponse(BaseModel):
+    """Result of comparing ``head`` against ``base`` (SPEC §3.5)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    ahead: int = Field(ge=0)
+    behind: int = Field(ge=0)
+    status: str
+    commits: list[CommitInfoResponse] = Field(default_factory=list)
