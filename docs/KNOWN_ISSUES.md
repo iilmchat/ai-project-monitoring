@@ -1,8 +1,8 @@
 # KNOWN_ISSUES — Реестр известных проблем
 
-**Последнее обновление:** 2026-11-05
+**Последнее обновление:** 2026-11-06
 
-**Всего проблем:** 8 (активных: 3, решено: 5)
+**Всего проблем:** 10 (активных: 5, решено: 5)
 
 ---
 
@@ -79,3 +79,27 @@
 **Описание:** При `state="diverged"` UI показывает только статус, но не список конфликтующих файлов.
 
 **Решение (S21-002):** `GET /repositories/{id}/conflicts` (`git diff --name-only --diff-filter=U`, read-only) и блок «Конфликты» в деталях репозитория для `diverged`.
+
+---
+
+## KI-009 · Accepted · Med · docker · Docker socket требует прав/настройки на Windows
+
+**Описание:** Docker-интеграция v0.5.0 обращается к демону через `/var/run/docker.sock` (в контейнере) или `docker ps` (fallback). На Windows Docker Desktop использует named pipe `\\.\pipe\docker_engine`; локальный backend без контейнера не может открыть UDS. Доступ к pipe может требовать прав администратора или членства в группе `docker-users`; в корпоративных окружениях Docker Desktop может быть запрещён.
+
+**Влияние:** без сокета/CLI блок Docker показывает `available=false` (`permission_denied` / `docker_not_found`); остальной дашборд работает. Важно: монтирование сокета `:ro` **не** делает Docker API read-only — сокет даёт root-эквивалент на хосте.
+
+**Workaround:** запустить Docker Desktop; для локального Windows использовать `DOCKER_MODE=cli`; при необходимости добавить пользователя в `docker-users`; в контейнере — `DOCKER_MODE=socket` + `:ro` mount + `DOCKER_PATH_MAP=C:/Projects=/projects`; при запрете Docker — `DOCKER_ENABLED=false`.
+
+**План (Sprint 24):** auto-детект socket/CLI, graceful `available=false`, инструкция в `docs/GETTING_STARTED.md`, ADR-0007.
+
+---
+
+## KI-010 · Accepted · Med · dependencies · Rate-limit API PyPI/npm
+
+**Описание:** проверка зависимостей делает запрос на каждый пакет. При большом числе репозиториев и пакетов PyPI/npm могут отвечать 429/503; без кэша это приводит к неполным отчётам и повторным запросам при каждом открытии карточки.
+
+**Влияние:** часть пакетов получает `status=unknown`; при отсутствии кэша ecosystem может быть `unavailable`. HTTP-ответ остаётся 200 (partial report), дашборд не падает.
+
+**Workaround:** не открывать dependency-блок массово; использовать `refresh=true` только для конкретного репозитория; дождаться восстановления лимита.
+
+**План (Sprint 25–26):** TTL-кэш 24 ч (`dependency_cache`, переживает перезапуск), concurrency ≤ 4, backoff 0.5/1/2 с, stale-while-revalidate, partial results. `refresh=true` — только по явному действию пользователя.

@@ -1,8 +1,10 @@
 # SPEC — спецификация проекта (источник истины по контрактам)
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
+Разделы с пометкой «v0.5.0, план» — проектные контракты следующего релиза,
+ещё не реализованные в текущей версии.
 
-**Версия:** v0.4.0 «UX & Advanced Monitoring» · **Обновлено:** 2026-11-05
+**Версия:** v0.4.0 (текущая) · v0.5.0 «Insights & Integrations» (план) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -234,7 +236,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-## 3.9. Actions — явные мутации (v0.2.0, ADR-0003)
+### 3.9. Actions — явные мутации (v0.2.0, ADR-0003)
 
 Автоматических мутаций нет: действие выполняется только при `confirm=true` и
 всегда попадает в `action_log`.
@@ -252,7 +254,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-## 3.10. Метрики (Prometheus)
+### 3.10. Метрики (Prometheus)
 
 | Метод | Путь | Ответ |
 |-------|------|-------|
@@ -265,7 +267,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-## 3.11. Bulk actions
+### 3.11. Bulk actions
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -283,7 +285,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-## 3.12. Settings
+### 3.12. Settings
 
 | Метод | Путь | Тело / Ответ |
 |-------|------|--------------|
@@ -297,7 +299,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
-## 3.13. Conflicts, activity & export
+### 3.13. Conflicts, activity & export
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -308,6 +310,173 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 `conflicts` использует `git diff --name-only --diff-filter=U` (без изменений в репозитории).
 `heatmap` агрегирует `git log --since` по всем `tracked` репозиториям.
 `export` отдаёт все репозитории со статусом/зеркалом; CSV или JSON.
+
+---
+
+### 3.14. Docker-интеграция (v0.5.0, план)
+
+Read-only срез runtime-состояния проекта. Эндпоинт **не управляет** контейнерами:
+разрешены только `GET`-операции к Docker Engine API или `docker ps`.
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/repositories/{id}/docker` | `refresh?: bool (default false)` | `DockerStatus` |
+
+`DockerStatus`:
+
+```json
+{
+  "repository_id": 1,
+  "available": true,
+  "source": "socket",
+  "containers": [
+    {
+      "id": "3f2a1b4c",
+      "name": "ai-project-monitoring-backend-1",
+      "image": "iiruchating-backend:dev",
+      "state": "running",
+      "status": "Up 2 hours (healthy)",
+      "health": "healthy",
+      "ports": [
+        {"host_ip": "127.0.0.1", "host_port": 8000, "container_port": 8000, "protocol": "tcp"}
+      ],
+      "compose_project": "ai-project-monitoring",
+      "compose_service": "backend",
+      "match": "compose_workdir",
+      "started_at": "2026-11-06T08:00:00Z"
+    }
+  ],
+  "ports": [8000],
+  "checked_at": "2026-11-06T10:00:00Z",
+  "error": null
+}
+```
+
+**Поля:**
+
+- `available` — Docker-демон включён (`DOCKER_ENABLED=true`) и доступен.
+- `source ∈ {socket, cli, disabled, unavailable}` — откуда получен срез.
+- `state ∈ {running, exited, created, paused, restarting, dead, removing}`.
+- `health ∈ {healthy, unhealthy, starting, none}`; `none` — healthcheck отсутствует.
+- `match ∈ {compose_workdir, compose_project, name, none}` — правило сопоставления.
+- `ports[]` — только опубликованные порты; `ports` на верхнем уровне — уникальные
+  `host_port` всех контейнеров.
+- `error` — `{code, message}` или `null`. Коды: `disabled`, `docker_not_found`,
+  `permission_denied`, `timeout`, `daemon_unavailable`, `parse_error`.
+
+**Сопоставление repository ↔ containers:**
+
+1. label `com.docker.compose.project.working_dir` == `repository.path` после
+   нормализации путей (разделители, case-insensitive на Windows) и применения
+   `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`);
+2. label `com.docker.compose.project` == slug имени каталога репозитория;
+3. имя контейнера содержит slug (fallback, `match=name`).
+
+Если path mapping не задан и пути находятся в разных namespace (backend в
+контейнере, проект на хосте), шаг 1 пропускается; используются шаги 2–3.
+
+Контейнеры без совпадения не возвращаются; несколько контейнеров одного
+compose-проекта возвращаются все. Если Docker доступен, но совпадений нет:
+`available=true`, `containers=[]`, `error=null` (UI показывает «не найдено»).
+
+**Кэш и ошибки:** `DOCKER_STATUS_TTL_SECONDS` (default 30); `refresh=true`
+обходит кэш. Недоступность Docker, таймаут или permission denied **не** дают 5xx:
+`available=false`, `error.code` заполнен. `checked_at` — момент фактической
+проверки; при отдаче из кэша он не обновляется.
+
+**Ограничения:** start/stop/restart/pause/exec/logs отсутствуют; сырой JSON
+Docker API наружу не отдаётся, только нормализованная схема выше.
+
+---
+
+### 3.15. Dependency management (v0.5.0, план)
+
+Проверка объявленных зависимостей по манифестам в корне репозитория.
+Файлы только читаются; `pip`/`npm`/`pnpm` не запускаются.
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/repositories/{id}/dependencies` | `refresh?: bool`, `ecosystem?: python\|node` | `DependencyReport` |
+
+`DependencyReport`:
+
+```json
+{
+  "repository_id": 1,
+  "checked_at": "2026-11-06T10:00:00Z",
+  "ecosystems": [
+    {
+      "ecosystem": "python",
+      "manifest": "requirements.txt",
+      "status": "ok",
+      "source": "mixed",
+      "total": 14,
+      "outdated": 3,
+      "up_to_date": 10,
+      "unknown": 1,
+      "ignored": 0,
+      "packages": [
+        {
+          "name": "fastapi",
+          "declared": "fastapi>=0.110,<1.0",
+          "current": "0.110.0",
+          "latest": "0.115.6",
+          "status": "outdated",
+          "kind": "range",
+          "severity": "minor",
+          "manifest_line": 3,
+          "manifest_section": null
+        }
+      ],
+      "error": null
+    }
+  ]
+}
+```
+
+**Статусы:**
+
+- `ecosystem.status ∈ {ok, no_manifest, parse_error, unavailable}`.
+- `ecosystem.source ∈ {registry, cache, mixed, stale_cache, none}`.
+- `package.status ∈ {outdated, current, unknown, ignored}`.
+- `package.kind ∈ {exact, range, vcs, path, workspace}`.
+- `package.severity ∈ {major, minor, patch}` — только для `outdated`; для
+  диапазона считается от нижней границы.
+
+**Инварианты отчёта:**
+
+- `ecosystems` содержит запрошенные ecosystem (по умолчанию оба); отсутствующий
+  манифест — запись `status=no_manifest`, а не 404/500.
+- `total = outdated + up_to_date + unknown + ignored` для каждого ecosystem.
+- `checked_at` верхнего уровня — момент формирования отчёта; `checked_at`
+  отдельного пакета не отдаётся, но stale-состояние видно через `source`.
+
+**Правила сравнения (v0.5.0):**
+
+- Python: `==` → `exact`; `~=`, `>=`, `>`, `<=`, `<` → `range`. `current` —
+  точная версия для `exact` или нижняя граница диапазона; если граница не
+  извлекается — `current=null`, `status=unknown`.
+- Node: `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` → `range`/`unknown`.
+  `workspace:`, `file:`, `link:`, `git+`, `http(s):`, `npm:` → `ignored`.
+- `declared` сохраняет исходное объявление; extras, environment markers и hashes
+  не участвуют в сравнении.
+- `manifest_line` — 1-based строка для `requirements.txt`; для `package.json`
+  `null`. `manifest_section` — `dependencies`/`devDependencies` для Node, иначе
+  `null`.
+- Транзитивные зависимости и lock-файлы **не** анализируются.
+
+**Кэш:** `DEPENDENCY_CACHE_TTL_SECONDS` (default 86400 = 24 ч), ключ
+`<registry>:<normalized-name>`, таблица `dependency_cache` (переживает
+перезапуск). `refresh=true` обходит TTL для запрошенного репозитория и
+обновляет кэш. При ошибке реестра отдаётся stale-кэш с `source=stale_cache`,
+если он есть.
+
+**Rate limits и ошибки:** concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY` (default 4),
+timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 с).
+Ошибка одного пакета не скрывает остальные. Коды `error.code`: `no_manifest`,
+`parse_error`, `rate_limited`, `registry_unavailable`, `timeout`, `not_found`.
+При недоступном реестре и отсутствии кэша — `ecosystem.status=unavailable`,
+HTTP 200 (частичный отчёт).
 
 ---
 
@@ -365,9 +534,19 @@ action_log(                 -- S10-005
 app_settings(               -- S15-001
   key* TEXT PRIMARY KEY, value TEXT NULL, updated_at
 )
+
+dependency_cache(           -- v0.5.0
+  key* TEXT PRIMARY KEY,    -- "pypi:fastapi" | "npm:react"
+  ecosystem TEXT,           -- pypi | npm
+  package TEXT,             -- нормализованное имя
+  latest_version TEXT NULL,
+  etag TEXT NULL,
+  payload JSONB,            -- последний ответ реестра (нормализованный)
+  checked_at
+)
 ```
 
-Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`.
+Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`.
 
 ---
 
@@ -388,10 +567,14 @@ app_settings(               -- S15-001
 | **Интервал polling** | **`MIRROR_POLL_INTERVAL_SECONDS` (default 300; замедление при rate-limit)** |
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |
 | **Токены провайдеров** | **`GITHUB_TOKEN`, `GITFLIC_TOKEN` (обязательны для mirror; без них `mirror_status=unavailable`, `mirror_expected` не влияет на UI-шум)** |
+| **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_MODE=auto\|socket\|cli\|disabled`, `DOCKER_HOST`, `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30); только `GET`-операции** |
+| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — только `requirements.txt` и `package.json` в корне (+ относительные `-r` include)** |
 
 ---
 
-## 6. Критерии приёмки v0.3.0
+## 6. Критерии приёмки
+
+### 6.1. Базовые (v0.1.0–v0.4.0, выполнено)
 
 - [x] Сканирование находит все `.git` в заданных корнях и не уходит глубже `SCAN_DEPTH`
 - [x] Для каждого репозитория определяются `modified/staged/untracked/conflicted`, `ahead/behind`, `detached`, `no_upstream`
@@ -411,6 +594,24 @@ app_settings(               -- S15-001
 - [x] **Bulk: массовые fetch/sync/migrate с ограничением concurrency и фоновыми API (v0.3.0)**
 - [x] **Settings: хранение в БД, маскировка токенов, применение без перезапуска (v0.3.0)**
 - [x] **UI: тёмная тема, графики состояний/зеркал, поиск и сортировка (v0.3.0)**
+
+### 6.2. v0.5.0 (план)
+
+- [ ] Docker: `GET /repositories/{id}/docker` возвращает контейнеры проекта,
+      порты и health; недоступный Docker → `available=false`, без 5xx.
+- [ ] Docker read-only: в коде нет start/stop/restart/exec/logs; сокет
+      монтируется `:ro`; проверка grep-аудитом.
+- [ ] Charts: recharts использует M3-токены, графики читаемы в light/dark,
+      контраст WCAG AA.
+- [ ] Python: `requirements.txt` парсится (pins/ranges/includes/markers),
+      устаревшие пакеты выводятся в карточке.
+- [ ] Node: `package.json` (`dependencies`/`devDependencies`) парсится,
+      scoped/ignored/ranges классифицируются корректно.
+- [ ] Кэш зависимостей: TTL 24 ч, переживает перезапуск, rate-limit → partial/
+      `unavailable`, без 5xx.
+- [ ] Тесты: манифесты на реальных tmp-репозиториях; PyPI/npm — на fake-клиентах.
+- [ ] Релиз: docs-consistency audit, тег `v0.5.0` в GitHub и GitFlic, `SHA(main)`
+      совпадает.
 
 ---
 
@@ -434,13 +635,14 @@ app_settings(               -- S15-001
 | Версия | Фокус | Документ |
 |--------|-------|----------|
 | v0.4.0 | UX/UI, advanced table, saved views, command palette, a11y, Telegram, heatmap, export | `TODO_V0.4.md` |
-| v0.5.0+ | серверная синхронизация представлений, история статусов, расширенные интеграции | `TODO.md` |
+| v0.5.0 | тёмные графики M3, Docker-интеграция, зависимости Python/Node | `TODO_V0.5.md` |
+| v0.6.0+ | серверная синхронизация представлений, история статусов, расширенные интеграции | `TODO.md` |
 
 ---
 
 ## 9. UX/UI Guidelines
 
-**Статус:** реализовано в v0.4.0 (спринты 18–21). Раздел описывает текущие правила.
+**Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — план v0.5.0.
 
 ### 9.1 Таблица репозиториев
 
@@ -455,6 +657,8 @@ app_settings(               -- S15-001
 - Строка кликабельна (мышь + `Enter`), действия внутри строки не триггерят переход.
 - Контекстное меню по `right-click`/`Shift+F10`: Fetch, Push, Copy path, Copy SHA,
   «Открыть детали»; мутации — через подтверждение (`confirm=true`).
+- **v0.5.0 (план):** опциональные колонки «Docker» (running/exited/off) и
+  «Зависимости» (число устаревших); управляются существующим column manager.
 
 ### 9.2 Фильтры и сохранённые представления
 
@@ -506,3 +710,31 @@ app_settings(               -- S15-001
 
 - Экспорт текущего среза таблицы в CSV/JSON формируется на клиенте из загруженных
   данных (без дополнительных серверных отчётов); экспорт уважает фильтры и видимые колонки.
+
+### 9.8 Тёмные графики (v0.5.0, план)
+
+- Все элементы recharts (оси, сетка, легенда, тултип, серии) используют
+  семантические токены `--chart-*`; хардкод hex в компонентах не допускается.
+- Light/dark переключаются без перезагрузки; tooltip — surface-container/on-surface,
+  сетка и оси — outline-variant/on-surface-variant.
+- Контраст текста и линий ≥ 4.5:1 (графические линии — ≥ 3:1); цвет не единственный
+  носитель смысла — подписи/легенда дублируют категорию.
+- Пустые данные показывают текстовое состояние, а не пустой SVG.
+- Тяжёлые чарты остаются lazy; переключение темы не вызывает reflow всей таблицы.
+
+### 9.9 Docker и зависимости (v0.5.0, план)
+
+**Docker:**
+
+- В карточке/деталях: бейдж состояния, health, image, compose service, порты.
+- `available=false` → «Docker недоступен» + ссылка на KI-009; блок не ломает карточку.
+- Только просмотр; кнопок start/stop/restart/logs нет.
+- «Обновить» вызывает `?refresh=true`.
+
+**Зависимости:**
+
+- Группировка по ecosystem (Python/Node), счётчики `outdated / up_to_date / unknown / ignored`.
+- Строка пакета: имя, `declared` → `latest`, severity-бейдж, ссылка на registry.
+- Partial failure: ошибка одного ecosystem не скрывает другой.
+- Кнопка «Проверить снова» → `?refresh=true`; автоматического обновления пакетов нет.
+- Блоки lazy; счётчик в карточке не требует раскрытия списка.

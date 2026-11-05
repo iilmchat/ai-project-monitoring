@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-—
+### Документация
+
+- docs(planning): план v0.5.0 — Dark Charts, Docker, зависимости Python/Node (S23-001..S23-003).
 
 ## [0.4.0] - 2026-11-05
 

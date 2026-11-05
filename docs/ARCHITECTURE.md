@@ -1,6 +1,7 @@
 # ARCHITECTURE — как устроен IIRuchating
 
-Документ описывает **текущее** устройство системы.
+Документ описывает **текущее** устройство системы; разделы с пометкой
+«v0.5.0 (план)» фиксируют проектное решение до реализации.
 
 ---
 
@@ -13,7 +14,8 @@
   ▼
 FastAPI (backend)
   ├─ /api/v1/scan            — запуск/статус сканирования
-  ├─ /api/v1/repositories    — CRUD, track/untrack, status, compare, recommendations, mirror, mirror-policy
+  ├─ /api/v1/repositories    — CRUD, track/untrack, status, compare, recommendations,
+  │                            mirror, mirror-policy, docker, dependencies
   ├─ /api/v1/mirror          — candidates, poll
   ├─ /api/v1/webhooks        — GitHub / GitFlic (HMAC)
   ├─ /api/v1/dashboard       — агрегированная сводка
@@ -26,7 +28,10 @@ FastAPI (backend)
   ├─ Mirror Service (R8)        — GitHub ↔ GitFlic: API-клиенты, сравнение HEAD SHA
   ├─ Mirror Scheduler (R9)      — polling раз в N минут + webhook-инвалидация
   ├─ Recommendation Service     — команды по состоянию (local + mirror)
-  └─ SQLite (или PostgreSQL)    — repositories, repository_status, repository_mirror_status, scan_runs, webhook_events
+  ├─ Docker Service (v0.5.0)    — read-only Docker Engine API (UDS) / docker ps fallback
+  ├─ Dependency Service         — requirements.txt / package.json → PyPI / npm
+  └─ SQLite (или PostgreSQL)    — repositories, repository_status, repository_mirror_status,
+                                  scan_runs, webhook_events, dependency_cache
 ```
 
 ---
@@ -42,9 +47,17 @@ app/services/*          бизнес-логика:
                           mirror_service          ← NEW (R8)
                           mirror_scheduler        ← NEW (R9)
                           recommendation_service
-app/providers/*         клиенты внешних API:       ← NEW
+                          docker_service          ← NEW (v0.5.0)
+                          dependency_service      ← NEW (v0.5.0)
+app/docker/*            Docker-абстракция:        ← NEW (v0.5.0)
+                          engine_api (UDS)
+                          cli_backend (docker ps)
+                          matcher (repository ↔ containers)
+app/providers/*         клиенты внешних API:
                           github_client (REST v3)
                           gitflic_client (REST)
+                          pypi_client             ← NEW (v0.5.0)
+                          npm_client              ← NEW (v0.5.0)
                           base (rate-limit, retry, backoff)
 app/git/*               pygit2_backend, command_backend
 app/db/repositories     Repository-паттерн
@@ -57,7 +70,10 @@ app/errors.py           доменные исключения
 - Сервисы не используют `HTTPException` — только доменные ошибки.
 - Git-операции не выполняются в HTTP-слое.
 - Внешние API — **только** через `app/providers/*` (единая обработка rate-limit, retry, токенов).
-- Read-only операции не вызывают мутирующих Git-команд.
+- Docker — только через `app/docker/*`; никаких прямых вызовов демона из роутеров.
+- Манифесты зависимостей читает `DependencyService`; `pip`/`npm`/`pnpm` не запускаются.
+- Read-only операции не вызывают мутирующих Git-команд, lifecycle-операций Docker
+  и установки пакетов.
 
 ---
 
@@ -205,8 +221,10 @@ Webhook **не заменяет** polling: если webhook не настрое�
 | **`repository_mirror_status`** | **последний снимок межпровайдерного состояния (R8) — v0.2.0** |
 | `scan_runs` | история сканирований |
 | **`webhook_events`** | **события от GitHub/GitFlic (R9) — v0.2.0** |
+| **`dependency_cache`** | **TTL-кэш latest-версий PyPI/npm (24 ч) — v0.5.0** |
 
 Кэш локального статуса: `STATUS_TTL_SECONDS=60`. Кэш mirror-статуса: `MIRROR_STATUS_TTL_SECONDS=300`.
+Кэш Docker: `DOCKER_STATUS_TTL_SECONDS=30`. Кэш зависимостей: `DEPENDENCY_CACHE_TTL_SECONDS=86400`.
 
 ---
 
@@ -260,6 +278,8 @@ stores/
   при > 500 строк (v0.4.1).
 - Тяжёлые виджеты (recharts, heatmap) — `React.lazy`; бюджет entry bundle — 100 kB gzip.
 - Экспорт CSV/JSON — на клиенте из текущего среза, без новых серверных отчётов.
+- Docker- и dependency-блоки (v0.5.0) — lazy, загружаются при раскрытии карточки/
+  деталей; dashboard не делает N запросов к Docker/PyPI/npm при первом рендере.
 
 ### 9.4. A11y и stale-состояние
 
@@ -268,22 +288,208 @@ stores/
 - Stale: вычисляется из `checked_at` и `remote_status`; данные не скрываются,
   блок получает opacity и бейдж «Устарело».
 
+### 9.5. Тёмные графики (v0.5.0)
+
+```
+index.css
+  :root  — светлые M3-токены
+  .dark  — тёмные M3-токены
+  --chart-grid, --chart-axis, --chart-legend,
+  --chart-tooltip-bg, --chart-tooltip-border, --chart-tooltip-text,
+  --chart-series-1..8
+
+tailwind.config.js
+  colors.chart.* → var(--chart-*)
+
+DashboardCharts.tsx
+  XAxis / YAxis / CartesianGrid / Legend / Tooltip / Cell → chart-токены
+```
+
+- recharts принимает `var(--chart-*)` в SVG-атрибутах (`stroke`, `fill`), поэтому
+  переключение темы не требует пересоздания графиков.
+- Семантика серий сохраняется: `current` — emerald, `dirty` — amber, `ahead` —
+  violet, `behind` — orange, `diverged`/`error` — red, нейтральные — outline.
+- Тултип — surface-container/on-surface, сетка — outline-variant с opacity;
+  контраст текста ≥ 4.5:1, линий ≥ 3:1.
+- Пустые данные — текстовое состояние; компонент не рендерит пустой SVG.
+
+### 9.6. Docker и зависимости (v0.5.0)
+
+- **Docker:** блок в деталях/карточке показывает `state`, `health`, image,
+  compose service и опубликованные порты. `available=false` — отдельное
+  состояние с причиной (`permission_denied`, `timeout`, `disabled`) и ссылкой
+  на KI-009; карточка репозитория остаётся работоспособной.
+- **Зависимости:** блок группирует Python/Node, показывает счётчики и список
+  `declared → latest` с severity. Ошибка одного ecosystem не скрывает другой.
+- Оба блока загружаются лениво и не участвуют в первичном запросе `/dashboard`.
+- Управляющих действий нет: только просмотр и `?refresh=true`.
+
 ---
 
 ## 10. Docker
 
+### 10.1. Текущая конфигурация
+
 - `docker-compose.yml` — backend + frontend; SQLite-volume.
 - Bind на `127.0.0.1` (local-only); наружу не публикуется.
+- Backend-образ: Python 3.12 + libgit2 + git; Docker CLI в образ не ставится.
 - Webhook-эндпоинты: для локального приёма webhook от GitHub/GitFlic нужен публичный URL. Варианты: (а) reverse-proxy с basic-auth + allowlist IP провайдера, (б) `ngrok`/`cloudflared` для dev, (в) только polling (webhook опционален). Решение фиксируется в ADR-0006 (TODO).
+
+### 10.2. Docker-интеграция v0.5.0 (план)
+
+**Цель.** Показать в карточке репозитория, запущен ли его контейнер, на каком
+порту и в каком состоянии — без управления контейнерами.
+
+```
+Браузер → FastAPI /repositories/{id}/docker
+              → DockerService
+                  ├─ DockerEngineAPI (httpx over UDS: /var/run/docker.sock)
+                  └─ DockerCliBackend (docker ps --format json) — Windows/dev fallback
+              → matcher (compose labels → repository.path)
+              → normalize → DockerStatus
+```
+
+**Монтирование сокета (Docker Compose):**
+
+```yaml
+services:
+  backend:
+    volumes:
+      - ./data:/app/data
+      - C:/Projects:/projects
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOCKER_ENABLED: "true"
+      DOCKER_MODE: auto
+      DOCKER_PATH_MAP: ${DOCKER_PATH_MAP:-C:/Projects=/projects}
+      DOCKER_STATUS_TTL_SECONDS: "30"
+```
+
+Для Docker Desktop с Linux-контейнерами путь внутри контейнера — тот же
+`/var/run/docker.sock`. На Windows при локальном `uvicorn` UDS недоступен:
+`DOCKER_MODE=cli` использует `docker ps --format '{{json .}}'`.
+
+**Path mapping.** Backend видит проекты как `/projects/<repo>`, а label
+`com.docker.compose.project.working_dir` содержит host-путь
+(`C:/Projects/<repo>`). `DOCKER_PATH_MAP` применяется к label перед сравнением
+с `repository.path`. Без маппинга точное сравнение путей пропускается, и
+matcher использует `compose_project`/имя контейнера (`match` показывает правило).
+
+**Режимы:**
+
+| `DOCKER_MODE` | Поведение |
+|---------------|-----------|
+| `auto` | socket, если доступен; иначе CLI; иначе `available=false` |
+| `socket` | только Engine API; ошибка → `unavailable` |
+| `cli` | только `docker ps`; ошибка → `unavailable` |
+| `disabled` | не обращаться к Docker; `source=disabled` |
+
+**Поток:**
+
+1. Проверить `DOCKER_ENABLED` и кэш (30 с).
+2. Получить контейнеры (`GET /containers/json?all=1` или `docker ps -a --format ...`).
+3. Сопоставить с `repository.path` по compose-labels (с `DOCKER_PATH_MAP`),
+   затем по project/имени.
+4. Нормализовать: `state`, `health`, порты, compose metadata.
+5. Обновить кэш, вернуть `DockerStatus`.
+
+**Почему не Docker SDK.** `docker` Python SDK — новая зависимость (нужен ADR).
+`httpx` уже используется провайдерами; UDS-транспорт покрывает контейнерный
+сценарий. Для Windows named pipe (`\\.\pipe\docker_engine`) CLI-fallback проще
+и не требует новых зависимостей. Если понадобится npipe из Python — ADR-0007.
+
+**Безопасность:**
+
+- Docker socket = root-эквивалент на хосте. `:ro` на bind-mount **не**
+  ограничивает Docker API: через сокет всё равно можно запускать контейнеры.
+- Приложение использует только `GET`-эндпоинты; lifecycle-операции запрещены
+  на уровне кода и grep-аудита.
+- Сокет не проксируется наружу; API остаётся local-only.
+- `DOCKER_ENABLED=false` — аварийный выключатель.
+- В ответ не попадает сырой JSON Docker: только нормализованные поля.
+
+**Windows-ограничения:** см. KI-009. Docker Desktop должен быть запущен;
+доступ к named pipe может требовать прав администратора/членства в `docker-users`.
+При `permission_denied` UI показывает причину, а не 500.
 
 ---
 
-## 11. Что ещё не сделано (v0.4+)
+## 11. Dependency Management (v0.5.0, план)
 
-- Advanced Data Table: batch selection, управление колонками, контекстное меню (S18).
-- Filter chips, Saved Views, URL-состояние (S19).
-- Command Palette и клавиатурная навигация (S20).
-- A11y-иконки, stale-индикатор, Conflict Manager, Telegram-уведомления, heatmap, export (S21).
-- Синхронизация saved views в БД (v0.5.0).
+**Задача.** Показать, какие объявленные зависимости устарели, не изменяя
+репозиторий и не запуская пакетные менеджеры.
+
+### 11.1. Поток
+
+```
+GET /repositories/{id}/dependencies
+  → DependencyService
+      ├─ manifest detection: requirements.txt, package.json
+      ├─ parser → [{name, declared, kind, line, section}]
+      ├─ cache lookup (dependency_cache, 24 ч)
+      ├─ registry fetch (PyPI / npm) для miss/stale, concurrency 4
+      └─ normalize → DependencyReport
+```
+
+### 11.2. Парсинг
+
+| Файл | Что читаем | Игнорируем |
+|------|------------|------------|
+| `requirements.txt` | `==`, `~=`, `>=`, `>`, `<=`, `<`; extras; markers; `-r` include (глубина ≤ 3) | `-e`, VCS, local paths, URL, hashes (для сравнения) |
+| `package.json` | `dependencies`, `devDependencies`; `^`, `~`, exact | `workspace:`, `file:`, `link:`, `git+`, `http(s):`, `npm:` aliases |
+
+- Include-файлы `requirements.txt` разрешены только внутри корня репозитория;
+  циклы и path traversal пропускаются с warning.
+- Lock-файлы и транзитивные зависимости не анализируются.
+- `current` — exact-версия или нижняя граница диапазона; для сложных диапазонов
+  `current=null`, `status=unknown`. Без `packaging`/`semver`-библиотек.
+
+### 11.3. Кэш
+
+- Таблица `dependency_cache(key*, ecosystem, package, latest_version, etag,
+  payload, checked_at)`.
+- Ключ `pypi:<normalized-name>` / `npm:<normalized-name>`.
+- TTL `DEPENDENCY_CACHE_TTL_SECONDS=86400` (24 ч); кэш переживает перезапуск.
+- In-memory LRU перед БД; single-flight на ключ (asyncio lock), чтобы N
+  одновременных запросов не делали N сетевых вызовов.
+- Stale-while-revalidate: при ошибке реестра и наличии stale-записи отдаётся
+  `source=stale_cache`, `checked_at` — время старой проверки.
+- `refresh=true` обходит TTL для запрошенного репозитория, но обновляет кэш.
+
+### 11.4. Registry clients
+
+- PyPI: `GET https://pypi.org/pypi/{name}/json`, latest = `info.version`.
+- npm: `GET https://registry.npmjs.org/{name}/latest`; scoped-имя кодируется
+  (`@scope%2Fname`).
+- Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/<version>`.
+- 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `unknown`.
+- Concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY=4`.
+- Ответы реестров ограничиваются по размеру; в логи не пишутся тела манифестов.
+
+### 11.5. Partial failure
+
+- Ошибка одного пакета не скрывает остальные: пакет получает `unknown`/`latest=null`.
+- Если реестр недоступен и кэша нет — `ecosystem.status=unavailable`,
+  `error.code` (`rate_limited`, `registry_unavailable`, `timeout`), HTTP 200.
+- Один ecosystem не влияет на другой: Python может быть `ok`, Node — `unavailable`.
+- `checked_at` и `source` позволяют UI показать stale-состояние.
+
+### 11.6. Read-only и безопасность
+
+- Читаются только фиксированные имена в корне репозитория (+ относительные
+  include для `requirements.txt`); произвольные пути запрещены.
+- `pip`/`npm`/`pnpm` не запускаются; shell не используется.
+- Имена пакетов URL-encode; URL из манифеста не используются как адрес запроса.
+- Приватные registry и токены — вне scope v0.5.0.
+- Запись — только в `dependency_cache`; рабочая директория репозитория не меняется.
+
+---
+
+## 12. Что ещё не сделано (v0.6+)
+
+- Синхронизация saved views в БД (v0.6.0).
 - История статусов (trend: как часто репозиторий был `dirty`; как часто `behind_gitflic`).
 - Полноценный GitFlic Compare API (сейчас — compare внутри GitFlic, классификация по SHA/датам).
+- Docker lifecycle-операции (start/stop/restart/logs) — вне scope v0.5.0.
+- Транзитивные зависимости, lock-файлы, CVE-аудит — вне scope v0.5.0.
+- Приватные registry и аутентификация в PyPI/npm.
