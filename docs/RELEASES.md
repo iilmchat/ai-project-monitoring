@@ -264,3 +264,21 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 111 passed
 - Frontend-тесты: 4 passed
 - Entry bundle: ~83 kB gzip
+
+---
+
+## Спринт 14: UX/UI & Dashboard Analytics (v0.3.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S14-001: тёмная тема (`dark` класс, localStorage, переключатель, dark-стили компонентов)
+- [x] S14-002: аналитика — Pie Chart состояний и Bar Chart `mirror_status` (recharts, lazy)
+- [x] S14-003: hover/кликабельные строки, бейджи зеркал
+- [x] S14-004: тесты (charts + theme toggle), CHANGELOG/RELEASES
+
+### Метрики
+- Backend-тесты: 111 passed
+- Frontend-тесты: 5 passed
+- Entry bundle: 84.03 kB gzip; charts chunk (lazy): 114.34 kB gzip

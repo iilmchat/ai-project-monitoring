@@ -11,6 +11,17 @@
       rel="stylesheet"
     />
     <meta name="theme-color" content="#FEF7FF" />
+    <script>
+      try {
+        var stored = localStorage.getItem('theme') || 'system';
+        var dark =
+          stored === 'dark' ||
+          (stored === 'system' &&
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      } catch (error) {}
+    </script>
     <title>ai-project-monitoring</title>
   </head>
   <body>

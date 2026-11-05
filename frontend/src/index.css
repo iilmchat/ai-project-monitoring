@@ -26,6 +26,12 @@ body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+.dark body {
+  background-color: #15121b;
+  color: #e7e0ed;
+  color-scheme: dark;
+}
+
 h1,
 h2,
 h3 {

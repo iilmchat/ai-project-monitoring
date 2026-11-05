@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
 import {
   bulkFetchAll,
@@ -12,6 +12,8 @@ import {
 import type { DashboardRepository, DashboardResponse } from '../api/types'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
+
+const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
 
 type Filter = 'all' | 'attention' | 'untracked' | 'mirror'
 type SortKey = 'name' | 'status' | 'ahead'
@@ -46,6 +48,7 @@ function hasMirrorIssue(repository: DashboardRepository): boolean {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(true)
@@ -226,7 +229,7 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Дашборд</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Локальное состояние репозиториев и расхождения с remote.
           </p>
         </div>
@@ -246,19 +249,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => void handleBulk('fetch')}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             Fetch All
           </button>
           <button
             type="button"
             onClick={() => void handleBulk('sync')}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             Sync Mirrors
           </button>
@@ -268,12 +271,12 @@ export default function Dashboard() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Поиск по имени или пути…"
-          className="w-full max-w-xs rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          className="w-full max-w-xs rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm"
         />
       </div>
 
       {bulkMessage && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-700 dark:text-slate-300 shadow-sm">
           {bulkMessage}
           {bulkPolling ? ' Обновление статусов каждые 2 с…' : ''}
         </div>
@@ -299,8 +302,20 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+      {summary && (
+        <Suspense
+          fallback={
+            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-400">
+              Загрузка графиков…
+            </p>
+          }
+        >
+          <DashboardCharts summary={summary} />
+        </Suspense>
+      )}
+
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((item) => (
               <button
@@ -310,32 +325,32 @@ export default function Dashboard() {
                 className={`rounded-full px-3 py-1 text-sm font-medium transition ${
                   filter === item.id
                     ? 'bg-primary text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    : 'bg-slate-100 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 {item.label}
               </button>
             ))}
           </div>
-          <span className="text-xs text-slate-500">{repositories.length} репозиториев</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{repositories.length} репозиториев</span>
         </div>
 
         {loading ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-500">Загрузка…</p>
+          <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">Загрузка…</p>
         ) : repositories.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-500">
+          <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
             Нет репозиториев. Запустите сканирование.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3 font-medium">
                     <button
                       type="button"
                       onClick={() => toggleSort('name')}
-                      className="hover:text-slate-800"
+                      className="hover:text-slate-800 dark:text-slate-200"
                     >
                       Репозиторий{sortIndicator('name')}
                     </button>
@@ -345,7 +360,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => toggleSort('status')}
-                      className="hover:text-slate-800"
+                      className="hover:text-slate-800 dark:text-slate-200"
                     >
                       Статус{sortIndicator('status')}
                     </button>
@@ -355,7 +370,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => toggleSort('ahead')}
-                      className="hover:text-slate-800"
+                      className="hover:text-slate-800 dark:text-slate-200"
                     >
                       Ahead / Behind{sortIndicator('ahead')}
                     </button>
@@ -365,19 +380,30 @@ export default function Dashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {repositories.map((repository) => (
-                  <tr key={repository.id} className="hover:bg-slate-50">
+                  <tr
+                    key={repository.id}
+                    onClick={() => navigate(`/repo/${repository.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        navigate(`/repo/${repository.id}`)
+                      }
+                    }}
+                    tabIndex={0}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-800/60 dark:focus:bg-slate-800/60"
+                  >
                     <td className="px-4 py-3">
                       <Link
                         to={`/repo/${repository.id}`}
-                        className="font-medium text-slate-900 hover:text-primary"
+                        className="font-medium text-slate-900 dark:text-slate-100 hover:text-primary"
                       >
                         {displayName(repository)}
                       </Link>
-                      <p className="max-w-xs truncate text-xs text-slate-500" title={repository.path}>
+                      <p className="max-w-xs truncate text-xs text-slate-500 dark:text-slate-400" title={repository.path}>
                         {repository.path}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                       {repository.status?.branch ?? '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -386,7 +412,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <MirrorBadge status={repository.mirror?.mirror_status} />
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                       {repository.status
                         ? `↑${repository.status.ahead} ↓${repository.status.behind}`
                         : '—'}
@@ -402,9 +428,12 @@ export default function Dashboard() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => void handleTrack(repository.id)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void handleTrack(repository.id)
+                          }}
                           disabled={busyRepository === repository.id}
-                          className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                          className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                         >
                           {busyRepository === repository.id ? '…' : 'Отслеживать'}
                         </button>
@@ -431,9 +460,9 @@ function SummaryCard({
   testId: string
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-slate-900" data-testid={testId}>
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100" data-testid={testId}>
         {value}
       </p>
     </div>

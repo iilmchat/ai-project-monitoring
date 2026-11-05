@@ -16,6 +16,20 @@ vi.mock('../api/client', () => ({
   trackRepository: vi.fn(),
 }))
 
+vi.mock('recharts', () => ({
+  ResponsiveContainer: () => <div data-testid="chart-container" />,
+  PieChart: () => <div />,
+  Pie: () => null,
+  Cell: () => null,
+  Tooltip: () => null,
+  Legend: () => null,
+  BarChart: () => <div />,
+  Bar: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  CartesianGrid: () => null,
+}))
+
 const mockedGetDashboard = vi.mocked(getDashboard)
 
 function makeStatus(overrides: Partial<RepositoryStatus>): RepositoryStatus {
@@ -48,6 +62,8 @@ const dashboard: DashboardResponse = {
     stale: 0,
     errors: 0,
     mirror_issues: 0,
+    by_state: { current: 1, dirty: 1 },
+    by_mirror_status: {},
   },
   repositories: [
     {
@@ -111,6 +127,7 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('summary-clean')).toHaveTextContent('1')
     expect(screen.getByTestId('summary-attention')).toHaveTextContent('1')
     expect(screen.getByTestId('summary-untracked')).toHaveTextContent('1')
+    expect(await screen.findByTestId('dashboard-charts')).toBeInTheDocument()
 
     expect(screen.getByRole('columnheader', { name: /Репозиторий/ })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Ahead / Behind' })).toBeInTheDocument()

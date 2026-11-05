@@ -93,6 +93,14 @@ async def test_dashboard_aggregation(
         "stale": 4,
         "errors": 1,
         "mirror_issues": 0,
+        "by_state": {
+            "current": 2,
+            "dirty": 1,
+            "behind": 1,
+            "no_upstream": 1,
+            "error": 1,
+        },
+        "by_mirror_status": {},
     }
     assert len(payload["repositories"]) == 7
 

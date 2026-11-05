@@ -55,6 +55,8 @@ export interface DashboardSummary {
   stale: number
   errors: number
   mirror_issues: number
+  by_state: Record<string, number>
+  by_mirror_status: Record<string, number>
 }
 
 export interface DashboardRepository extends Repository {

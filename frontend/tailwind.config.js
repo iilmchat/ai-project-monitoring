@@ -1,6 +1,7 @@
 /** Tailwind CSS configuration — IIRuChating brand book (v1.1, M3 Fidelity). */
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {

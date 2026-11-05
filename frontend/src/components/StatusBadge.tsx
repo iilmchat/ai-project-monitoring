@@ -16,21 +16,21 @@ const LABELS: Record<string, string> = {
 }
 
 const STYLES: Record<string, string> = {
-  current: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
-  ahead: 'bg-amber-100 text-amber-800 ring-amber-200',
-  behind: 'bg-amber-100 text-amber-800 ring-amber-200',
-  dirty: 'bg-amber-100 text-amber-800 ring-amber-200',
-  diverged: 'bg-red-100 text-red-800 ring-red-200',
-  error: 'bg-red-100 text-red-800 ring-red-200',
-  no_upstream: 'bg-slate-100 text-slate-700 ring-slate-200',
-  detached: 'bg-slate-100 text-slate-700 ring-slate-200',
-  unknown: 'bg-slate-100 text-slate-500 ring-slate-200',
+  current: 'bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-800',
+  ahead: 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:ring-amber-800',
+  behind: 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:ring-amber-800',
+  dirty: 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:ring-amber-800',
+  diverged: 'bg-red-100 text-red-800 ring-red-200 dark:bg-red-900/40 dark:text-red-300 dark:ring-red-800',
+  error: 'bg-red-100 text-red-800 ring-red-200 dark:bg-red-900/40 dark:text-red-300 dark:ring-red-800',
+  no_upstream: 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600',
+  detached: 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600',
+  unknown: 'bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-600',
 }
 
 export default function StatusBadge({ state, tracked }: StatusBadgeProps) {
   if (!tracked) {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600">
         untracked
       </span>
     )

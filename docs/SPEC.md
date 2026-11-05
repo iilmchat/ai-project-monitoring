@@ -125,7 +125,7 @@
 |-------|------|-----------|-------|
 | GET | `/dashboard` | `tracked_only?` | `{summary, repositories[]}` |
 
-`summary`: `{total, clean, needs_attention, untracked, stale, errors}` (mirror-счётчики — v0.2.0).
+`summary`: `{total, clean, needs_attention, untracked, stale, errors, mirror_issues, by_state, by_mirror_status}` (mirror-счётчики — v0.2.0).
 
 **Секция «Не отслеживаются»** — `tracked=false`. **Секция «Зеркала»** — `mirror_status != in_sync | not_applicable`, см. §3.8.
 

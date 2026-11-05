@@ -44,17 +44,23 @@ async def get_dashboard(
     stale = 0
     errors = 0
     mirror_issues = 0
+    by_state: dict[str, int] = {}
+    by_mirror_status: dict[str, int] = {}
 
     for repository in repositories:
         if not repository.tracked:
             untracked += 1
 
-        if repository.mirror is not None and repository.mirror.mirror_status in ATTENTION_STATUSES:
-            mirror_issues += 1
+        if repository.mirror is not None:
+            mirror_status = repository.mirror.mirror_status
+            by_mirror_status[mirror_status] = by_mirror_status.get(mirror_status, 0) + 1
+            if mirror_status in ATTENTION_STATUSES:
+                mirror_issues += 1
 
         repo_status = repository.status
         if repo_status is None:
             continue
+        by_state[repo_status.state] = by_state.get(repo_status.state, 0) + 1
 
         if repo_status.state == "current":
             clean += 1
@@ -74,6 +80,8 @@ async def get_dashboard(
         stale=stale,
         errors=errors,
         mirror_issues=mirror_issues,
+        by_state=by_state,
+        by_mirror_status=by_mirror_status,
     )
 
     items: list[DashboardRepository] = []

@@ -18,6 +18,8 @@ class DashboardSummary(BaseModel):
     stale: int = Field(ge=0)
     errors: int = Field(ge=0)
     mirror_issues: int = Field(default=0, ge=0)
+    by_state: dict[str, int] = Field(default_factory=dict)
+    by_mirror_status: dict[str, int] = Field(default_factory=dict)
 
 
 class DashboardRepository(RepositoryRead):

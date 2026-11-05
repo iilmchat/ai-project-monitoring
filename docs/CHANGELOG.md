@@ -10,6 +10,9 @@
 
 ### Добавлено
 
+- feat(ui): тёмная тема (`darkMode: 'class'`, ThemeProvider + localStorage, переключатель в шапке).
+- feat(ui): аналитика дашборда — Pie Chart по состояниям и Bar Chart по `mirror_status` (recharts, lazy-загрузка).
+- feat(ui): кликабельные строки таблицы, hover, поиск/сортировка, dark-варианты бейджей и модалок.
 - feat(bulk): `POST /repositories/actions/fetch_all` и `/sync_mirrors_all` — фоновые массовые операции с `asyncio.Semaphore(5)`; sync пишет `action_log`.
 - feat(cache): TTL-кэш провайдеров (`PROVIDER_CACHE_TTL_SECONDS=60`) для branch/list запросов GitHub/GitFlic.
 - feat(ui): панель Fetch All / Sync Mirrors с polling каждые 2 с, поиск по имени/пути и сортировка таблицы.
