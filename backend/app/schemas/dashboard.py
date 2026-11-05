@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ci import CISummary
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
 
@@ -27,6 +28,7 @@ class DashboardRepository(RepositoryRead):
 
     status: RepositoryStatusResponse | None = None
     mirror: MirrorStatusResponse | None = None
+    ci: CISummary | None = None
 
 
 class DashboardResponse(BaseModel):

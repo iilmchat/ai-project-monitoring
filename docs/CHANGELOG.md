@@ -10,6 +10,10 @@
 
 ### Добавлено
 
+- feat(filters): filter chips (статус/зеркало/CI + untracked), OR внутри категории и AND между категориями.
+- feat(views): сохранённые представления (фильтры, сортировка, колонки) в Zustand + localStorage.
+- feat(url): синхронизация фильтров/поиска/сортировки с query string (`?status=…&mirror=…&q=…`).
+- feat(dashboard): CI-агрегат в `GET /dashboard` (кэш 60 с) для CI-чипов и колонки.
 - feat(table): batch selection (Zustand + persist), bulk fetch/sync по `repo_ids`, контекстное меню (open/fetch/copy path).
 - feat(table): управление колонками (видимость/ширина, localStorage), моноширинные пути и SHA.
 - feat(settings): `app_settings` + `GET/PATCH /settings` с маскировкой токенов; значения подхватываются в конфиг при старте.

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import type { FormEvent, MouseEvent as ReactMouseEvent } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   bulkFetchAll,
@@ -18,22 +18,23 @@ import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
 import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
+import { useViewsStore } from '../store/useViewsStore'
+import type { SavedViewFilters } from '../store/useViewsStore'
 
 const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
 
-type Filter = 'all' | 'attention' | 'untracked' | 'mirror'
 type SortKey = 'name' | 'status' | 'ahead'
 type SortDirection = 'asc' | 'desc'
 
-const ATTENTION_STATES = new Set(['dirty', 'ahead', 'behind', 'diverged', 'no_upstream'])
-const MIRROR_OK = new Set(['in_sync', 'not_applicable'])
-
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: 'all', label: 'Все' },
-  { id: 'attention', label: 'Требуют внимания' },
-  { id: 'untracked', label: 'Не отслеживаются' },
-  { id: 'mirror', label: 'Зеркала' },
+const STATUS_OPTIONS = ['current', 'dirty', 'ahead', 'behind', 'diverged', 'no_upstream']
+const MIRROR_OPTIONS = [
+  'in_sync',
+  'missing_on_gitflic',
+  'missing_on_github',
+  'behind_gitflic',
+  'diverged',
 ]
+const CI_OPTIONS = ['success', 'failure', 'pending']
 
 const COLUMN_LABELS: { key: ColumnKey; label: string }[] = [
   { key: 'branch', label: 'Ветка' },
@@ -43,6 +44,13 @@ const COLUMN_LABELS: { key: ColumnKey; label: string }[] = [
   { key: 'aheadBehind', label: 'Ahead / Behind' },
 ]
 
+const EMPTY_FILTERS: SavedViewFilters = {
+  status: [],
+  mirror: [],
+  ci: [],
+  untrackedOnly: false,
+}
+
 function displayName(repository: DashboardRepository): string {
   if (repository.alias) {
     return repository.alias
@@ -51,14 +59,17 @@ function displayName(repository: DashboardRepository): string {
   return normalized.split('/').filter(Boolean).pop() ?? repository.path
 }
 
-function needsAttention(repository: DashboardRepository): boolean {
-  const state = repository.status?.state
-  return state !== undefined && ATTENTION_STATES.has(state)
+function parseList(value: string | null): string[] {
+  return value ? value.split(',').filter(Boolean) : []
 }
 
-function hasMirrorIssue(repository: DashboardRepository): boolean {
-  const status = repository.mirror?.mirror_status
-  return status !== undefined && !MIRROR_OK.has(status)
+function hasActiveFilters(filters: SavedViewFilters): boolean {
+  return (
+    filters.status.length > 0 ||
+    filters.mirror.length > 0 ||
+    filters.ci.length > 0 ||
+    filters.untrackedOnly
+  )
 }
 
 interface ContextState {
@@ -69,19 +80,35 @@ interface ContextState {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filters, setFilters] = useState<SavedViewFilters>(() => ({
+    status: parseList(searchParams.get('status')),
+    mirror: parseList(searchParams.get('mirror')),
+    ci: parseList(searchParams.get('ci')),
+    untrackedOnly: searchParams.get('tracked') === 'false',
+  }))
+  const [query, setQuery] = useState(searchParams.get('q') ?? '')
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const value = searchParams.get('sort')
+    return value === 'status' || value === 'ahead' ? value : 'name'
+  })
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() =>
+    searchParams.get('dir') === 'desc' ? 'desc' : 'asc',
+  )
+
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [busyRepository, setBusyRepository] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
   const [bulkPolling, setBulkPolling] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextState | null>(null)
+  const [viewsOpen, setViewsOpen] = useState(false)
+  const [saveViewOpen, setSaveViewOpen] = useState(false)
+  const [viewName, setViewName] = useState('')
 
   const selectedRepoIds = useTableStore((state) => state.selectedRepoIds)
   const visibleColumns = useTableStore((state) => state.visibleColumns)
@@ -90,7 +117,12 @@ export default function Dashboard() {
   const setSelected = useTableStore((state) => state.setSelected)
   const clearSelected = useTableStore((state) => state.clearSelected)
   const toggleColumn = useTableStore((state) => state.toggleColumn)
+  const setVisibleColumns = useTableStore((state) => state.setVisibleColumns)
   const setColumnWidth = useTableStore((state) => state.setColumnWidth)
+
+  const savedViews = useViewsStore((state) => state.views)
+  const addView = useViewsStore((state) => state.addView)
+  const removeView = useViewsStore((state) => state.removeView)
 
   async function loadDashboard(silent = false) {
     if (!silent) {
@@ -149,6 +181,20 @@ export default function Dashboard() {
     }
   }, [bulkPolling])
 
+  useEffect(() => {
+    const next = new URLSearchParams()
+    if (filters.status.length) next.set('status', filters.status.join(','))
+    if (filters.mirror.length) next.set('mirror', filters.mirror.join(','))
+    if (filters.ci.length) next.set('ci', filters.ci.join(','))
+    if (filters.untrackedOnly) next.set('tracked', 'false')
+    if (query.trim()) next.set('q', query.trim())
+    if (sortKey !== 'name' || sortDirection !== 'asc') {
+      next.set('sort', sortKey)
+      next.set('dir', sortDirection)
+    }
+    setSearchParams(next, { replace: true })
+  }, [filters, query, sortKey, sortDirection])
+
   async function handleScan() {
     setScanning(true)
     setError(null)
@@ -181,6 +227,18 @@ export default function Dashboard() {
     }
   }
 
+  function toggleFilter(category: 'status' | 'mirror' | 'ci', value: string) {
+    setFilters((current) => {
+      const values = current[category]
+      return {
+        ...current,
+        [category]: values.includes(value)
+          ? values.filter((item) => item !== value)
+          : [...values, value],
+      }
+    })
+  }
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
@@ -201,15 +259,31 @@ export default function Dashboard() {
     if (!dashboard) {
       return []
     }
-    let items: DashboardRepository[]
-    if (filter === 'attention') {
-      items = dashboard.repositories.filter(needsAttention)
-    } else if (filter === 'untracked') {
-      items = dashboard.repositories.filter((repository) => !repository.tracked)
-    } else if (filter === 'mirror') {
-      items = dashboard.repositories.filter(hasMirrorIssue)
-    } else {
-      items = dashboard.repositories
+    let items = dashboard.repositories
+
+    if (filters.status.length) {
+      items = items.filter(
+        (repository) =>
+          repository.status !== null && filters.status.includes(repository.status.state),
+      )
+    }
+    if (filters.mirror.length) {
+      items = items.filter(
+        (repository) =>
+          repository.mirror !== null &&
+          filters.mirror.includes(repository.mirror.mirror_status),
+      )
+    }
+    if (filters.ci.length) {
+      items = items.filter(
+        (repository) =>
+          repository.ci !== null &&
+          repository.ci !== undefined &&
+          filters.ci.includes(repository.ci.aggregate),
+      )
+    }
+    if (filters.untrackedOnly) {
+      items = items.filter((repository) => !repository.tracked)
     }
 
     const needle = query.trim().toLowerCase()
@@ -237,7 +311,7 @@ export default function Dashboard() {
       }
       return displayName(left).localeCompare(displayName(right)) * direction
     })
-  }, [dashboard, filter, query, sortKey, sortDirection])
+  }, [dashboard, filters, query, sortKey, sortDirection])
 
   const selectedSet = useMemo(() => new Set(selectedRepoIds), [selectedRepoIds])
   const selectedVisible = useMemo(
@@ -311,6 +385,34 @@ export default function Dashboard() {
     } catch {
       setBulkMessage('Не удалось скопировать путь.')
     }
+  }
+
+  function applyView(viewId: string) {
+    const view = savedViews.find((item) => item.id === viewId)
+    if (!view) {
+      return
+    }
+    setFilters({ ...view.filters })
+    setSortKey(view.sorting.key)
+    setSortDirection(view.sorting.direction)
+    setVisibleColumns(view.visibleColumns)
+    setViewsOpen(false)
+  }
+
+  function handleSaveView(event: FormEvent) {
+    event.preventDefault()
+    const name = viewName.trim()
+    if (!name) {
+      return
+    }
+    addView({
+      name,
+      filters: { ...filters },
+      sorting: { key: sortKey, direction: sortDirection },
+      visibleColumns: { ...visibleColumns },
+    })
+    setViewName('')
+    setSaveViewOpen(false)
   }
 
   return (
@@ -400,6 +502,55 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setViewsOpen((current) => !current)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Представления
+            </button>
+            {viewsOpen && (
+              <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewsOpen(false)
+                    setViewName('')
+                    setSaveViewOpen(true)
+                  }}
+                  className="w-full rounded px-2 py-1.5 text-left text-sm font-medium text-primary hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Сохранить текущее представление…
+                </button>
+                {savedViews.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    Нет сохранённых представлений.
+                  </p>
+                ) : (
+                  savedViews.map((view) => (
+                    <div key={view.id} className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => applyView(view.id)}
+                        className="flex-1 truncate rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        {view.name}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Удалить представление ${view.name}`}
+                        onClick={() => removeView(view.id)}
+                        className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <input
           type="search"
@@ -416,6 +567,56 @@ export default function Dashboard() {
           {bulkPolling ? ' Обновление статусов каждые 2 с…' : ''}
         </div>
       )}
+
+      <div className="space-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Фильтры
+          </span>
+          {hasActiveFilters(filters) && (
+            <button
+              type="button"
+              onClick={() => setFilters({ ...EMPTY_FILTERS })}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Очистить всё
+            </button>
+          )}
+        </div>
+        <FilterRow
+          label="Статус"
+          options={STATUS_OPTIONS}
+          active={filters.status}
+          onToggle={(value) => toggleFilter('status', value)}
+        />
+        <FilterRow
+          label="Зеркало"
+          options={MIRROR_OPTIONS}
+          active={filters.mirror}
+          onToggle={(value) => toggleFilter('mirror', value)}
+        />
+        <FilterRow
+          label="CI"
+          options={CI_OPTIONS}
+          active={filters.ci}
+          onToggle={(value) => toggleFilter('ci', value)}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-20 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Прочее
+          </span>
+          <FilterChip
+            label="Не отслеживаются"
+            active={filters.untrackedOnly}
+            onClick={() =>
+              setFilters((current) => ({
+                ...current,
+                untrackedOnly: !current.untrackedOnly,
+              }))
+            }
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <SummaryCard label="Всего" value={summary?.total ?? 0} testId="summary-total" />
@@ -449,25 +650,14 @@ export default function Dashboard() {
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <div className="flex flex-wrap gap-2">
-            {FILTERS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setFilter(item.id)}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-                  filter === item.id
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {repositories.length} репозиториев
             {selectedVisible.length > 0 ? ` · выбрано ${selectedVisible.length}` : ''}
+          </span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {filters.status.length + filters.mirror.length + filters.ci.length > 0
+              ? 'OR внутри категории, AND между категориями'
+              : 'Фильтры не активны'}
           </span>
         </div>
 
@@ -477,7 +667,7 @@ export default function Dashboard() {
           </p>
         ) : repositories.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            Нет репозиториев. Запустите сканирование.
+            Нет репозиториев по текущим фильтрам.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -503,8 +693,7 @@ export default function Dashboard() {
                       checked={allSelected}
                       ref={(element) => {
                         if (element) {
-                          element.indeterminate =
-                            selectedVisible.length > 0 && !allSelected
+                          element.indeterminate = selectedVisible.length > 0 && !allSelected
                         }
                       }}
                       onChange={handleSelectAll}
@@ -602,10 +791,7 @@ export default function Dashboard() {
                     tabIndex={0}
                     className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-800/60 dark:focus:bg-slate-800/60"
                   >
-                    <td
-                      className="px-3 py-3"
-                      onClick={(event) => event.stopPropagation()}
-                    >
+                    <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         aria-label={`Выбрать ${displayName(repository)}`}
@@ -647,13 +833,12 @@ export default function Dashboard() {
                     )}
                     {visibleColumns.ci && (
                       <td className="px-4 py-3">
-                        <Link
-                          to={`/repo/${repository.id}`}
-                          className="font-mono text-xs text-primary hover:underline"
-                          title="CI status в деталях репозитория"
+                        <span
+                          className="font-mono text-xs text-slate-600 dark:text-slate-300"
+                          title="CI status"
                         >
-                          CI →
-                        </Link>
+                          {repository.ci?.aggregate ?? '—'}
+                        </span>
                       </td>
                     )}
                     {visibleColumns.aheadBehind && (
@@ -714,7 +899,97 @@ export default function Dashboard() {
           ]}
         />
       )}
+
+      {saveViewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form
+            onSubmit={handleSaveView}
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+          >
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Сохранить представление
+            </h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Фильтры, сортировка и видимые колонки сохранятся локально.
+            </p>
+            <input
+              autoFocus
+              value={viewName}
+              onChange={(event) => setViewName(event.target.value)}
+              placeholder="Например, «Проблемы с зеркалом»"
+              className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSaveViewOpen(false)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={!viewName.trim()}
+                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-container disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
+  )
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
+        active
+          ? 'bg-primary text-white'
+          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+function FilterRow({
+  label,
+  options,
+  active,
+  onToggle,
+}: {
+  label: string
+  options: string[]
+  active: string[]
+  onToggle: (value: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="w-20 text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+      {options.map((option) => (
+        <FilterChip
+          key={option}
+          label={option}
+          active={active.includes(option)}
+          onClick={() => onToggle(option)}
+        />
+      ))}
+    </div>
   )
 }
 

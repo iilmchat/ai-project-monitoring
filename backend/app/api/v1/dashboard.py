@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
 from app.models.entities import Repository
+from app.schemas.ci import CISummary
 from app.schemas.dashboard import DashboardRepository, DashboardResponse, DashboardSummary
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
@@ -25,6 +26,7 @@ STALE_REMOTE_STATUSES = frozenset({"stale", "unavailable"})
 
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     tracked_only: Annotated[bool, Query()] = False,
 ) -> DashboardResponse:
@@ -85,6 +87,16 @@ async def get_dashboard(
     )
 
     items: list[DashboardRepository] = []
+    ci_rows = [
+        (
+            repository.id,
+            repository.status.branch if repository.status and repository.status.branch else "main",
+            repository.github_full_name,
+            repository.gitflic_full_name,
+        )
+        for repository in repositories
+    ]
+    ci_map = await request.app.state.ci_service.get_many(ci_rows)
     for repository in repositories:
         base = RepositoryRead.model_validate(repository)
         row_status = repository.status
@@ -100,11 +112,21 @@ async def get_dashboard(
             if repository.mirror is not None
             else None
         )
+        ci_summary = ci_map.get(repository.id)
         items.append(
             DashboardRepository(
                 **base.model_dump(),
                 status=status_response,
                 mirror=mirror_response,
+                ci=(
+                    CISummary(
+                        github=ci_summary.github,
+                        gitflic=ci_summary.gitflic,
+                        aggregate=ci_summary.aggregate,
+                    )
+                    if ci_summary
+                    else None
+                ),
             )
         )
 

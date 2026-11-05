@@ -44,6 +44,7 @@ from app.services.action_service import (
     UnknownActionError,
 )
 from app.services.bulk_service import BulkService
+from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
@@ -78,25 +79,7 @@ def _bulk_service(request: Request) -> BulkService:
 
 
 def _aggregate_ci(results: list[dict[str, object]]) -> str:
-    statuses = {str(item.get("status")) for item in results}
-    conclusions = {item.get("conclusion") for item in results}
-    if "failure" in conclusions or "timed_out" in conclusions:
-        return "failure"
-    if "cancelled" in conclusions:
-        return "cancelled"
-    if statuses & {"queued", "in_progress", "pending"}:
-        return "pending"
-    if "success" in conclusions and statuses <= {
-        "completed",
-        "success",
-        "none",
-        "not_supported",
-        "not_configured",
-    }:
-        return "success"
-    if statuses <= {"none", "not_supported", "not_configured"}:
-        return "none"
-    return "unknown"
+    return aggregate_ci(results)
 
 
 @router.get("/repositories/{repository_id}/ci-status", response_model=CIStatusResponse)

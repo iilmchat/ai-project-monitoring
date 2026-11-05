@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
+from app.services.ci_service import CIService
 from app.services.discovery_service import DiscoveryService, ScanResult
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService, MirrorSnapshot, classify_mirror_status
@@ -21,6 +22,7 @@ from app.services.status_service import (
 __all__ = [
     "ActionService",
     "BulkService",
+    "CIService",
     "DiscoveryService",
     "MirrorScheduler",
     "MirrorService",

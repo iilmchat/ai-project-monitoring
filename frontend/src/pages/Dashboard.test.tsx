@@ -205,4 +205,19 @@ describe('Dashboard', () => {
       await screen.findByRole('menuitem', { name: 'Скопировать путь' }),
     ).toBeInTheDocument()
   })
+
+  it('applies filters from URL search params', async () => {
+    render(
+      <MemoryRouter initialEntries={['/?status=dirty']}>
+        <Dashboard />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('beta')).toBeInTheDocument()
+    expect(screen.queryByText('alpha')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'dirty' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
 })

@@ -19,6 +19,7 @@ from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
 from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
+from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
@@ -69,6 +70,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         github_client,
         gitflic_client,
         ttl_seconds=resolved.mirror_status_ttl_seconds,
+    )
+    ci_service = CIService(
+        github_client,
+        gitflic_client,
+        resolved,
+        ttl_seconds=resolved.provider_cache_ttl_seconds,
+        concurrency=resolved.scan_concurrency,
     )
     mirror_scheduler = MirrorScheduler(
         mirror_service,
@@ -124,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.github_client = github_client
     application.state.gitflic_client = gitflic_client
     application.state.mirror_service = mirror_service
+    application.state.ci_service = ci_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

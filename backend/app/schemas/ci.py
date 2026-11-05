@@ -18,3 +18,9 @@ class CIStatusResponse(BaseModel):
     github: ProviderCIStatus
     gitflic: ProviderCIStatus
     aggregate: str
+
+
+class CISummary(BaseModel):
+    github: str
+    gitflic: str
+    aggregate: str

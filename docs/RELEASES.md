@@ -337,3 +337,21 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 117 passed
 - Frontend-тесты: 7 passed
 - Entry bundle: 84.19 kB gzip; Dashboard chunk: 20.27 kB
+
+---
+
+## Спринт 19: Filtering & Saved Views (v0.4.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S19-001: filter chips (статус/зеркало/CI/untracked) + «Очистить всё»
+- [x] S19-002: Saved Views (Zustand + persist, применение/удаление)
+- [x] S19-003: URL-синхронизация фильтров, сортировки и поиска
+- [x] S19-004: CI-агрегат в dashboard для CI-чипов (кэш 60 с)
+
+### Метрики
+- Backend-тесты: 117 passed
+- Frontend-тесты: 8 passed
+- Entry bundle: 84.53 kB gzip; Dashboard chunk: 26.36 kB

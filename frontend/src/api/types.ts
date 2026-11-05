@@ -62,6 +62,7 @@ export interface DashboardSummary {
 export interface DashboardRepository extends Repository {
   status: RepositoryStatus | null
   mirror: MirrorStatus | null
+  ci?: CISummary | null
 }
 
 export interface MirrorProviderStatus {
@@ -125,6 +126,12 @@ export interface CIStatus {
   branch: string
   github: ProviderCIStatus
   gitflic: ProviderCIStatus
+  aggregate: string
+}
+
+export interface CISummary {
+  github: string
+  gitflic: string
   aggregate: string
 }
 

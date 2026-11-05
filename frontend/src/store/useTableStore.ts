@@ -19,6 +19,7 @@ interface TableState {
   setSelected: (repositoryIds: number[]) => void
   clearSelected: () => void
   toggleColumn: (column: ColumnKey) => void
+  setVisibleColumns: (columns: Record<ColumnKey, boolean>) => void
   setColumnWidth: (column: ColumnKey, width: number) => void
 }
 
@@ -49,6 +50,7 @@ export const useTableStore = create<TableState>()(
             [column]: !state.visibleColumns[column],
           },
         })),
+      setVisibleColumns: (columns) => set({ visibleColumns: { ...columns } }),
       setColumnWidth: (column, width) =>
         set((state) => ({
           columnWidths: {
