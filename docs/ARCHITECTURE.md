@@ -106,7 +106,7 @@ SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
 
 ## 6. Read-only политика и мутации
 
-**v0.1.0 — только чтение.** `pull`, `push`, `merge`, `stash` не выполняются. Рекомендации формируются, но не запускаются. Это осознанный trade-off (ADR-0003). Мутации — v0.2 через `POST /actions` с `confirm=true` и аудитом.
+**v0.1.0 — только чтение.** `pull`, `push`, `merge`, `stash` не выполняются. Рекомендации формируются, но не запускаются. Это осознанный trade-off (ADR-0003). В v0.2.0 добавлены **явные** мутации `POST /repositories/{id}/actions/{action}` с `confirm=true` и аудитом (`action_log`); destructive-команд по-прежнему нет.
 
 ---
 

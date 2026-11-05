@@ -23,7 +23,8 @@ cp .env.example .env
 Заполните в `.env`:
 
 ```env
-SCAN_ROOTS=/home/user/projects,/home/user/work
+# В Docker путь внутри контейнера (host-каталог монтируется в /projects)
+SCAN_ROOTS=/projects
 SCAN_DEPTH=3
 SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
 GITHUB_TOKEN=<your-github-pat>          # опционально (зарезервировано для v0.2.0)
@@ -32,6 +33,9 @@ COMPARE_TTL_SECONDS=60
 FETCH_TIMEOUT=30
 DATABASE_URL=sqlite+aiosqlite:///./data/iiruchating.db
 ```
+
+Для локального запуска без Docker укажите реальные хостовые пути
+(например, `SCAN_ROOTS=C:/Projects`).
 
 ---
 
@@ -47,8 +51,10 @@ docker compose up -d --build
 SQLite-файл сохраняется в `./data/` (volume). Backend при старте выполняет
 `alembic upgrade head`. Nginx проксирует `/api` на сервис `backend`.
 
-Чтобы сканирование видело локальные проекты, добавьте volume в
-`docker-compose.yml` (пример закомментирован) или задайте `SCAN_ROOTS`.
+Каталог с проектами монтируется в контейнер: по умолчанию
+`C:/Projects:/projects`, а `SCAN_ROOTS=/projects`. Если ваши репозитории
+лежат в другом месте, измените путь в `docker-compose.yml` (`volumes`) и
+`SCAN_ROOTS` — иначе сканирование найдёт 0 репозиториев.
 
 Остановить: `docker compose down`.
 

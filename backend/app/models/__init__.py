@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.models.entities import (
+    ActionLog,
     Repository,
     RepositoryMirrorStatus,
     RepositoryStatus,
@@ -11,6 +12,7 @@ from app.models.entities import (
 )
 
 __all__ = [
+    "ActionLog",
     "Repository",
     "RepositoryMirrorStatus",
     "RepositoryStatus",

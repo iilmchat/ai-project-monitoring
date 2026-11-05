@@ -47,8 +47,12 @@ docker compose up -d --build
 Backend собирается из `backend/Dockerfile` (Python 3.12, `libgit2`, `git`),
 frontend — из `frontend/Dockerfile` (Node 20 build → nginx). SQLite хранится
 в `./data` (volume), nginx проксирует `/api` на сервис `backend`.
-Чтобы сканирование видело локальные проекты, добавьте volume в
-`docker-compose.yml` (пример закомментирован) или задайте `SCAN_ROOTS`.
+
+Для сканирования в Docker каталог с проектами монтируется в контейнер:
+по умолчанию в `docker-compose.yml` указано `C:/Projects:/projects`, а
+`SCAN_ROOTS=/projects`. Если проекты лежат в другом месте — измените путь
+в `volumes` и `SCAN_ROOTS` (или задайте в `.env`). Без этого volume
+сканирование найдёт 0 репозиториев.
 
 ### Локально без Docker
 
@@ -99,8 +103,8 @@ pnpm --dir frontend dev
 |------------|----------|
 | Версия | **v0.1.0** (2026-11-05) |
 | Спринты | 1–6 (MVP завершён) |
-| Тесты backend | **90** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **2** (Vitest + Testing Library) |
+| Тесты backend | **98** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **3** (Vitest + Testing Library) |
 | Entry bundle | 83.3 kB gzip (React 19 + Router) |
 | Покрытие | не измерялось в v0.1.0 (`pytest-cov` не подключён) |
 | Лицензия | MIT |

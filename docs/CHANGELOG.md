@@ -4,6 +4,7 @@
 
 ### Добавлено
 
+- feat(actions): явные мутации с `confirm=true` — `pull`, `push`, `stash`, `push-mirror`; аудит `action_log`, `GET /admin/actions`; UI-кнопка «Выполнить» с модалкой подтверждения.
 - feat(mirror): межпровайдерное зеркало GitHub ↔ GitFlic — `repository_mirror_status`, `webhook_events`, миграция `003`.
 - feat(mirror): клиенты GitHub/GitFlic (`get_branch`, `list_repos`, rate-limit → `unavailable`), `MirrorService` (9 статусов) и `MirrorScheduler` (polling 300 с).
 - feat(mirror): API `GET/POST /repositories/{id}/mirror`, `PATCH /mirror-policy`, `GET /mirror/candidates`, webhooks с HMAC.
@@ -14,6 +15,8 @@
 
 ### Изменено
 
+- fix(docker): каталог проектов монтируется как `C:/Projects:/projects`, `SCAN_ROOTS=/projects`; `git safe.directory` в образе.
+- chore(ui): брендинг переименован в **ai-project-monitoring** (title, шапка, футер).
 - perf: fast dirty check (KI-002) — `git status --porcelain -uno` перед `pygit2.status()`; чистый tracked-статус не грузит CPU.
 - feat: compare cache (KI-003) — TTL-кэш `GET /repositories/{id}/compare` (60 с, инвалидация на refresh).
 - fix: fetch timeout cleanup (KI-001) — таймаут fetch убивает процесс (`proc.kill()`), логирует подсказку увеличить `FETCH_TIMEOUT`.

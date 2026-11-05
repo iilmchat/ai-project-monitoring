@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite+aiosqlite:///./data/iiruchating.db"
-    scan_roots: str = "C:/Projects"
+    scan_roots: str = "/projects"
     scan_depth: int = 3
     scan_ignore: str = "node_modules,.venv,vendor,dist,build,target"
     scan_concurrency: int = 4
@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     mirror_poll_interval_seconds: int = 300
     mirror_status_ttl_seconds: int = 300
     provider_timeout_seconds: float = 10.0
+    action_timeout_seconds: int = 60
     debug: bool = False
     app_version: str = "0.1.0"
 

@@ -1,4 +1,5 @@
 import type {
+  ActionLog,
   CommitInfo,
   CompareResponse,
   DashboardResponse,
@@ -138,4 +139,27 @@ export async function updateMirrorPolicy(
 
 export async function getMirrorCandidates(): Promise<MirrorCandidates> {
   return request<MirrorCandidates>('/mirror/candidates')
+}
+
+export async function runAction(repositoryId: number, action: string): Promise<ActionLog> {
+  return request<ActionLog>(`/repositories/${repositoryId}/actions/${action}`, {
+    method: 'POST',
+    body: { confirm: true },
+  })
+}
+
+export async function runMirrorAction(
+  repositoryId: number,
+  action: string,
+): Promise<ActionLog> {
+  return request<ActionLog>(`/mirror/actions/${action}`, {
+    method: 'POST',
+    body: { confirm: true, repository_id: repositoryId },
+  })
+}
+
+export async function getActions(repositoryId: number, limit = 20): Promise<ActionLog[]> {
+  return request<ActionLog[]>(`/repositories/${repositoryId}/actions`, {
+    query: { limit },
+  })
 }

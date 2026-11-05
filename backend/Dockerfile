@@ -9,7 +9,8 @@ WORKDIR /app
 # pygit2 needs libgit2; the git CLI is used for fetch/rev-list.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgit2-dev git gcc \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory '*'
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

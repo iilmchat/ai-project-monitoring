@@ -189,3 +189,23 @@
 - Backend-тесты: 90 passed
 - Frontend-тесты: 2 passed
 - Entry bundle: 83.3 kB gzip
+
+---
+
+## Спринт 10: Мутации с подтверждением (v0.2.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S10-001: `POST /repositories/{id}/actions/{action}` с `confirm=true` (ADR-0003)
+- [x] S10-002: действия `pull`, `push`, `stash`
+- [x] S10-003: `POST /mirror/actions/push-mirror`
+- [x] S10-004: UI «Выполнить» + модалка подтверждения
+- [x] S10-005: аудит `action_log` + `GET /admin/actions`
+- [x] S10-006: тесты действий на bare-remote
+
+### Метрики
+- Backend-тесты: 98 passed
+- Frontend-тесты: 3 passed
+- Docker: scanning host `C:/Projects` через volume `/projects`

@@ -16,7 +16,8 @@ from app.git.pygit2_backend import (
     read_commits,
     read_local_status,
 )
-from app.models.entities import Repository
+from app.models.entities import ActionLog, Repository
+from app.schemas.action import ActionLogResponse, ActionRequest
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
     MirrorPolicyUpdate,
@@ -30,6 +31,12 @@ from app.schemas.repository import (
     RepositoryListResponse,
     RepositoryRead,
     RepositoryStatusResponse,
+)
+from app.services.action_service import (
+    ActionNotAllowedError,
+    ActionService,
+    ConfirmationRequiredError,
+    UnknownActionError,
 )
 from app.services.compare_cache import CompareCache
 from app.services.mirror_service import MirrorService
@@ -51,6 +58,11 @@ def _compare_cache(request: Request) -> CompareCache:
 
 def _mirror_service(request: Request) -> MirrorService:
     service: MirrorService = request.app.state.mirror_service
+    return service
+
+
+def _action_service(request: Request) -> ActionService:
+    service: ActionService = request.app.state.action_service
     return service
 
 
@@ -248,6 +260,10 @@ async def update_mirror_policy(
         repository.mirror_expected = payload.mirror_expected
     if payload.mirror_policy is not None:
         repository.mirror_policy = payload.mirror_policy
+    if payload.github_full_name is not None:
+        repository.github_full_name = payload.github_full_name.strip() or None
+    if payload.gitflic_full_name is not None:
+        repository.gitflic_full_name = payload.gitflic_full_name.strip() or None
     await session.commit()
     await session.refresh(repository)
     await _mirror_service(request).invalidate(repository_id)
@@ -258,6 +274,93 @@ async def update_mirror_policy(
 async def mirror_candidates(request: Request) -> MirrorCandidatesResponse:
     candidates = await _mirror_service(request).discover_candidates()
     return MirrorCandidatesResponse.model_validate(candidates)
+
+
+@router.post(
+    "/repositories/{repository_id}/actions/{action}",
+    response_model=ActionLogResponse,
+)
+async def run_repository_action(
+    repository_id: int,
+    action: str,
+    payload: ActionRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ActionLogResponse:
+    repository = await _get_repository(session, repository_id)
+    try:
+        entry = await _action_service(request).execute_action(
+            session, repository, action, confirm=payload.confirm
+        )
+    except UnknownActionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except ConfirmationRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    if entry.status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=entry.error or entry.output or "action failed",
+        )
+    return ActionLogResponse.model_validate(entry)
+
+
+@router.get(
+    "/repositories/{repository_id}/actions",
+    response_model=list[ActionLogResponse],
+)
+async def repository_action_history(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+) -> list[ActionLogResponse]:
+    await _get_repository(session, repository_id)
+    rows = (
+        await session.scalars(
+            select(ActionLog)
+            .where(ActionLog.repository_id == repository_id)
+            .order_by(ActionLog.created_at.desc(), ActionLog.id.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [ActionLogResponse.model_validate(row) for row in rows]
+
+
+@router.post("/mirror/actions/{action}", response_model=ActionLogResponse)
+async def run_mirror_action(
+    action: str,
+    payload: ActionRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ActionLogResponse:
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirm=true is required for mutations",
+        )
+    if payload.repository_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="repository_id is required for mirror actions",
+        )
+    repository = await _get_repository(session, payload.repository_id)
+    try:
+        entry = await _action_service(request).execute_action(
+            session, repository, action, confirm=payload.confirm
+        )
+    except (UnknownActionError, ActionNotAllowedError, ConfirmationRequiredError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    if entry.status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=entry.error or entry.output or "action failed",
+        )
+    return ActionLogResponse.model_validate(entry)
 
 
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])

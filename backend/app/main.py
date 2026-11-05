@@ -17,6 +17,7 @@ from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
+from app.services.action_service import ActionService
 from app.services.compare_cache import CompareCache
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session_factory,
         interval_seconds=resolved.mirror_poll_interval_seconds,
     )
+    action_service = ActionService(timeout_seconds=resolved.action_timeout_seconds)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -97,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.gitflic_client = gitflic_client
     application.state.mirror_service = mirror_service
     application.state.mirror_scheduler = mirror_scheduler
+    application.state.action_service = action_service
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

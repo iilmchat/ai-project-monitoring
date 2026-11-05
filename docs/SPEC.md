@@ -138,7 +138,6 @@
 `category ∈ {local, mirror}` — рекомендации по локальному состоянию и по зеркалам разделены. Рекомендации **не выполняются автоматически**.
 
 ### 3.8. Mirror / межпровайдерная согласованность (GitHub ↔ GitFlic) — R8/R9
-
 **Назначение.** Отдельный сервис (`MirrorService`) ходит в API GitHub и API GitFlic, сравнивает `HEAD SHA` default-ветки и возвращает канонический `mirror_status`. Сравнение **не** опирается на локальный клон: он может знать только один remote.
 
 **Статус реализации (v0.2.0, Sprint 9):** эндпоинты §3.8.1, все 9 значений `mirror_status`, polling и webhooks реализованы. Классификация при разных SHA использует детерминированную эвристику по датам коммитов (`sha+date-heuristic`); полноценный provider Compare API — v0.3.
@@ -222,7 +221,6 @@
 Каждый элемент: `{provider, full_name, private, url, canonical_provider_guess, suggested_action}`. **Никаких автоматических мутаций** — только кандидаты для ручного решения (создать зеркало / отметить `mirror_expected=false`).
 
 #### 3.8.6. Rate limits и стратегия запросов
-
 | Провайдер | Лимит (authenticated) | Стратегия |
 |-----------|----------------------|-----------|
 | GitHub | 5000 req/час | Однократный `GET /repos/{o}/{r}/branches/{b}` на репозиторий, кэш 300 с |
@@ -232,8 +230,25 @@
 
 ---
 
-## 4. Схема БД (SQLite / PostgreSQL)
+## 3.9. Actions — явные мутации (v0.2.0, ADR-0003)
 
+Автоматических мутаций нет: действие выполняется только при `confirm=true` и
+всегда попадает в `action_log`.
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/repositories/{id}/actions/{action}` | `{confirm: true}` | `ActionLog` |
+| POST | `/mirror/actions/{action}` | `{confirm: true, repository_id}` | `ActionLog` |
+| GET | `/admin/actions` | `repository_id?`, `limit?` | `ActionLog[]` |
+
+- `action ∈ {pull, push, stash}`; `mirror action = push-mirror`.
+- Без `confirm=true` → 400; неизвестное действие → 400.
+- Destructive-команды (`reset --hard`, `clean -f`, `push --force`, `checkout .`) отсутствуют.
+- `ActionLog`: `repository_id, action, command, status, exit_code, output, actor, created_at`.
+
+---
+
+## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
   id, path*, alias, tracked BOOLEAN DEFAULT false,

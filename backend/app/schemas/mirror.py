@@ -40,6 +40,8 @@ class MirrorPolicyUpdate(BaseModel):
     canonical_provider: CanonicalProvider | None = None
     mirror_expected: bool | None = None
     mirror_policy: str | None = None
+    github_full_name: str | None = None
+    gitflic_full_name: str | None = None
 
 
 class MirrorCandidatesResponse(BaseModel):

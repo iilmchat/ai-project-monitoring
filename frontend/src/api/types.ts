@@ -93,6 +93,20 @@ export interface MirrorPolicyUpdate {
   canonical_provider?: 'github' | 'gitflic' | 'both'
   mirror_expected?: boolean
   mirror_policy?: string
+  github_full_name?: string
+  gitflic_full_name?: string
+}
+
+export interface ActionLog {
+  id: number
+  repository_id: number | null
+  action: string
+  command: string
+  status: 'success' | 'failed' | string
+  exit_code: number | null
+  output: string | null
+  actor: string
+  created_at: string
 }
 
 export interface DashboardResponse {

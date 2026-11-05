@@ -151,6 +151,31 @@ class WebhookEvent(Base):
         return f"WebhookEvent(provider={self.provider!r}, event_type={self.event_type!r})"
 
 
+class ActionLog(Base):
+    """Audit trail for explicitly confirmed mutations (SPEC §3.7, S10-005)."""
+
+    __tablename__ = "action_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    repository_id: Mapped[int | None] = mapped_column(
+        ForeignKey("repositories.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    command: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor: Mapped[str] = mapped_column(String(64), default="local", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"ActionLog(action={self.action!r}, status={self.status!r})"
+
+
 class ScanRun(Base):
     """History of discovery scans."""
 
@@ -174,6 +199,7 @@ class ScanRun(Base):
 
 
 __all__ = [
+    "ActionLog",
     "Repository",
     "RepositoryMirrorStatus",
     "RepositoryStatus",

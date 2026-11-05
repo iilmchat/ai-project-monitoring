@@ -8,11 +8,11 @@ services:
     volumes:
       # SQLite database lives on the host and survives container rebuilds.
       - ./data:/app/data
-      # Mount project roots here so discovery can see them, e.g.:
-      # - ${SCAN_ROOTS:-C:/Projects}:/repos:ro
+      # Host projects mounted read-write so scan/status/actions work.
+      - C:/Projects:/projects
     environment:
       DATABASE_URL: sqlite+aiosqlite:////app/data/iiruchating.db
-      SCAN_ROOTS: ${SCAN_ROOTS:-C:/Projects}
+      SCAN_ROOTS: ${SCAN_ROOTS:-/projects}
       SCAN_DEPTH: ${SCAN_DEPTH:-3}
       DEBUG: ${DEBUG:-false}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

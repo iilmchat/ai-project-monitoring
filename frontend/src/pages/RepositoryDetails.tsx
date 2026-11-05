@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import {
+  getActions,
   getLog,
   getMirror,
   getRecommendations,
@@ -10,9 +11,12 @@ import {
   getStatus,
   refreshMirror,
   refreshRepository,
+  runAction,
+  runMirrorAction,
   updateMirrorPolicy,
 } from '../api/client'
 import type {
+  ActionLog,
   CommitInfo,
   MirrorProviderStatus,
   MirrorStatus,
@@ -22,6 +26,20 @@ import type {
 } from '../api/types'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
+
+const EXECUTABLE_ACTIONS: Record<string, string> = {
+  stash: 'stash',
+  push: 'push',
+  pull: 'pull',
+  'pull-rebase': 'pull',
+}
+
+interface ActionPrompt {
+  kind: 'local' | 'mirror'
+  action: string
+  reason: string
+  command: string
+}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
@@ -47,6 +65,13 @@ export default function RepositoryDetails() {
     'github',
   )
   const [policyExpected, setPolicyExpected] = useState(true)
+  const [policyGithubName, setPolicyGithubName] = useState('')
+  const [policyGitflicName, setPolicyGitflicName] = useState('')
+  const [history, setHistory] = useState<ActionLog[]>([])
+  const [actionPrompt, setActionPrompt] = useState<ActionPrompt | null>(null)
+  const [actionConfirmed, setActionConfirmed] = useState(false)
+  const [actionRunning, setActionRunning] = useState(false)
+  const [actionResult, setActionResult] = useState<string | null>(null)
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
   const [loading, setLoading] = useState(!invalidId)
   const [refreshing, setRefreshing] = useState(false)
@@ -59,13 +84,15 @@ export default function RepositoryDetails() {
     let active = true
     void (async () => {
       try {
-        const [list, currentStatus, log, tips, mirrorStatus] = await Promise.all([
-          getRepositories(0, 500),
-          getStatus(repositoryId),
-          getLog(repositoryId, 10),
-          getRecommendations(repositoryId),
-          getMirror(repositoryId),
-        ])
+        const [list, currentStatus, log, tips, mirrorStatus, actionHistory] =
+          await Promise.all([
+            getRepositories(0, 500),
+            getStatus(repositoryId),
+            getLog(repositoryId, 10),
+            getRecommendations(repositoryId),
+            getMirror(repositoryId),
+            getActions(repositoryId),
+          ])
         if (!active) {
           return
         }
@@ -75,11 +102,14 @@ export default function RepositoryDetails() {
         setCommits(log)
         setRecommendations(tips)
         setMirror(mirrorStatus)
+        setHistory(actionHistory)
         if (found) {
           setPolicyCanonical(
             found.canonical_provider === 'gitflic' ? 'gitflic' : 'github',
           )
           setPolicyExpected(found.mirror_expected)
+          setPolicyGithubName(found.github_full_name ?? '')
+          setPolicyGitflicName(found.gitflic_full_name ?? '')
         }
         setError(null)
       } catch {
@@ -140,6 +170,8 @@ export default function RepositoryDetails() {
   function openPolicy() {
     setPolicyCanonical(repository?.canonical_provider === 'gitflic' ? 'gitflic' : 'github')
     setPolicyExpected(repository?.mirror_expected ?? true)
+    setPolicyGithubName(repository?.github_full_name ?? '')
+    setPolicyGitflicName(repository?.gitflic_full_name ?? '')
     setPolicyOpen(true)
   }
 
@@ -149,6 +181,8 @@ export default function RepositoryDetails() {
       await updateMirrorPolicy(repositoryId, {
         canonical_provider: policyCanonical,
         mirror_expected: policyExpected,
+        github_full_name: policyGithubName,
+        gitflic_full_name: policyGitflicName,
       })
       const [updatedMirror, list] = await Promise.all([
         getMirror(repositoryId),
@@ -160,6 +194,54 @@ export default function RepositoryDetails() {
       setError(null)
     } catch {
       setError('Не удалось сохранить политику зеркала.')
+    }
+  }
+
+  function openAction(prompt: ActionPrompt) {
+    setActionPrompt(prompt)
+    setActionConfirmed(false)
+    setActionResult(null)
+  }
+
+  async function handleExecuteAction() {
+    if (!actionPrompt) {
+      return
+    }
+    setActionRunning(true)
+    try {
+      let entry: ActionLog
+      if (actionPrompt.kind === 'mirror') {
+        entry = await runMirrorAction(repositoryId, actionPrompt.action)
+      } else {
+        const backendAction =
+          EXECUTABLE_ACTIONS[actionPrompt.action] ?? actionPrompt.action
+        entry = await runAction(repositoryId, backendAction)
+      }
+      setActionResult(
+        entry.status === 'success'
+          ? `Выполнено: ${entry.command}`
+          : `Ошибка ${entry.exit_code ?? ''}: ${entry.output ?? entry.command}`,
+      )
+      setActionPrompt(null)
+      setActionConfirmed(false)
+
+      const [updatedStatus, log, tips, mirrorStatus, actionHistory] =
+        await Promise.all([
+          refreshRepository(repositoryId, false),
+          getLog(repositoryId, 10),
+          getRecommendations(repositoryId),
+          getMirror(repositoryId),
+          getActions(repositoryId),
+        ])
+      setStatus(updatedStatus)
+      setCommits(log)
+      setRecommendations(tips)
+      setMirror(mirrorStatus)
+      setHistory(actionHistory)
+    } catch {
+      setActionResult('Не удалось выполнить действие.')
+    } finally {
+      setActionRunning(false)
     }
   }
 
@@ -187,6 +269,12 @@ export default function RepositoryDetails() {
       {(error ?? (invalidId ? 'Некорректный идентификатор репозитория.' : null)) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error ?? 'Некорректный идентификатор репозитория.'}
+        </div>
+      )}
+
+      {actionResult && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+          {actionResult}
         </div>
       )}
 
@@ -330,6 +418,22 @@ export default function RepositoryDetails() {
                     >
                       {copiedCommand === item.command ? 'Скопировано' : 'Копировать'}
                     </button>
+                    {item.action === 'push-mirror' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openAction({
+                            kind: 'mirror',
+                            action: 'push-mirror',
+                            reason: item.reason,
+                            command: item.command,
+                          })
+                        }
+                        className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
+                      >
+                        Выполнить
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -362,6 +466,22 @@ export default function RepositoryDetails() {
                     >
                       {copiedCommand === item.command ? 'Скопировано' : 'Копировать'}
                     </button>
+                    {EXECUTABLE_ACTIONS[item.action] && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openAction({
+                            kind: 'local',
+                            action: item.action,
+                            reason: item.reason,
+                            command: item.command,
+                          })
+                        }
+                        className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
+                      >
+                        Выполнить
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -400,6 +520,50 @@ export default function RepositoryDetails() {
             )}
           </div>
 
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              История действий
+            </h2>
+            {history.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-500">Действий пока не было.</p>
+            ) : (
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Дата</th>
+                    <th className="px-4 py-3 font-medium">Действие</th>
+                    <th className="px-4 py-3 font-medium">Статус</th>
+                    <th className="px-4 py-3 font-medium">Команда</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {history.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatDate(entry.created_at)}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{entry.action}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            entry.status === 'success'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {entry.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                        {entry.command}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           {policyOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
               <form
@@ -422,6 +586,24 @@ export default function RepositoryDetails() {
                     <option value="gitflic">GitFlic</option>
                     <option value="both">Both</option>
                   </select>
+                </label>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  GitHub full name (owner/repo)
+                  <input
+                    value={policyGithubName}
+                    onChange={(event) => setPolicyGithubName(event.target.value)}
+                    placeholder="owner/repo"
+                    className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  GitFlic full name (owner/repo)
+                  <input
+                    value={policyGitflicName}
+                    onChange={(event) => setPolicyGitflicName(event.target.value)}
+                    placeholder="owner/repo"
+                    className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
                 </label>
                 <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -447,6 +629,47 @@ export default function RepositoryDetails() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {actionPrompt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+              <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+                <h2 className="text-lg font-semibold">Подтверждение действия</h2>
+                <p className="mt-2 text-sm text-slate-600">{actionPrompt.reason}</p>
+                <code className="mt-3 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">
+                  {actionPrompt.command}
+                </code>
+                <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={actionConfirmed}
+                    onChange={(event) => setActionConfirmed(event.target.checked)}
+                    className="mt-1"
+                  />
+                  Я понимаю, что действие изменит репозиторий (pull/push/stash).
+                </label>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionPrompt(null)
+                      setActionConfirmed(false)
+                    }}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExecuteAction()}
+                    disabled={!actionConfirmed || actionRunning}
+                    className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {actionRunning ? 'Выполнение…' : 'Выполнить'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </>
