@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
-from app.models.entities import Repository, RepositoryStatus, ScanRun
+from app.models.entities import (
+    Repository,
+    RepositoryMirrorStatus,
+    RepositoryStatus,
+    ScanRun,
+    WebhookEvent,
+)
 
-__all__ = ["Repository", "RepositoryStatus", "ScanRun"]
+__all__ = [
+    "Repository",
+    "RepositoryMirrorStatus",
+    "RepositoryStatus",
+    "ScanRun",
+    "WebhookEvent",
+]

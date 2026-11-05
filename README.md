@@ -99,7 +99,7 @@ pnpm --dir frontend dev
 |------------|----------|
 | Версия | **v0.1.0** (2026-11-05) |
 | Спринты | 1–6 (MVP завершён) |
-| Тесты backend | **69** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты backend | **90** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **2** (Vitest + Testing Library) |
 | Entry bundle | 83.3 kB gzip (React 19 + Router) |
 | Покрытие | не измерялось в v0.1.0 (`pytest-cov` не подключён) |

@@ -29,6 +29,8 @@
 | `iiruchating_status_duration_seconds` | Histogram | Время сбора локального статуса (fast check + pygit2) |
 | `iiruchating_repositories_total{state=...}` | Gauge | Текущее число репозиториев в каждом каноническом состоянии (обновляется при scrape из БД) |
 | `iiruchating_scan_duration_seconds` | Gauge | Длительность последнего полного сканирования |
+| `iiruchating_mirror_status_total{status=...}` | Gauge | Текущее число репозиториев по `mirror_status` (при scrape из БД) |
+| `iiruchating_mirror_check_duration_seconds` | Histogram | Время проверки зеркала GitHub ↔ GitFlic |
 
 Гистограммы **без лейбла `repo`** — чтобы не плодить кардинальность; разбор
 медленных репозиториев идёт через JSON-лог `status_slow`.

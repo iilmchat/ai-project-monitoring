@@ -163,3 +163,29 @@
 
 ### Метрики
 - Backend-тесты: 69 passed
+
+---
+
+## Спринт 9: Mirror GitHub ↔ GitFlic (v0.2.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S9-001: поля mirror-политики в `repositories`, таблицы `repository_mirror_status` и `webhook_events`, миграция `003`
+- [x] S9-002: `GitHubClient` — `get_branch`, `list_repos`, rate-limit
+- [x] S9-003: `GitFlicClient` — `get_branch`, `list_repos`, rate-limit
+- [x] S9-004: `MirrorService` — классификация 9 статусов, upsert, candidates
+- [x] S9-005: API `/mirror`, `/mirror/refresh`, `PATCH /mirror-policy`
+- [x] S9-006: `GET /mirror/candidates`
+- [x] S9-007: `MirrorScheduler` (polling `MIRROR_POLL_INTERVAL_SECONDS`)
+- [x] S9-008: webhooks GitHub/GitFlic (HMAC, `webhook_events`, инвалидация)
+- [x] S9-009: UI — вкладка «Зеркала», панель и модалка политики
+- [x] S9-010: метрики `mirror_status_total`, `mirror_check_duration_seconds`
+- [x] S9-011: тесты сервиса/API/webhooks
+- [x] S9-012: документация (SPEC §3.8, ARCHITECTURE §7, USER_GUIDE)
+
+### Метрики
+- Backend-тесты: 90 passed
+- Frontend-тесты: 2 passed
+- Entry bundle: 83.3 kB gzip

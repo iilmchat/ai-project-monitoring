@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 from app.config import Settings
 from app.db.base import Base
 from app.db.session import ensure_sqlite_directory
-from app.models import Repository, RepositoryStatus, ScanRun  # noqa: F401
+from app.models import (  # noqa: F401
+    Repository,
+    RepositoryMirrorStatus,
+    RepositoryStatus,
+    ScanRun,
+    WebhookEvent,
+)
 
 config = context.config
 

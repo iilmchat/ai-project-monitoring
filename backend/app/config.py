@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     status_ttl_seconds: int = 60
     compare_ttl_seconds: int = 60
     fetch_timeout: int = 30
+    github_token: str = ""
+    gitflic_token: str = ""
+    webhook_secret: str = ""
+    mirror_poll_interval_seconds: int = 300
+    mirror_status_ttl_seconds: int = 300
+    provider_timeout_seconds: float = 10.0
     debug: bool = False
     app_version: str = "0.1.0"
 

@@ -45,6 +45,7 @@ const dashboard: DashboardResponse = {
     untracked: 1,
     stale: 0,
     errors: 0,
+    mirror_issues: 0,
   },
   repositories: [
     {
@@ -52,15 +53,26 @@ const dashboard: DashboardResponse = {
       path: 'C:/work/alpha',
       alias: 'alpha',
       tracked: true,
+      github_full_name: 'acme/alpha',
+      gitflic_full_name: 'acme/alpha',
+      canonical_provider: 'github',
+      mirror_expected: true,
+      mirror_policy: 'github_to_gitflic',
       created_at: '2026-11-01T00:00:00Z',
       updated_at: '2026-11-01T00:00:00Z',
       status: makeStatus({ repository_id: 1, path: 'C:/work/alpha' }),
+      mirror: null,
     },
     {
       id: 2,
       path: 'C:/work/beta',
       alias: null,
       tracked: false,
+      github_full_name: null,
+      gitflic_full_name: null,
+      canonical_provider: 'github',
+      mirror_expected: true,
+      mirror_policy: 'github_to_gitflic',
       created_at: '2026-11-01T00:00:00Z',
       updated_at: '2026-11-01T00:00:00Z',
       status: makeStatus({
@@ -68,6 +80,7 @@ const dashboard: DashboardResponse = {
         path: 'C:/work/beta',
         state: 'dirty',
       }),
+      mirror: null,
     },
   ],
 }

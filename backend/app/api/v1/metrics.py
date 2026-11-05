@@ -9,9 +9,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.metrics import set_repository_state_counts
+from app.core.metrics import set_mirror_status_counts, set_repository_state_counts
 from app.db.session import get_session
-from app.models.entities import RepositoryStatus
+from app.models.entities import RepositoryMirrorStatus, RepositoryStatus
 
 router = APIRouter(tags=["observability"])
 
@@ -27,4 +27,13 @@ async def metrics(
     )
     counts = {state: count for state, count in rows.all()}
     set_repository_state_counts(counts)
+
+    mirror_rows = await session.execute(
+        select(
+            RepositoryMirrorStatus.mirror_status,
+            func.count(RepositoryMirrorStatus.id),
+        ).group_by(RepositoryMirrorStatus.mirror_status)
+    )
+    set_mirror_status_counts({status: count for status, count in mirror_rows.all()})
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

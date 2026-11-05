@@ -8,16 +8,19 @@ import {
   trackRepository,
 } from '../api/client'
 import type { DashboardRepository, DashboardResponse } from '../api/types'
+import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
 
-type Filter = 'all' | 'attention' | 'untracked'
+type Filter = 'all' | 'attention' | 'untracked' | 'mirror'
 
 const ATTENTION_STATES = new Set(['dirty', 'ahead', 'behind', 'diverged', 'no_upstream'])
+const MIRROR_OK = new Set(['in_sync', 'not_applicable'])
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'Все' },
   { id: 'attention', label: 'Требуют внимания' },
   { id: 'untracked', label: 'Не отслеживаются' },
+  { id: 'mirror', label: 'Зеркала' },
 ]
 
 function displayName(repository: DashboardRepository): string {
@@ -31,6 +34,11 @@ function displayName(repository: DashboardRepository): string {
 function needsAttention(repository: DashboardRepository): boolean {
   const state = repository.status?.state
   return state !== undefined && ATTENTION_STATES.has(state)
+}
+
+function hasMirrorIssue(repository: DashboardRepository): boolean {
+  const status = repository.mirror?.mirror_status
+  return status !== undefined && !MIRROR_OK.has(status)
 }
 
 export default function Dashboard() {
@@ -120,6 +128,9 @@ export default function Dashboard() {
     if (filter === 'untracked') {
       return dashboard.repositories.filter((repository) => !repository.tracked)
     }
+    if (filter === 'mirror') {
+      return dashboard.repositories.filter(hasMirrorIssue)
+    }
     return dashboard.repositories
   }, [dashboard, filter])
 
@@ -150,7 +161,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <SummaryCard label="Всего" value={summary?.total ?? 0} testId="summary-total" />
         <SummaryCard label="Чистые" value={summary?.clean ?? 0} testId="summary-clean" />
         <SummaryCard
@@ -162,6 +173,11 @@ export default function Dashboard() {
           label="Не отслеживаются"
           value={summary?.untracked ?? 0}
           testId="summary-untracked"
+        />
+        <SummaryCard
+          label="Зеркала расходятся"
+          value={summary?.mirror_issues ?? 0}
+          testId="summary-mirror"
         />
       </div>
 
@@ -200,6 +216,7 @@ export default function Dashboard() {
                   <th className="px-4 py-3 font-medium">Репозиторий</th>
                   <th className="px-4 py-3 font-medium">Ветка</th>
                   <th className="px-4 py-3 font-medium">Статус</th>
+                  <th className="px-4 py-3 font-medium">Зеркало</th>
                   <th className="px-4 py-3 font-medium">Ahead / Behind</th>
                   <th className="px-4 py-3 font-medium">Действия</th>
                 </tr>
@@ -223,6 +240,9 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge state={repository.status?.state} tracked={repository.tracked} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <MirrorBadge status={repository.mirror?.mirror_status} />
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {repository.status

@@ -17,6 +17,11 @@ from app.git.pygit2_backend import (
     read_local_status,
 )
 from app.models.entities import Repository
+from app.schemas.mirror import (
+    MirrorCandidatesResponse,
+    MirrorPolicyUpdate,
+    MirrorStatusResponse,
+)
 from app.schemas.recommendation import RecommendationResponse
 from app.schemas.repository import (
     CommitInfoResponse,
@@ -27,6 +32,7 @@ from app.schemas.repository import (
     RepositoryStatusResponse,
 )
 from app.services.compare_cache import CompareCache
+from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
 from app.services.status_service import StatusService
 
@@ -41,6 +47,11 @@ def _status_service(request: Request) -> StatusService:
 def _compare_cache(request: Request) -> CompareCache:
     cache: CompareCache = request.app.state.compare_cache
     return cache
+
+
+def _mirror_service(request: Request) -> MirrorService:
+    service: MirrorService = request.app.state.mirror_service
+    return service
 
 
 async def _get_repository(session: AsyncSession, repository_id: int) -> Repository:
@@ -190,6 +201,63 @@ async def compare_repository(
 
     cache.set(repository.id, resolved_base, resolved_head, result)
     return CompareResponse.model_validate(result)
+
+
+@router.get("/repositories/{repository_id}/mirror", response_model=MirrorStatusResponse)
+async def get_repository_mirror(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    refresh: Annotated[bool, Query()] = False,
+) -> MirrorStatusResponse:
+    repository = await _get_repository(session, repository_id)
+    snapshot = await _mirror_service(request).get_mirror_status(
+        repository, refresh=refresh
+    )
+    return MirrorStatusResponse.model_validate(snapshot)
+
+
+@router.post(
+    "/repositories/{repository_id}/mirror/refresh",
+    response_model=MirrorStatusResponse,
+)
+async def refresh_repository_mirror(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> MirrorStatusResponse:
+    repository = await _get_repository(session, repository_id)
+    snapshot = await _mirror_service(request).refresh_mirror_status(repository)
+    return MirrorStatusResponse.model_validate(snapshot)
+
+
+@router.patch(
+    "/repositories/{repository_id}/mirror-policy",
+    response_model=RepositoryRead,
+)
+async def update_mirror_policy(
+    repository_id: int,
+    payload: MirrorPolicyUpdate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RepositoryRead:
+    repository = await _get_repository(session, repository_id)
+    if payload.canonical_provider is not None:
+        repository.canonical_provider = payload.canonical_provider
+    if payload.mirror_expected is not None:
+        repository.mirror_expected = payload.mirror_expected
+    if payload.mirror_policy is not None:
+        repository.mirror_policy = payload.mirror_policy
+    await session.commit()
+    await session.refresh(repository)
+    await _mirror_service(request).invalidate(repository_id)
+    return RepositoryRead.model_validate(repository)
+
+
+@router.get("/mirror/candidates", response_model=MirrorCandidatesResponse)
+async def mirror_candidates(request: Request) -> MirrorCandidatesResponse:
+    candidates = await _mirror_service(request).discover_candidates()
+    return MirrorCandidatesResponse.model_validate(candidates)
 
 
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])

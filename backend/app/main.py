@@ -15,7 +15,11 @@ from app.core.system import read_git_version
 from app.db.session import build_engine, build_session_factory
 from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
+from app.providers.gitflic_client import GitFlicClient
+from app.providers.github_client import GitHubClient
 from app.services.compare_cache import CompareCache
+from app.services.mirror_scheduler import MirrorScheduler
+from app.services.mirror_service import MirrorService
 from app.services.remote_service import RemoteService
 from app.services.status_service import StatusCache, StatusService
 
@@ -41,6 +45,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ttl_seconds=resolved.status_ttl_seconds,
         remote_service=remote_service,
     )
+    github_client = GitHubClient(
+        resolved.github_token, timeout=resolved.provider_timeout_seconds
+    )
+    gitflic_client = GitFlicClient(
+        resolved.gitflic_token, timeout=resolved.provider_timeout_seconds
+    )
+    mirror_service = MirrorService(
+        session_factory,
+        github_client,
+        gitflic_client,
+        ttl_seconds=resolved.mirror_status_ttl_seconds,
+    )
+    mirror_scheduler = MirrorScheduler(
+        mirror_service,
+        session_factory,
+        interval_seconds=resolved.mirror_poll_interval_seconds,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -50,9 +71,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             database_url=resolved.database_url,
             scan_roots=resolved.scan_root_paths,
         )
+        mirror_scheduler.start()
         try:
             yield
         finally:
+            await mirror_scheduler.stop()
             await engine.dispose()
             logger.info("app_stopped")
 
@@ -70,6 +93,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.compare_cache = compare_cache
     application.state.remote_service = remote_service
     application.state.status_service = status_service
+    application.state.github_client = github_client
+    application.state.gitflic_client = gitflic_client
+    application.state.mirror_service = mirror_service
+    application.state.mirror_scheduler = mirror_scheduler
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

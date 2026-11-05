@@ -2,6 +2,9 @@ import type {
   CommitInfo,
   CompareResponse,
   DashboardResponse,
+  MirrorCandidates,
+  MirrorPolicyUpdate,
+  MirrorStatus,
   Recommendation,
   Repository,
   RepositoryListResponse,
@@ -13,7 +16,7 @@ import type {
 const API_BASE = '/api/v1'
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH'
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>
 }
@@ -109,4 +112,30 @@ export async function getLog(repositoryId: number, limit = 20): Promise<CommitIn
 
 export async function getRecommendations(repositoryId: number): Promise<Recommendation[]> {
   return request<Recommendation[]>(`/repositories/${repositoryId}/recommendations`)
+}
+
+export async function getMirror(repositoryId: number, refresh = false): Promise<MirrorStatus> {
+  return request<MirrorStatus>(`/repositories/${repositoryId}/mirror`, {
+    query: { refresh },
+  })
+}
+
+export async function refreshMirror(repositoryId: number): Promise<MirrorStatus> {
+  return request<MirrorStatus>(`/repositories/${repositoryId}/mirror/refresh`, {
+    method: 'POST',
+  })
+}
+
+export async function updateMirrorPolicy(
+  repositoryId: number,
+  payload: MirrorPolicyUpdate,
+): Promise<Repository> {
+  return request<Repository>(`/repositories/${repositoryId}/mirror-policy`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export async function getMirrorCandidates(): Promise<MirrorCandidates> {
+  return request<MirrorCandidates>('/mirror/candidates')
 }

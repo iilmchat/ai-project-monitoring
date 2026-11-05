@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
 
 
@@ -16,12 +17,14 @@ class DashboardSummary(BaseModel):
     untracked: int = Field(ge=0)
     stale: int = Field(ge=0)
     errors: int = Field(ge=0)
+    mirror_issues: int = Field(default=0, ge=0)
 
 
 class DashboardRepository(RepositoryRead):
     """Repository row with its last known status (may be missing)."""
 
     status: RepositoryStatusResponse | None = None
+    mirror: MirrorStatusResponse | None = None
 
 
 class DashboardResponse(BaseModel):

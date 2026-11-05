@@ -12,8 +12,10 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_session
 from app.models.entities import Repository
 from app.schemas.dashboard import DashboardRepository, DashboardResponse, DashboardSummary
+from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
-from app.services.status_service import snapshot_from_row
+from app.services.mirror_service import ATTENTION_STATUSES, snapshot_from_row
+from app.services.status_service import snapshot_from_row as status_snapshot_from_row
 
 router = APIRouter(tags=["dashboard"])
 
@@ -28,7 +30,7 @@ async def get_dashboard(
 ) -> DashboardResponse:
     statement = (
         select(Repository)
-        .options(selectinload(Repository.status))
+        .options(selectinload(Repository.status), selectinload(Repository.mirror))
         .order_by(Repository.path)
     )
     if tracked_only:
@@ -41,10 +43,14 @@ async def get_dashboard(
     untracked = 0
     stale = 0
     errors = 0
+    mirror_issues = 0
 
     for repository in repositories:
         if not repository.tracked:
             untracked += 1
+
+        if repository.mirror is not None and repository.mirror.mirror_status in ATTENTION_STATUSES:
+            mirror_issues += 1
 
         repo_status = repository.status
         if repo_status is None:
@@ -67,6 +73,7 @@ async def get_dashboard(
         untracked=untracked,
         stale=stale,
         errors=errors,
+        mirror_issues=mirror_issues,
     )
 
     items: list[DashboardRepository] = []
@@ -75,11 +82,22 @@ async def get_dashboard(
         row_status = repository.status
         status_response = (
             RepositoryStatusResponse.model_validate(
-                snapshot_from_row(repository, row_status)
+                status_snapshot_from_row(repository, row_status)
             )
             if row_status is not None
             else None
         )
-        items.append(DashboardRepository(**base.model_dump(), status=status_response))
+        mirror_response = (
+            MirrorStatusResponse.model_validate(snapshot_from_row(repository, repository.mirror))
+            if repository.mirror is not None
+            else None
+        )
+        items.append(
+            DashboardRepository(
+                **base.model_dump(),
+                status=status_response,
+                mirror=mirror_response,
+            )
+        )
 
     return DashboardResponse(summary=summary, repositories=items)

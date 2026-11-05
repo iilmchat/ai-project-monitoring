@@ -16,6 +16,11 @@ class RepositoryRead(BaseModel):
     path: str
     alias: str | None = None
     tracked: bool
+    github_full_name: str | None = None
+    gitflic_full_name: str | None = None
+    canonical_provider: str = "github"
+    mirror_expected: bool = True
+    mirror_policy: str = "github_to_gitflic"
     created_at: datetime
     updated_at: datetime
 

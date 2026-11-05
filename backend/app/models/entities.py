@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -19,6 +20,15 @@ class Repository(Base):
     path: Mapped[str] = mapped_column(String(1024), unique=True, index=True, nullable=False)
     alias: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tracked: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
+    github_full_name: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    gitflic_full_name: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    canonical_provider: Mapped[str] = mapped_column(
+        String(16), default="github", nullable=False
+    )
+    mirror_expected: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    mirror_policy: Mapped[str] = mapped_column(
+        String(64), default="github_to_gitflic", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -27,6 +37,11 @@ class Repository(Base):
     )
 
     status: Mapped[RepositoryStatus | None] = relationship(
+        back_populates="repository",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    mirror: Mapped[RepositoryMirrorStatus | None] = relationship(
         back_populates="repository",
         cascade="all, delete-orphan",
         uselist=False,
@@ -73,6 +88,69 @@ class RepositoryStatus(Base):
         return f"RepositoryStatus(repository_id={self.repository_id!r}, state={self.state!r})"
 
 
+class RepositoryMirrorStatus(Base):
+    """Latest cross-provider (GitHub ↔ GitFlic) snapshot for a repository."""
+
+    __tablename__ = "repository_mirror_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    github_head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    gitflic_head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    github_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gitflic_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    github_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    gitflic_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    mirror_status: Mapped[str] = mapped_column(
+        String(32), default="unavailable", nullable=False
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    repository: Mapped[Repository] = relationship(back_populates="mirror")
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"RepositoryMirrorStatus(repository_id={self.repository_id!r}, "
+            f"mirror_status={self.mirror_status!r})"
+        )
+
+
+class WebhookEvent(Base):
+    """Incoming GitHub/GitFlic webhook (SPEC §4, R9)."""
+
+    __tablename__ = "webhook_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    repository_id: Mapped[int | None] = mapped_column(
+        ForeignKey("repositories.id", ondelete="SET NULL"), nullable=True
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), default="received", nullable=False)
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"WebhookEvent(provider={self.provider!r}, event_type={self.event_type!r})"
+
+
 class ScanRun(Base):
     """History of discovery scans."""
 
@@ -95,4 +173,10 @@ class ScanRun(Base):
         return f"ScanRun(id={self.id!r}, status={self.status!r})"
 
 
-__all__ = ["Repository", "RepositoryStatus", "ScanRun"]
+__all__ = [
+    "Repository",
+    "RepositoryMirrorStatus",
+    "RepositoryStatus",
+    "ScanRun",
+    "WebhookEvent",
+]

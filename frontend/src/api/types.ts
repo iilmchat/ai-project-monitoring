@@ -13,6 +13,11 @@ export interface Repository {
   path: string
   alias: string | null
   tracked: boolean
+  github_full_name: string | null
+  gitflic_full_name: string | null
+  canonical_provider: string
+  mirror_expected: boolean
+  mirror_policy: string
   created_at: string
   updated_at: string
 }
@@ -49,10 +54,45 @@ export interface DashboardSummary {
   untracked: number
   stale: number
   errors: number
+  mirror_issues: number
 }
 
 export interface DashboardRepository extends Repository {
   status: RepositoryStatus | null
+  mirror: MirrorStatus | null
+}
+
+export interface MirrorProviderStatus {
+  full_name: string | null
+  branch: string | null
+  head_sha: string | null
+  head_date: string | null
+  private: boolean | null
+  checked_at: string | null
+}
+
+export interface MirrorStatus {
+  repository_id: number
+  github: MirrorProviderStatus | null
+  gitflic: MirrorProviderStatus | null
+  mirror_status: string
+  canonical_provider: string
+  mirror_expected: boolean
+  recommendations: Recommendation[]
+  checked_at: string
+}
+
+export interface MirrorCandidates {
+  github_only: Record<string, unknown>[]
+  gitflic_only: Record<string, unknown>[]
+  both: Record<string, unknown>[]
+  unknown: Record<string, unknown>[]
+}
+
+export interface MirrorPolicyUpdate {
+  canonical_provider?: 'github' | 'gitflic' | 'both'
+  mirror_expected?: boolean
+  mirror_policy?: string
 }
 
 export interface DashboardResponse {

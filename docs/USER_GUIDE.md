@@ -96,3 +96,28 @@
 
 **Это безопасно? Не потеряю ли я изменения?**
 Да. Все операции чтения не изменяют рабочую директорию. Fetch обновляет только `refs/remotes/*`.
+
+---
+
+## 8. Зеркала GitHub ↔ GitFlic
+
+1. Укажите имена репозиториев у провайдеров (API/PATCH или напрямую в БД):
+   `github_full_name = "owner/repo"`, `gitflic_full_name = "owner/repo"`.
+2. Задайте `GITHUB_TOKEN` и `GITFLIC_TOKEN` в `.env` (иначе статус будет `unavailable`).
+3. Настройте политику в панели «Зеркало» на странице репозитория:
+   - `canonical_provider` — `github` (по умолчанию), `gitflic` или `both`;
+   - `mirror_expected` — `false` для осознанно односторонних проектов (статус `not_applicable`).
+4. Нажмите **«Обновить зеркало»** или дождитесь polling (`MIRROR_POLL_INTERVAL_SECONDS`, default 300 с).
+
+| `mirror_status` | Значение | Действие |
+|-----------------|----------|----------|
+| `in_sync` | SHA совпадают | — |
+| `missing_on_gitflic` / `missing_on_github` | Репозиторий есть только у одного провайдера | Создать зеркало / `mirror_expected=false` |
+| `behind_gitflic` / `behind_github` | Зеркало отстаёт от канонического | `git push <mirror> <branch>` |
+| `diverged` | Истории разошлись | Ручная сверка |
+| `history_rewritten` | Похоже на force-push | Ручная сверка (критический алерт) |
+| `unavailable` | Нет токена/API недоступен/rate-limit | Проверить токены и сеть |
+| `not_applicable` | `mirror_expected=false` | — |
+
+Webhooks `POST /api/v1/webhooks/{github,gitflic}` инвалидируют кэш зеркала;
+при заданном `WEBHOOK_SECRET` подпись обязательна.

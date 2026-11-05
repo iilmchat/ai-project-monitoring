@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.models.entities import Repository, RepositoryStatus
+from app.models.entities import Repository, RepositoryMirrorStatus, RepositoryStatus
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -92,6 +92,7 @@ async def test_dashboard_aggregation(
         "untracked": 1,
         "stale": 4,
         "errors": 1,
+        "mirror_issues": 0,
     }
     assert len(payload["repositories"]) == 7
 
@@ -137,6 +138,30 @@ async def test_track_and_untrack(session_factory, client: AsyncClient, tmp_path:
 
     missing = await client.post("/api/v1/repositories/999999/track")
     assert missing.status_code == 404
+
+
+async def test_dashboard_includes_mirror_issues(
+    session_factory, client: AsyncClient, tmp_path: Path
+) -> None:
+    repository_id = await _add_repository(
+        session_factory, tmp_path, "mirror", tracked=True, state="current"
+    )
+    async with session_factory() as session:
+        session.add(
+            RepositoryMirrorStatus(
+                repository_id=repository_id,
+                mirror_status="behind_gitflic",
+                details={},
+            )
+        )
+        await session.commit()
+
+    response = await client.get("/api/v1/dashboard")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["mirror_issues"] == 1
+    item = next(row for row in payload["repositories"] if row["id"] == repository_id)
+    assert item["mirror"]["mirror_status"] == "behind_gitflic"
 
 
 async def test_dashboard_cors_preflight(client: AsyncClient) -> None:

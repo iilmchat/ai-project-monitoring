@@ -114,6 +114,8 @@ SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
 
 **Задача.** Обнаружить, что один и тот же проект по-разному представлен в двух провайдерах: отсутствует в одном, отстаёт, разошёлся или был force-push'нут в один из них (переписанная история). Локальный клон не решает задачу: он может знать только один remote.
 
+**Реализация v0.2.0 (Sprint 9):** `app/providers/{github,gitflic}_client.py`, `MirrorService`, `MirrorScheduler`, webhooks. При разных SHA классификация использует даты коммитов, полученные из API (`sha+date-heuristic`); history/compare API провайдеров — следующий шаг.
+
 ### 7.1. Поток сравнения
 
 ```
