@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +21,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.metrics import observe_scan_duration
 from app.db.base import utcnow
 from app.models.entities import Repository, ScanRun
 
@@ -129,6 +131,7 @@ class DiscoveryService:
         scan_run_id: int | None = None,
     ) -> ScanResult:
         """Scan ``roots`` and upsert repositories; optionally update a ScanRun."""
+        started = time.perf_counter()
         walk = await asyncio.to_thread(_walk_roots, roots, depth, ignore)
         added_count = 0
 
@@ -164,6 +167,8 @@ class DiscoveryService:
             errors=walk.errors,
             repositories=walk.found,
         )
+        duration_seconds = time.perf_counter() - started
+        observe_scan_duration(duration_seconds)
         logger.info(
             "scan_completed",
             scan_run_id=scan_run_id,
@@ -173,5 +178,6 @@ class DiscoveryService:
             added=result.added_count,
             skipped=result.skipped_count,
             errors=len(result.errors),
+            duration_ms=round(duration_seconds * 1000, 2),
         )
         return result

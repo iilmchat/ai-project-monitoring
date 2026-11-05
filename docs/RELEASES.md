@@ -146,3 +146,20 @@
 ### Метрики
 - Backend-тесты: 66 passed
 - KI-001…KI-003: **Resolved**
+
+---
+
+## Спринт 8: Monitoring & Metrics (v0.2.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S8-001: Prometheus-метрики fetch/status duration, `repositories_total{state}`, `scan_duration_seconds`
+- [x] S8-002: `GET /api/v1/metrics` (Prometheus text format, local-only)
+- [x] S8-003: structlog JSON: `fetch_failed`, `status_slow`, `scan_completed`
+- [x] S8-004: `/health` — `providers`, кэшированный `git_version`, `db_ok`
+- [x] S8-005: `docs/MONITORING.md`, `SPEC §3.1`, тесты observability
+
+### Метрики
+- Backend-тесты: 69 passed

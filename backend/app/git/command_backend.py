@@ -135,6 +135,18 @@ def is_repo_dirty_fast(
     return bool(result.stdout.strip())
 
 
+def get_remote_url(repository_path: str | Path, remote: str = "origin") -> str | None:
+    """Return the configured URL for ``remote`` (read-only, for logs)."""
+    result = run_git(
+        ["config", "--get", f"remote.{remote}.url"],
+        cwd=repository_path,
+        timeout=5,
+    )
+    if not result.ok:
+        return None
+    return result.stdout.strip() or None
+
+
 def fetch_all(repository_path: str | Path, timeout: float) -> FetchResult:
     """Fetch all remotes with pruning; never raises on Git/network errors."""
     started = time.perf_counter()
@@ -184,6 +196,7 @@ __all__ = [
     "CommandResult",
     "FetchResult",
     "fetch_all",
+    "get_remote_url",
     "is_repo_dirty_fast",
     "rev_list_counts",
     "run_git",

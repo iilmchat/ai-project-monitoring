@@ -1,9 +1,7 @@
-"""Health check endpoint (SPEC §3.1, S1-005)."""
+"""Health check endpoint (SPEC §3.1, S8-004)."""
 
 from __future__ import annotations
 
-import asyncio
-import subprocess
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -16,21 +14,8 @@ from app.schemas.health import HealthResponse
 
 router = APIRouter(tags=["health"])
 
-
-def _read_git_version() -> str | None:
-    try:
-        completed = subprocess.run(
-            ["git", "--version"],
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if completed.returncode != 0:
-        return None
-    return completed.stdout.strip() or None
+# Token-based checks arrive in Sprint 9 (mirror); v0.1.0 reports stubs.
+PROVIDERS: dict[str, str] = {"github": "not_configured", "gitflic": "not_configured"}
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -39,7 +24,7 @@ async def health(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> HealthResponse:
     settings: Settings = request.app.state.settings
-    git_version = await asyncio.to_thread(_read_git_version)
+    git_version: str | None = getattr(request.app.state, "git_version", None)
 
     db_ok = True
     try:
@@ -53,4 +38,5 @@ async def health(
         git_version=git_version,
         scan_roots=settings.scan_root_paths,
         db_ok=db_ok,
+        providers=PROVIDERS,
     )

@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.metrics import observe_status_duration
 from app.db.base import utcnow
 from app.git.command_backend import rev_list_counts
 from app.git.pygit2_backend import DirtyCounts, GitStatusError, LocalStatus, read_local_status
@@ -168,10 +169,12 @@ class StatusService:
         ``remote_status`` becomes ``unavailable`` while ``ahead``/``behind``
         are still computed from the locally known tracking refs.
         """
+        status_started = time.perf_counter()
         try:
             local = await asyncio.to_thread(read_local_status, repository.path)
         except GitStatusError as exc:
             snapshot = _error_snapshot(repository, str(exc))
+            status_duration = time.perf_counter() - status_started
         else:
             ahead = local.ahead
             behind = local.behind
@@ -199,6 +202,7 @@ class StatusService:
                 behind=behind,
                 remote_status=remote_status,
             )
+            status_duration = time.perf_counter() - status_started
 
         await self._store(session, snapshot)
         await session.commit()
@@ -212,6 +216,16 @@ class StatusService:
             behind=snapshot.behind,
             dirty_total=snapshot.dirty.total,
         )
+
+        duration_seconds = status_duration
+        observe_status_duration(duration_seconds)
+        if duration_seconds > 1.0:
+            logger.warning(
+                "status_slow",
+                repository_id=repository.id,
+                path=repository.path,
+                duration_ms=round(duration_seconds * 1000, 2),
+            )
         return snapshot
 
     async def _load_row(self, session: AsyncSession, repository_id: int) -> RepositoryStatus | None:

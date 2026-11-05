@@ -40,9 +40,10 @@
 
 | Метод | Путь | Ответ |
 |-------|------|-------|
-| GET | `/health` | `{status, version, git_version, scan_roots, db_ok}` |
+| GET | `/health` | `{status, version, git_version, scan_roots, db_ok, providers}` |
 
-`providers.*: {configured, reachable, rate_remaining, last_check_at}` — запланировано на v0.2.0 (mirror).
+`providers.github` / `providers.gitflic`: `not_configured` в v0.1.0; реальная
+проверка токенов и доступности — v0.2.0 (mirror).
 
 ### 3.2. Discovery / Сканирование
 

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import Settings
+from app.core.system import read_git_version
 from app.db.session import build_engine, build_session_factory
 from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = resolved
+    application.state.git_version = read_git_version()
     application.state.engine = engine
     application.state.session_factory = session_factory
     application.state.status_cache = status_cache

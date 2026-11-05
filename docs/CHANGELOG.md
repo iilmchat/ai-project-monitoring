@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(obs): Prometheus-метрики `/api/v1/metrics` — fetch/status histograms, `repositories_total{state}`, `scan_duration_seconds`.
+- feat(obs): расширенный `/health` — `providers` (github/gitflic), `git_version` кэшируется при старте.
+- feat(obs): structlog-события `fetch_failed` (с `remote_url`), `status_slow` (> 1 с), `scan_completed` с длительностью.
+
 ### Изменено
 
 - perf: fast dirty check (KI-002) — `git status --porcelain -uno` перед `pygit2.status()`; чистый tracked-статус не грузит CPU.

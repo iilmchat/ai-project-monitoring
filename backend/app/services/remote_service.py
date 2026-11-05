@@ -8,7 +8,8 @@ from pathlib import Path
 
 import structlog
 
-from app.git.command_backend import fetch_all
+from app.core.metrics import observe_fetch_duration
+from app.git.command_backend import fetch_all, get_remote_url
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +40,7 @@ class RemoteService:
 
     async def fetch(self, repository_path: str | Path) -> RemoteFetchResult:
         result = await asyncio.to_thread(fetch_all, repository_path, self._timeout)
+        observe_fetch_duration(result.duration_ms / 1000)
         if result.ok:
             logger.info(
                 "fetch_completed",
@@ -47,10 +49,12 @@ class RemoteService:
             )
             return RemoteFetchResult(ok=True, duration_ms=result.duration_ms)
 
+        remote_url = await asyncio.to_thread(get_remote_url, repository_path)
         if result.timed_out:
             logger.warning(
                 "fetch_timed_out",
                 path=str(repository_path),
+                remote_url=remote_url,
                 timeout_seconds=self._timeout,
                 message=(
                     f"Fetch timed out after {self._timeout:g}s. "
@@ -61,6 +65,7 @@ class RemoteService:
             logger.warning(
                 "fetch_failed",
                 path=str(repository_path),
+                remote_url=remote_url,
                 duration_ms=result.duration_ms,
                 error=result.error,
             )

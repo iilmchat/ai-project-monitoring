@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
@@ -11,3 +11,4 @@ class HealthResponse(BaseModel):
     git_version: str | None = None
     scan_roots: list[str]
     db_ok: bool
+    providers: dict[str, str] = Field(default_factory=dict)
