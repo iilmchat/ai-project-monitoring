@@ -48,6 +48,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     notification_service = NotificationService(
         enabled=resolved.notifications_enabled,
         notify_on=set(resolved.notify_on_names),
+        bot_token=resolved.telegram_bot_token,
+        chat_id=resolved.telegram_chat_id,
     )
     status_service = StatusService(
         status_cache,

@@ -2,7 +2,7 @@
 
 **Последнее обновление:** 2026-11-05
 
-**Всего проблем:** 8 (активных: 5, решено: 3)
+**Всего проблем:** 8 (активных: 3, решено: 5)
 
 ---
 
@@ -66,22 +66,16 @@
 
 ---
 
-## KI-007 · Open · Med · notifications · `plyer` не работает в Docker/headless
+## KI-007 · Resolved · Med · notifications · `plyer` не работает в Docker/headless
 
 **Описание:** Desktop-уведомления через `plyer` требуют графической сессии. В Docker и headless-окружениях вызов завершается `notification_failed`, уведомления не доставляются.
 
-**Workaround:** Смотреть события в JSON-логах (`history_rewritten`, `fetch_failed`); в v0.4.0 запланирован Telegram-канал.
-
-**План (S21-004):** Telegram Bot API (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-`NOTIFICATIONS_CHANNEL=telegram|desktop`) с retry/backoff и маскировкой токена в Settings.
+**Решение (S21-003):** `plyer` удалён. `NotificationService` отправляет сообщения в Telegram Bot API (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`), при отсутствии токенов — fallback в structlog. Rate-limit ошибок remote сохранён (1/час).
 
 ---
 
-## KI-008 · Open · Low · UI · Нет Conflict Manager
+## KI-008 · Resolved · Low · UI · Нет Conflict Manager
 
-**Описание:** При `state="diverged"` UI показывает только статус, но не список конфликтующих файлов. Пользователь вынужден вручную запускать `git diff --name-only --diff-filter=U` в терминале.
+**Описание:** При `state="diverged"` UI показывает только статус, но не список конфликтующих файлов.
 
-**Workaround:** Выполнить `git diff --name-only --diff-filter=U` в репозитории (read-only).
-
-**План (S21-003):** Панель Conflict Manager в деталях репозитория с unmerged-файлами
-(без автоматического разрешения конфликтов).
+**Решение (S21-002):** `GET /repositories/{id}/conflicts` (`git diff --name-only --diff-filter=U`, read-only) и блок «Конфликты» в деталях репозитория для `diverged`.

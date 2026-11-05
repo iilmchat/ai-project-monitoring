@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { bulkFetchAll, getDashboard } from '../api/client'
+import { bulkFetchAll, getDashboard, getHeatmap } from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import { useTableStore } from '../store/useTableStore'
 import Dashboard from './Dashboard'
@@ -11,7 +11,9 @@ import Dashboard from './Dashboard'
 vi.mock('../api/client', () => ({
   bulkFetchAll: vi.fn(),
   bulkSyncMirrorsAll: vi.fn(),
+  exportRepositories: vi.fn(),
   getDashboard: vi.fn(),
+  getHeatmap: vi.fn(),
   migrateToGitflic: vi.fn(),
   runAction: vi.fn(),
   scan: vi.fn(),
@@ -134,6 +136,7 @@ describe('Dashboard', () => {
       },
     })
     vi.mocked(getDashboard).mockResolvedValue(dashboard)
+    vi.mocked(getHeatmap).mockResolvedValue({})
   })
 
   it('renders summary cards and repository table', async () => {

@@ -147,6 +147,34 @@ def get_remote_url(repository_path: str | Path, remote: str = "origin") -> str |
     return result.stdout.strip() or None
 
 
+def get_conflicts(repository_path: str | Path, timeout: float = 10) -> list[str]:
+    """Return unmerged file paths (read-only Conflict Manager support)."""
+    result = run_git(
+        ["diff", "--name-only", "--diff-filter=U"],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+    if not result.ok:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def commit_dates(
+    repository_path: str | Path,
+    since: str,
+    timeout: float = 30,
+) -> list[str]:
+    """Return commit dates (YYYY-MM-DD) since ``since`` for activity heatmap."""
+    result = run_git(
+        ["log", f"--since={since}", "--format=%ad", "--date=short"],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+    if not result.ok:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 def fetch_all(repository_path: str | Path, timeout: float) -> FetchResult:
     """Fetch all remotes with pruning; never raises on Git/network errors."""
     started = time.perf_counter()
@@ -195,7 +223,9 @@ __all__ = [
     "FAST_STATUS_TIMEOUT",
     "CommandResult",
     "FetchResult",
+    "commit_dates",
     "fetch_all",
+    "get_conflicts",
     "get_remote_url",
     "is_repo_dirty_fast",
     "rev_list_counts",

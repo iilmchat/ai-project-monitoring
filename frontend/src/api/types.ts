@@ -135,6 +135,13 @@ export interface CISummary {
   aggregate: string
 }
 
+export interface ConflictsResponse {
+  repository_id: number
+  files: string[]
+}
+
+export type HeatmapData = Record<string, number>
+
 export interface AppSettings {
   scan_roots: string
   github_token: string

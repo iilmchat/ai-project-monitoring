@@ -372,3 +372,23 @@ Docker-сканирование `C:/Projects` через volume `/projects` (34 
 - Backend-тесты: 117 passed
 - Frontend-тесты: 11 passed
 - Entry bundle: 85.59 kB gzip; Command Palette chunk (lazy): 4.33 kB
+
+---
+
+## Спринт 21: Visuals, A11y & New Features (v0.4.0)
+
+**Период:** 2026-11-05
+**Статус:** ✅ Завершён
+
+### Задачи
+- [x] S21-001: A11y-иконки статусов, stale-индикатор (10 мин / remote stale)
+- [x] S21-002: Conflict Manager (`/conflicts`, блок для `diverged`); KI-008 Resolved
+- [x] S21-003: Telegram-уведомления вместо `plyer`; KI-007 Resolved
+- [x] S21-004: contribution heatmap (`/dashboard/heatmap` + UI)
+- [x] S21-005: экспорт CSV/JSON (`/repositories/export` + UI)
+- [x] S21-006: тесты и документация
+
+### Метрики
+- Backend-тесты: 121 passed
+- Frontend-тесты: 11 passed
+- Entry bundle: 85.59 kB gzip; Dashboard chunk: 30.55 kB

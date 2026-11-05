@@ -4,7 +4,9 @@ import type {
   CIStatus,
   CommitInfo,
   CompareResponse,
+  ConflictsResponse,
   DashboardResponse,
+  HeatmapData,
   MirrorCandidates,
   MirrorPolicyUpdate,
   MirrorStatus,
@@ -169,6 +171,22 @@ export async function getActions(repositoryId: number, limit = 20): Promise<Acti
 
 export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
   return request<CIStatus>(`/repositories/${repositoryId}/ci-status`)
+}
+
+export async function getConflicts(repositoryId: number): Promise<ConflictsResponse> {
+  return request<ConflictsResponse>(`/repositories/${repositoryId}/conflicts`)
+}
+
+export async function getHeatmap(days = 365): Promise<HeatmapData> {
+  return request<HeatmapData>('/dashboard/heatmap', { query: { days } })
+}
+
+export async function exportRepositories(format: 'csv' | 'json'): Promise<Blob> {
+  const response = await fetch(`/api/v1/repositories/export?format=${format}`)
+  if (!response.ok) {
+    throw new Error(`export failed: ${response.status}`)
+  }
+  return response.blob()
 }
 
 export async function bulkFetchAll(

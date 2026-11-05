@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated
+import csv
+import io
+import json
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
+from app.git.command_backend import get_conflicts
 from app.git.pygit2_backend import (
     GitStatusError,
     compare_refs,
@@ -33,6 +47,7 @@ from app.schemas.repository import (
     CommitInfoResponse,
     CompareResponse,
     RefreshRequest,
+    RepositoryConflictsResponse,
     RepositoryListResponse,
     RepositoryRead,
     RepositoryStatusResponse,
@@ -473,6 +488,67 @@ async def bulk_migrate_to_gitflic(
 ) -> dict[str, object]:
     background_tasks.add_task(_bulk_service(request).migrate_to_gitflic)
     return {"status": "accepted", "action": "migrate_to_gitflic"}
+
+
+@router.get("/repositories/export")
+async def export_repositories(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    format: Annotated[Literal["csv", "json"], Query()] = "json",
+) -> Response:
+    repositories = (
+        await session.scalars(
+            select(Repository)
+            .options(selectinload(Repository.status), selectinload(Repository.mirror))
+            .order_by(Repository.path)
+        )
+    ).all()
+
+    rows = [
+        {
+            "id": repository.id,
+            "path": repository.path,
+            "alias": repository.alias,
+            "tracked": repository.tracked,
+            "state": repository.status.state if repository.status else None,
+            "branch": repository.status.branch if repository.status else None,
+            "ahead": repository.status.ahead if repository.status else None,
+            "behind": repository.status.behind if repository.status else None,
+            "remote_status": repository.status.remote_status if repository.status else None,
+            "canonical_provider": repository.canonical_provider,
+            "mirror_status": repository.mirror.mirror_status if repository.mirror else None,
+        }
+        for repository in repositories
+    ]
+
+    if format == "json":
+        return Response(
+            content=json.dumps(rows, ensure_ascii=False, default=str),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="repositories.json"'},
+        )
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()) if rows else ["id"])
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="repositories.csv"'},
+    )
+
+
+@router.get(
+    "/repositories/{repository_id}/conflicts",
+    response_model=RepositoryConflictsResponse,
+)
+async def repository_conflicts(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RepositoryConflictsResponse:
+    repository = await _get_repository(session, repository_id)
+    files = await asyncio.to_thread(get_conflicts, repository.path)
+    return RepositoryConflictsResponse(repository_id=repository_id, files=files)
 
 
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])

@@ -1,4 +1,4 @@
-"""Desktop notification tests (S11-002)."""
+"""Notifications via Telegram with logger fallback (S21-003)."""
 
 from __future__ import annotations
 
@@ -14,37 +14,68 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
+class FakeResponse:
+    status_code = 200
+
+
+class FakeTelegramClient:
+    def __init__(self, calls: list[tuple[str, dict[str, object]]]) -> None:
+        self._calls = calls
+
+    def __enter__(self) -> FakeTelegramClient:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def post(self, url: str, json: dict[str, object]) -> FakeResponse:
+        self._calls.append((url, json))
+        return FakeResponse()
+
+
 @pytest.fixture
-def sent(monkeypatch) -> list[dict[str, object]]:
-    calls: list[dict[str, object]] = []
-
-    def fake_notify(**kwargs: object) -> None:
-        calls.append(kwargs)
-
-    monkeypatch.setattr("plyer.notification.notify", fake_notify)
+def telegram_calls(monkeypatch) -> list[tuple[str, dict[str, object]]]:
+    calls: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.services.notification_service.httpx.Client",
+        lambda timeout: FakeTelegramClient(calls),
+    )
     return calls
 
 
-def test_send_notification_calls_plyer(sent) -> None:
+def test_send_notification_via_telegram(telegram_calls) -> None:
+    service = NotificationService(
+        enabled=True, bot_token="123:abc", chat_id="42"
+    )
+
+    assert service.send_notification("Title", "Message") is True
+    assert len(telegram_calls) == 1
+    url, payload = telegram_calls[0]
+    assert "/bot123:abc/sendMessage" in url
+    assert payload["chat_id"] == "42"
+    assert "Title" in str(payload["text"])
+
+
+def test_logger_fallback_without_telegram(telegram_calls) -> None:
     service = NotificationService(enabled=True)
 
     assert service.send_notification("Title", "Message") is True
-    assert len(sent) == 1
-    assert sent[0]["title"] == "Title"
-    assert sent[0]["message"] == "Message"
+    assert telegram_calls == []
 
 
-def test_notifications_disabled(sent) -> None:
-    service = NotificationService(enabled=False)
+def test_notifications_disabled(telegram_calls) -> None:
+    service = NotificationService(enabled=False, bot_token="123:abc", chat_id="42")
 
     assert service.send_notification("Title", "Message") is False
-    assert sent == []
+    assert telegram_calls == []
 
 
-def test_notify_on_transition(sent) -> None:
+def test_notify_on_transition() -> None:
     service = NotificationService(
         enabled=True, notify_on={"history_rewritten", "missing_on_gitflic"}
     )
+    calls: list[tuple[str, str]] = []
+    service._deliver = lambda title, message: calls.append((title, message)) or True  # type: ignore[method-assign]
 
     assert service.notify_mirror_status(1, "C:/repo", "in_sync", None) is False
     assert (
@@ -57,15 +88,17 @@ def test_notify_on_transition(sent) -> None:
         )
         is False
     )
-    assert len(sent) == 1
+    assert len(calls) == 1
 
 
-def test_remote_error_is_rate_limited(sent) -> None:
+def test_remote_error_is_rate_limited() -> None:
     service = NotificationService(enabled=True)
+    calls: list[str] = []
+    service._deliver = lambda title, message: calls.append(title) or True  # type: ignore[method-assign]
 
     assert service.notify_remote_unavailable(1, "C:/repo", "network") is True
     assert service.notify_remote_unavailable(1, "C:/repo", "network") is False
-    assert len(sent) == 1
+    assert len(calls) == 1
 
 
 class FakeMirrorService:
@@ -91,7 +124,6 @@ async def test_scheduler_notifies_on_transition(
     app: FastAPI,
     session_factory: async_sessionmaker[AsyncSession],
     tmp_path: Path,
-    sent,
 ) -> None:
     async with session_factory() as session:
         session.add(
@@ -105,11 +137,13 @@ async def test_scheduler_notifies_on_transition(
 
     fake = FakeMirrorService()
     notifications = NotificationService(enabled=True, notify_on={"history_rewritten"})
+    calls: list[str] = []
+    notifications._deliver = lambda title, message: calls.append(title) or True  # type: ignore[method-assign]
     scheduler = MirrorScheduler(fake, session_factory, notifications=notifications)  # type: ignore[arg-type]
 
     await scheduler.tick()
-    assert sent == []
+    assert calls == []
 
     fake.status = "history_rewritten"
     await scheduler.tick()
-    assert len(sent) == 1
+    assert len(calls) == 1

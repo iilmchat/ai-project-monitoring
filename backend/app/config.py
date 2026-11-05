@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     notify_on: str = (
         "history_rewritten,missing_on_gitflic,missing_on_github,behind_gitflic"
     )
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
     debug: bool = False
     app_version: str = "0.3.0"
 

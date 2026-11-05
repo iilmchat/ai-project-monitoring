@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   bulkFetchAll,
   bulkSyncMirrorsAll,
+  exportRepositories,
   getDashboard,
   getScan,
   migrateToGitflic,
@@ -14,12 +15,14 @@ import {
 } from '../api/client'
 import type { DashboardRepository, DashboardResponse } from '../api/types'
 import ContextMenu from '../components/ContextMenu'
+import Heatmap from '../components/Heatmap'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
 import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
 import type { SavedViewFilters } from '../store/useViewsStore'
+import { isStatusStale } from '../utils/stale'
 
 const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
 
@@ -109,6 +112,7 @@ export default function Dashboard() {
   const [viewsOpen, setViewsOpen] = useState(false)
   const [saveViewOpen, setSaveViewOpen] = useState(false)
   const [viewName, setViewName] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
   const [focusedRepoId, setFocusedRepoId] = useState<number | null>(null)
   const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({})
   const searchRef = useRef<HTMLInputElement>(null)
@@ -390,6 +394,24 @@ export default function Dashboard() {
     }
   }
 
+  async function handleExport(format: 'csv' | 'json') {
+    setExportOpen(false)
+    try {
+      const blob = await exportRepositories(format)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `repositories.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setBulkMessage(`Экспорт ${format.toUpperCase()} готов.`)
+    } catch {
+      setBulkMessage('Не удалось выполнить экспорт.')
+    }
+  }
+
   function handleTableKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement
     if (
@@ -452,7 +474,8 @@ export default function Dashboard() {
     }
   }
 
-  function applyView(viewId: string) {    const view = savedViews.find((item) => item.id === viewId)
+  function applyView(viewId: string) {
+    const view = savedViews.find((item) => item.id === viewId)
     if (!view) {
       return
     }
@@ -488,14 +511,43 @@ export default function Dashboard() {
             Локальное состояние репозиториев и расхождения с remote.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleScan()}
-          disabled={scanning}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {scanning ? 'Сканирование…' : 'Сканировать'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleScan()}
+            disabled={scanning}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {scanning ? 'Сканирование…' : 'Сканировать'}
+          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setExportOpen((current) => !current)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Экспорт
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => void handleExport('csv')}
+                  className="w-full rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('json')}
+                  className="w-full rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  JSON
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -713,6 +765,8 @@ export default function Dashboard() {
         </Suspense>
       )}
 
+      <Heatmap />
+
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
           <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -855,7 +909,7 @@ export default function Dashboard() {
                     aria-selected={focusedRepoId === repository.id}
                     className={`cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-800/60 dark:focus:bg-slate-800/60 ${
                       focusedRepoId === repository.id ? 'ring-2 ring-inset ring-primary' : ''
-                    }`}
+                    } ${isStatusStale(repository.status) ? 'opacity-60' : ''}`}
                   >
                     <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                       <input
@@ -889,6 +943,7 @@ export default function Dashboard() {
                         <StatusBadge
                           state={repository.status?.state}
                           tracked={repository.tracked}
+                          stale={isStatusStale(repository.status)}
                         />
                       </td>
                     )}

@@ -297,6 +297,20 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 ---
 
+## 3.13. Conflicts, activity & export
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/repositories/{id}/conflicts` | — | `{repository_id, files[]}` (unmerged, read-only) |
+| GET | `/dashboard/heatmap` | `days?` (default 365) | `{"YYYY-MM-DD": commits}` |
+| GET | `/repositories/export` | `format=csv|json` | файл (attachment) |
+
+`conflicts` использует `git diff --name-only --diff-filter=U` (без изменений в репозитории).
+`heatmap` агрегирует `git log --since` по всем `tracked` репозиториям.
+`export` отдаёт все репозитории со статусом/зеркалом; CSV или JSON.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(

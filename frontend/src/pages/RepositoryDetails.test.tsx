@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getActions,
   getCiStatus,
+  getConflicts,
   getLog,
   getMirror,
   getRecommendations,
@@ -18,6 +19,7 @@ import RepositoryDetails from './RepositoryDetails'
 vi.mock('../api/client', () => ({
   getActions: vi.fn(),
   getCiStatus: vi.fn(),
+  getConflicts: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
   getRecommendations: vi.fn(),
@@ -106,6 +108,7 @@ describe('RepositoryDetails actions', () => {
     ])
     vi.mocked(getMirror).mockResolvedValue(mirror)
     vi.mocked(getActions).mockResolvedValue([])
+    vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',

@@ -276,8 +276,8 @@
 | KI-001 (fetch timeout) | Med | S7-001 | Resolved |
 | KI-002 (status на больших деревьях) | Low | S7-002 | Resolved |
 | KI-003 (GitHub Compare rate-limit) | Med | S7-003 | Resolved |
-| KI-007 (plyer в Docker) | Med | S21-004 | Open |
-| KI-008 (нет Conflict Manager) | Low | S21-003 | Open |
+| KI-007 (plyer в Docker) | Med | S21-003 | Resolved |
+| KI-008 (нет Conflict Manager) | Low | S21-002 | Resolved |
 
 Новые KI, обнаруженные в спринтах, добавляются в `docs/KNOWN_ISSUES.md` и в эту таблицу.
 

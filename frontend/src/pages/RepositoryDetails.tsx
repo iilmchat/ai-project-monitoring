@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   getActions,
   getCiStatus,
+  getConflicts,
   getLog,
   getMirror,
   getRecommendations,
@@ -20,6 +21,7 @@ import type {
   ActionLog,
   CIStatus,
   CommitInfo,
+  ConflictsResponse,
   MirrorProviderStatus,
   MirrorStatus,
   Recommendation,
@@ -28,6 +30,7 @@ import type {
 } from '../api/types'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
+import { isStatusStale } from '../utils/stale'
 
 const EXECUTABLE_ACTIONS: Record<string, string> = {
   stash: 'stash',
@@ -62,6 +65,7 @@ export default function RepositoryDetails() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [mirror, setMirror] = useState<MirrorStatus | null>(null)
   const [ciStatus, setCiStatus] = useState<CIStatus | null>(null)
+  const [conflicts, setConflicts] = useState<ConflictsResponse | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -87,7 +91,7 @@ export default function RepositoryDetails() {
     let active = true
     void (async () => {
       try {
-        const [list, currentStatus, log, tips, mirrorStatus, actionHistory, ci] =
+        const [list, currentStatus, log, tips, mirrorStatus, actionHistory, ci, conflictData] =
           await Promise.all([
             getRepositories(0, 500),
             getStatus(repositoryId),
@@ -96,6 +100,7 @@ export default function RepositoryDetails() {
             getMirror(repositoryId),
             getActions(repositoryId),
             getCiStatus(repositoryId),
+            getConflicts(repositoryId),
           ])
         if (!active) {
           return
@@ -108,6 +113,7 @@ export default function RepositoryDetails() {
         setMirror(mirrorStatus)
         setHistory(actionHistory)
         setCiStatus(ci)
+        setConflicts(conflictData)
         if (found) {
           setPolicyCanonical(
             found.canonical_provider === 'gitflic' ? 'gitflic' : 'github',
@@ -230,7 +236,7 @@ export default function RepositoryDetails() {
       setActionPrompt(null)
       setActionConfirmed(false)
 
-      const [updatedStatus, log, tips, mirrorStatus, actionHistory, ci] =
+      const [updatedStatus, log, tips, mirrorStatus, actionHistory, ci, conflictData] =
         await Promise.all([
           refreshRepository(repositoryId, false),
           getLog(repositoryId, 10),
@@ -238,6 +244,7 @@ export default function RepositoryDetails() {
           getMirror(repositoryId),
           getActions(repositoryId),
           getCiStatus(repositoryId),
+          getConflicts(repositoryId),
         ])
       setStatus(updatedStatus)
       setCommits(log)
@@ -245,6 +252,7 @@ export default function RepositoryDetails() {
       setMirror(mirrorStatus)
       setHistory(actionHistory)
       setCiStatus(ci)
+      setConflicts(conflictData)
     } catch {
       setActionResult('Не удалось выполнить действие.')
     } finally {
@@ -331,7 +339,11 @@ export default function RepositoryDetails() {
                 Статус
               </h2>
               <div className="mt-3 flex items-center gap-3">
-                <StatusBadge state={status?.state} tracked={repository?.tracked ?? false} />
+                <StatusBadge
+                  state={status?.state}
+                  tracked={repository?.tracked ?? false}
+                  stale={isStatusStale(status)}
+                />
                 <span className="text-sm text-slate-500 dark:text-slate-400">
                   ahead {status?.ahead ?? 0} / behind {status?.behind ?? 0}
                 </span>
@@ -361,6 +373,30 @@ export default function RepositoryDetails() {
               </dl>
             </div>
           </div>
+
+          {status?.state === 'diverged' && (
+            <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm dark:border-red-800 dark:bg-slate-900">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Конфликты ({conflicts?.files.length ?? 0})
+              </h2>
+              {conflicts && conflicts.files.length > 0 ? (
+                <ul className="mt-3 space-y-1">
+                  {conflicts.files.map((file) => (
+                    <li
+                      key={file}
+                      className="rounded bg-red-50 px-2 py-1 font-mono text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                    >
+                      {file}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                  Конфликтов в рабочей директории нет.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">

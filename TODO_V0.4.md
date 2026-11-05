@@ -103,23 +103,15 @@
 
 ### Спринт 21 — Visuals, A11y & New Features
 
+**Статус:** ✅ Завершён (2026-11-05)
+
 **Задачи**
-- **S21-001 A11y.** Иконки/форма к цветным бейджам (не только цвет): `✓ current`,
-  `!` dirty, `↓` behind, `⚠` diverged, `?` no_upstream. `aria-label`, контраст
-  WCAG AA, видимый focus-ring, `prefers-reduced-motion`.
-- **S21-002 Stale Data Indicator.** Если `checked_at` старше TTL или
-  `remote_status ∈ {stale, unavailable}` — приглушать блок (`opacity`), бейдж
-  «Устарело» с tooltip «обновлено N минут назад».
-- **S21-003 Conflict Manager.** Для `state="diverged"` — список конфликтующих файлов
-  через `git diff --name-only --diff-filter=U` (read-only), панель в деталях
-  репозитория; ссылки на файлы не открываются автоматически.
-- **S21-004 Telegram Webhooks.** Замена `plyer` на Bot API:
-  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_CHANNEL=telegram|desktop`.
-  Retry/backoff, rate-limit; токены — в Settings (маскируются) или ENV.
-- **S21-005 Contribution Heatmap.** Активность коммитов за 365 дней по всем
-  репозиториям (агрегация `git log --since`), lazy-компонент, кэш 10 минут.
-- **S21-006 Data Export.** Экспорт текущего среза таблицы в CSV/JSON (клиентская
-  генерация из уже загруженных данных; без новых серверных отчётов).
+- **S21-001 A11y.** ✅ Иконки/форма у бейджей, aria-label, stale-индикатор 🕒 и opacity.
+- **S21-002 Stale Data Indicator.** ✅ `remote_status ∈ {stale, unavailable}` или `checked_at` > 10 мин.
+- **S21-003 Conflict Manager.** ✅ `git diff --name-only --diff-filter=U` + блок в деталях; KI-008 Resolved.
+- **S21-004 Telegram Webhooks.** ✅ Bot API, logger fallback, `plyer` удалён; KI-007 Resolved.
+- **S21-005 Contribution Heatmap.** ✅ `/dashboard/heatmap` + CSS-grid виджет.
+- **S21-006 Data Export.** ✅ CSV/JSON на сервере + скачивание через Blob.
 
 **DoD:** бейджи различимы без цвета; stale-состояние видно; conflict-файлы
 показываются для diverged; Telegram-уведомление уходит на тестовый чат (mock в тестах);

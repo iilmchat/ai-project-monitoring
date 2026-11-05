@@ -10,6 +10,11 @@
 
 ### Добавлено
 
+- feat(a11y): иконки статусов (✓/↑/↓/⚠/!/✕), stale-индикатор 🕒 + opacity для данных старше 10 минут.
+- feat(conflicts): `GET /repositories/{id}/conflicts` и блок Conflict Manager для `diverged`.
+- feat(notify): Telegram Bot API (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`), logger fallback, `plyer` удалён (KI-007 Resolved).
+- feat(activity): `GET /dashboard/heatmap` + contribution heatmap на дашборде.
+- feat(export): `GET /repositories/export?format=csv|json` + кнопка «Экспорт» в UI.
 - feat(keyboard): Command Palette (`Ctrl/Cmd+K`) — репозитории, страницы, scan/fetch/migrate.
 - feat(keyboard): навигация по таблице `↑/↓`, `Enter`, `Space`, `/`, `Esc` + ring-подсветка.
 - feat(keyboard): модалка горячих клавиш по `?` и подсказка в футере.
