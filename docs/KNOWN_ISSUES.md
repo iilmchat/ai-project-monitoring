@@ -2,7 +2,7 @@
 
 **Последнее обновление:** 2026-11-05
 
-**Всего проблем:** 6 (активных: 3, решено: 3)
+**Всего проблем:** 8 (активных: 5, решено: 3)
 
 ---
 
@@ -63,3 +63,25 @@
 **Решение:** Автоматическое зеркалирование не используется. Синхронизация выполняется вручную через `git push gitflic main` (или `git push --all gitflic`) сразу после пуша в GitHub. Инструкция — в `docs/GETTING_STARTED.md`.
 
 **План:** Пересмотреть при появлении рабочего механизма зеркалирования в GitFlic.
+
+---
+
+## KI-007 · Open · Med · notifications · `plyer` не работает в Docker/headless
+
+**Описание:** Desktop-уведомления через `plyer` требуют графической сессии. В Docker и headless-окружениях вызов завершается `notification_failed`, уведомления не доставляются.
+
+**Workaround:** Смотреть события в JSON-логах (`history_rewritten`, `fetch_failed`); в v0.4.0 запланирован Telegram-канал.
+
+**План (S21-004):** Telegram Bot API (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+`NOTIFICATIONS_CHANNEL=telegram|desktop`) с retry/backoff и маскировкой токена в Settings.
+
+---
+
+## KI-008 · Open · Low · UI · Нет Conflict Manager
+
+**Описание:** При `state="diverged"` UI показывает только статус, но не список конфликтующих файлов. Пользователь вынужден вручную запускать `git diff --name-only --diff-filter=U` в терминале.
+
+**Workaround:** Выполнить `git diff --name-only --diff-filter=U` в репозитории (read-only).
+
+**План (S21-003):** Панель Conflict Manager в деталях репозитория с unmerged-файлами
+(без автоматического разрешения конфликтов).

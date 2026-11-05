@@ -218,6 +218,56 @@ Webhook **не заменяет** polling: если webhook не настрое�
 - **Настройка политики** — `canonical_provider`, `mirror_expected`, `mirror_policy` в модалке деталей.
 - **Кнопка «Обновить»** — обновляет **оба** статуса (локальный + mirror).
 
+### 9.1. Состояние UI и Saved Views (v0.4.0)
+
+```
+stores/
+  useTableStore     — сортировка, фильтры, выбранные строки, видимость/порядок/ширина колонок
+  useViewsStore     — именованные представления {filters, sort, columns, widths}
+  useCommandStore   — открытие палитры, недавние команды
+```
+
+- Zustand + middleware `persist` (`localStorage`) с версионированием (`version: 1`)
+  и миграциями. Ключи: `table.state.v1`, `views.v1`, `theme` (уже существует).
+- Источник истины на клиенте — store, компоненты только читают селекторы.
+  Это исключает рассинхрон между чипами, таблицей и URL.
+- v0.5.0: опциональная синхронизация `views` в БД (`saved_views`) через API;
+  локальный store остаётся кэшем и работает offline.
+- Query string — проекция store (`?state=dirty&mirror=behind_gitflic&view=...`),
+  при загрузке — гидратация store.
+
+### 9.2. Command Palette (v0.4.0)
+
+```
+<CommandPalette/>
+  ├─ commandRegistry: [{id, title, keywords, run(), when?}]
+  ├─ providers: repositories (dashboard cache), actions (fetch/push/migrate),
+  │             navigation (dashboard/settings/repo)
+  ├─ fuzzy match (client-side, без сетевых вызовов)
+  └─ useHotkeys('mod+k', '?', '/', ...)
+```
+
+- Палитра не знает о роутере напрямую: команды вызывают `navigate()`/API через
+  переданные callbacks, поэтому компонент тестируется изолированно.
+- Глобальный обработчик клавиш игнорирует события из `input/textarea/select`
+  и `contentEditable`.
+- Мутирующие команды из палитры открывают ту же модалку подтверждения, что и
+  кнопки в UI (единый `ActionConfirmDialog`).
+
+### 9.3. Производительность
+
+- Таблица: мемоизированные селекторы, сортировка/фильтрация в store, виртуализация —
+  при > 500 строк (v0.4.1).
+- Тяжёлые виджеты (recharts, heatmap) — `React.lazy`; бюджет entry bundle — 100 kB gzip.
+- Экспорт CSV/JSON — на клиенте из текущего среза, без новых серверных отчётов.
+
+### 9.4. A11y и stale-состояние
+
+- Бейджи: цвет + иконка/форма; `aria-label` описывает состояние.
+- Модалки: `role="dialog"`, `aria-modal`, focus trap, возврат фокуса.
+- Stale: вычисляется из `checked_at` и `remote_status`; данные не скрываются,
+  блок получает opacity и бейдж «Устарело».
+
 ---
 
 ## 10. Docker
@@ -228,10 +278,12 @@ Webhook **не заменяет** polling: если webhook не настрое�
 
 ---
 
-## 11. Что ещё не сделано (v0.2+)
+## 11. Что ещё не сделано (v0.4+)
 
-- Мутации (`pull`/`push`) с подтверждением и аудитом.
+- Advanced Data Table: batch selection, управление колонками, контекстное меню (S18).
+- Filter chips, Saved Views, URL-состояние (S19).
+- Command Palette и клавиатурная навигация (S20).
+- A11y-иконки, stale-индикатор, Conflict Manager, Telegram-уведомления, heatmap, export (S21).
+- Синхронизация saved views в БД (v0.5.0).
 - История статусов (trend: как часто репозиторий был `dirty`; как часто `behind_gitflic`).
-- Уведомления (desktop/webhook) о `history_rewritten` и «забытых» зеркалах.
-- Публичный reverse-proxy для webhook (ADR-0006).
 - Полноценный GitFlic Compare API (сейчас — compare внутри GitFlic, классификация по SHA/датам).

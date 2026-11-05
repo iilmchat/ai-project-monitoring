@@ -1,7 +1,7 @@
 # TODO — план развития IIRuchating
 
 **Текущая версия:** v0.3.0 (релиз 2026-11-05)
-**Ближайший этап:** v0.4.0 (планирование)
+**Ближайший этап:** v0.4.0 «UX/UI & Productivity» — план в [`TODO_V0.4.md`](TODO_V0.4.md)
 **Следующий этап:** идеи из раздела 6
 **Последнее обновление:** 2026-11-05
 
@@ -276,6 +276,8 @@
 | KI-001 (fetch timeout) | Med | S7-001 | Resolved |
 | KI-002 (status на больших деревьях) | Low | S7-002 | Resolved |
 | KI-003 (GitHub Compare rate-limit) | Med | S7-003 | Resolved |
+| KI-007 (plyer в Docker) | Med | S21-004 | Open |
+| KI-008 (нет Conflict Manager) | Low | S21-003 | Open |
 
 Новые KI, обнаруженные в спринтах, добавляются в `docs/KNOWN_ISSUES.md` и в эту таблицу.
 

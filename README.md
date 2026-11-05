@@ -113,6 +113,17 @@ pnpm --dir frontend dev
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
+### Roadmap
+
+**v0.4.0 «UX/UI & Productivity»** ([полный план](TODO_V0.4.md)):
+
+- Advanced Data Table: batch selection, управление колонками, контекстное меню, моноширинный стиль.
+- Filter chips и Saved Views (фильтры + сортировка + колонки, localStorage/URL).
+- Command Palette (`Ctrl/Cmd+K`), горячие клавиши и панель подсказок.
+- A11y-иконки статусов, stale-индикатор, Conflict Manager (`diverged`).
+- Telegram-уведомления вместо `plyer` для headless/Docker.
+- Contribution heatmap и экспорт таблицы в CSV/JSON.
+
 ---
 
 ## Лицензия
