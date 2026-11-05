@@ -1,6 +1,32 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.4.0 (2026-11-05)
+**Текущая версия:** v0.5.0 (2026-11-06)
+
+---
+
+## Релиз v0.5.0 — «Observability & Dependency Management»
+
+**Дата:** 2026-11-06 · **Тег:** `v0.5.0`
+
+Итоги этапа (спринты 24–26):
+
+- **Dark Charts (S24):** M3-палитра recharts для light/dark, токены осей,
+  сетки, тултипов и легенд.
+- **Docker Integration (S24):** read-only Docker SDK, DooD через socket,
+  статусы контейнеров, порты и `DOCKER_PATH_MAP`.
+- **Dependency Management (S25):** парсер `requirements.txt`, PyPI-клиент,
+  `dependency_cache` 24 ч, UI-блок и API.
+- **Dependency Management (S26):** парсер `package.json`, npm-клиент,
+  `ecosystem=all`, объединённый `summary`, табы Python/Node в UI.
+- **Релиз (S26):** версии 0.5.0, docs-consistency audit, тег в GitHub и GitFlic.
+
+**Итоговые метрики:** 148 backend-тестов, 17 frontend-тестов;
+entry bundle 85.59 kB gzip, `RepositoryDetails` — 7.09 kB,
+`DashboardCharts` — 114.55 kB gzip (lazy).
+
+**Release smoke:** `/health` → `version=0.5.0`; `ecosystem=node` для
+`ai-dzenwriter` → 9 пакетов, 2 outdated; `ecosystem=all` → `summary`
+9/2 (Python no_manifest + Node); Docker-контейнеры проекта — `running`.
 
 ---
 

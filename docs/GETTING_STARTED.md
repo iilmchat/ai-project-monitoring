@@ -86,8 +86,8 @@ Backend читает `requirements.txt` в корне репозитория и 
 - `refresh=true` запускает повторную проверку, иначе используется кэш
   `dependency_cache` с TTL 24 часа.
 - `pip`/`npm` не запускаются; читаются только манифесты внутри репозитория.
-- Node (`package.json`) появится в Sprint 26; до этого `ecosystem=node`
-  возвращает `status=unavailable`, `error=node_not_implemented`.
+- Node: `ecosystem=node` читает `package.json` и проверяет версии через npm
+  registry; `ecosystem=all` объединяет Python и Node.
 
 ---
 

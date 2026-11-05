@@ -1,10 +1,9 @@
 # SPEC — спецификация проекта (источник истины по контрактам)
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
-Разделы с пометкой «v0.5.0» — контракты следующего релиза. Docker §3.14
-реализован в Sprint 24; Python dependency §3.15 — в Sprint 25, Node — в Sprint 26.
+Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26.
 
-**Версия:** v0.4.0 (текущая) · v0.5.0 «Insights & Integrations» (в разработке) · **Обновлено:** 2026-11-06
+**Версия:** v0.5.0 «Observability & Dependency Management» · **Обновлено:** 2026-11-06
 
 ---
 
@@ -397,18 +396,18 @@ Docker API наружу не отдаётся, только нормализов
 
 ---
 
-### 3.15. Dependency management (v0.5.0, Sprint 25)
+### 3.15. Dependency management (v0.5.0, Sprint 25–26)
 
 Проверка объявленных зависимостей по манифестам в корне репозитория.
 Файлы только читаются; `pip`/`npm`/`pnpm` не запускаются.
 
-**Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25.
-Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` при наличии
-`package.json` возвращает `status=unavailable`, `error=node_not_implemented`.
+**Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25;
+Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутствие
+параметра) возвращает объединённый отчёт.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| GET | `/repositories/{id}/dependencies` | `refresh?: bool`, `ecosystem?: python\|node` | `DependencyReport` |
+| GET | `/repositories/{id}/dependencies` | `refresh?: bool`, `ecosystem?: python\|node\|all` | `DependencyReport` |
 
 `DependencyReport`:
 
@@ -416,6 +415,13 @@ Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` пр�
 {
   "repository_id": 1,
   "checked_at": "2026-11-06T10:00:00Z",
+  "summary": {
+    "total": 18,
+    "outdated": 4,
+    "up_to_date": 12,
+    "unknown": 1,
+    "ignored": 1
+  },
   "ecosystems": [
     {
       "ecosystem": "python",
@@ -459,6 +465,8 @@ Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` пр�
 
 - `ecosystems` содержит запрошенные ecosystem (по умолчанию оба); отсутствующий
   манифест — запись `status=no_manifest`, а не 404/500.
+- `summary` — сумма счётчиков по всем запрошенным ecosystem; для одного
+  ecosystem совпадает с его счётчиками.
 - `total = outdated + up_to_date + unknown + ignored` для каждого ecosystem.
 - `checked_at` верхнего уровня — момент формирования отчёта; `checked_at`
   отдельного пакета не отдаётся, но stale-состояние видно через `source`.
@@ -471,9 +479,9 @@ Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` пр�
 - Python: `-e`, VCS, local path и URL → `ignored`; `-r` include читается
   относительно манифеста, только внутри корня репозитория, глубина ≤ 3;
   `-c`/constraints не раскрываются.
-- Node (Sprint 26): `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` →
-  `range`/`unknown`. `workspace:`, `file:`, `link:`, `git+`, `http(s):`,
-  `npm:` → `ignored`.
+- Node: `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` →
+  `range`/`unknown`. `workspace:`, `file:`, `link:`, `portal:`, `git+`,
+  `github:`, `http(s):`, `npm:` → `ignored`.
 - `declared` сохраняет исходное объявление; extras, environment markers и hashes
   не участвуют в сравнении.
 - `manifest_line` — 1-based строка для `requirements.txt`; для `package.json`
@@ -493,10 +501,9 @@ Node (`package.json`, npm) — Sprint 26; до этого `ecosystem=node` пр�
 timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 с).
 Ошибка одного пакета не скрывает остальные. `error` — строка: для registry-ошибок
 используются коды `rate_limited`, `registry_unavailable`, `timeout`; для
-`parse_error` — сообщение; для Node-заглушки — `node_not_implemented`.
-Пакет, отсутствующий в PyPI (404), получает `latest=null`, `status=unknown`.
-При недоступном реестре и отсутствии кэша — `ecosystem.status=unavailable`,
-HTTP 200 (частичный отчёт).
+`parse_error` — сообщение. Пакет, отсутствующий в реестре (404), получает
+`latest=null`, `status=unknown`. При недоступном реестре и отсутствии кэша —
+`ecosystem.status=unavailable`, HTTP 200 (частичный отчёт).
 
 ---
 
@@ -615,23 +622,23 @@ dependency_cache(           -- v0.5.0
 - [x] **Settings: хранение в БД, маскировка токенов, применение без перезапуска (v0.3.0)**
 - [x] **UI: тёмная тема, графики состояний/зеркал, поиск и сортировка (v0.3.0)**
 
-### 6.2. v0.5.0 (план)
+### 6.2. v0.5.0 (выполнено)
 
-- [ ] Docker: `GET /repositories/{id}/docker` возвращает контейнеры проекта,
+- [x] Docker: `GET /repositories/{id}/docker` возвращает контейнеры проекта,
       порты и health; `status ∈ {running, stopped, not_found, unavailable}`,
       недоступный Docker → `status=unavailable`, без 5xx.
-- [ ] Docker read-only: в коде нет start/stop/restart/exec/logs; сокет
+- [x] Docker read-only: в коде нет start/stop/restart/exec/logs; сокет
       монтируется `:ro`; проверка grep-аудитом.
-- [ ] Charts: recharts использует M3-токены, графики читаемы в light/dark,
+- [x] Charts: recharts использует M3-токены, графики читаемы в light/dark,
       контраст WCAG AA.
 - [x] Python: `requirements.txt` парсится (pins/ranges/includes/markers),
       устаревшие пакеты выводятся в карточке.
-- [ ] Node: `package.json` (`dependencies`/`devDependencies`) парсится,
+- [x] Node: `package.json` (`dependencies`/`devDependencies`) парсится,
       scoped/ignored/ranges классифицируются корректно.
 - [x] Кэш зависимостей: TTL 24 ч, переживает перезапуск, rate-limit → partial/
       `unavailable`, без 5xx.
-- [ ] Тесты: манифесты на реальных tmp-репозиториях; PyPI/npm — на fake-клиентах.
-- [ ] Релиз: docs-consistency audit, тег `v0.5.0` в GitHub и GitFlic, `SHA(main)`
+- [x] Тесты: манифесты на реальных tmp-репозиториях; PyPI/npm — на fake-клиентах.
+- [x] Релиз: docs-consistency audit, тег `v0.5.0` в GitHub и GitFlic, `SHA(main)`
       совпадает.
 
 ---

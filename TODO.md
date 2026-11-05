@@ -1,7 +1,7 @@
 # TODO — план развития IIRuchating
 
-**Текущая версия:** v0.4.0 (релиз 2026-11-05)
-**Ближайший этап:** v0.5.0 «Insights & Integrations» — план в [`TODO_V0.5.md`](TODO_V0.5.md)
+**Текущая версия:** v0.5.0 (релиз 2026-11-06)
+**Предыдущий этап:** v0.5.0 — [`TODO_V0.5.md`](TODO_V0.5.md)
 **Следующий этап:** v0.6.0+ — идеи из раздела 6
 **Последнее обновление:** 2026-11-06
 
@@ -279,7 +279,7 @@
 | KI-007 (plyer в Docker) | Med | S21-003 | Resolved |
 | KI-008 (нет Conflict Manager) | Low | S21-002 | Resolved |
 | KI-009 (Docker socket на Windows) | Med | S24-002 | Accepted |
-| KI-010 (rate-limit PyPI/npm) | Med | S25-001, S26-002 | Accepted |
+| KI-010 (rate-limit PyPI/npm) | Med | S25-001, S26-002 | Resolved |
 
 Новые KI, обнаруженные в спринтах, добавляются в `docs/KNOWN_ISSUES.md` и в эту таблицу.
 

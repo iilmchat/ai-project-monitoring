@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+—
+
+## [0.5.0] - 2026-11-06
+
+Наблюдаемость и управление зависимостями: тёмные графики M3, Docker-интеграция,
+аудит Python- и Node-зависимостей.
+
 ### Добавлено
 
 - feat(ui): M3-тема для recharts — оси, сетка, тултипы и легенды используют surface/on-surface, light/dark переключается без reload (S24-001).
@@ -14,7 +21,11 @@
 - feat(deps): PyPI-клиент с timeout, retry/backoff на 429/5xx и partial results (S25-003).
 - feat(deps): `GET /repositories/{id}/dependencies` с фильтром `ecosystem` (S25-004).
 - feat(ui): блок «Зависимости» — счётчики, severity и ссылки на PyPI (S25-005).
-- test(deps): парсер, cache/single-flight/stale, API-контракт.
+- feat(deps): парсер `package.json` — `dependencies`/`devDependencies`, scoped/workspace/file/git (S26-001).
+- feat(deps): npm registry client с timeout, retry/backoff и общим кэшем `npm:<name>` (S26-002).
+- feat(deps): `ecosystem=all` и верхнеуровневый `summary` объединённого отчёта (S26-003).
+- feat(ui): табы Python/Node и кнопка «Проверить всё» в блоке зависимостей (S26-003).
+- test(deps): Node-парсер, npm-кэш, объединённый отчёт и API `ecosystem=all`.
 
 ### Документация
 

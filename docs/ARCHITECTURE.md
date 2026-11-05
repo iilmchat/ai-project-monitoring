@@ -1,8 +1,8 @@
 # ARCHITECTURE — как устроен IIRuchating
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
-реализован в Sprint 24; §11 (Python dependencies) — в Sprint 25; Node-часть
-§11 и разделы с пометкой «план» фиксируют проектное решение до реализации.
+реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26.
+Разделы с пометкой «план» фиксируют проектное решение до реализации.
 
 ---
 
@@ -430,14 +430,13 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 
 ---
 
-## 11. Dependency Management (v0.5.0, Sprint 25; Node — Sprint 26)
+## 11. Dependency Management (v0.5.0, Sprint 25–26)
 
 **Задача.** Показать, какие объявленные зависимости устарели, не изменяя
 репозиторий и не запуская пакетные менеджеры.
 
-**Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25.
-Node (`package.json`, npm) — Sprint 26; до этого Node-запись возвращает
-`status=unavailable`/`error=node_not_implemented` при наличии `package.json`.
+**Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25;
+Node (`package.json`, npm) — в Sprint 26. `ecosystem=all` объединяет отчёты.
 
 ### 11.1. Поток
 
@@ -485,10 +484,10 @@ GET /repositories/{id}/dependencies
 
 ### 11.4. Registry clients
 
-- PyPI (Sprint 25): `GET https://pypi.org/pypi/{name}/json`, latest =
-  `info.version`; имя URL-encode.
-- npm (Sprint 26): `GET https://registry.npmjs.org/{name}/latest`; scoped-имя
-  кодируется (`@scope%2Fname`).
+- PyPI: `GET https://pypi.org/pypi/{name}/json`, latest = `info.version`;
+  имя URL-encode.
+- npm: `GET https://registry.npmjs.org/{name}/latest`; scoped-имя кодируется
+  (`@scope%2Fname`), latest = `version`.
 - Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/0.5`.
 - 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `not_found`
   (пакет получает `status=unknown`).
