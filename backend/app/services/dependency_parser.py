@@ -40,6 +40,7 @@ class ParsedRequirement:
     kind: RequirementKind
     current: str | None
     manifest_line: int | None = None
+    manifest_section: str | None = None
 
 
 @dataclass(slots=True)

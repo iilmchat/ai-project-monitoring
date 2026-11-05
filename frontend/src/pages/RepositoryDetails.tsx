@@ -80,6 +80,9 @@ export default function RepositoryDetails() {
   const [dependenciesLoading, setDependenciesLoading] = useState(!invalidId)
   const [dependenciesRefreshing, setDependenciesRefreshing] = useState(false)
   const [dependenciesError, setDependenciesError] = useState<string | null>(null)
+  const [dependencyEcosystem, setDependencyEcosystem] = useState<'python' | 'node'>(
+    'python',
+  )
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -169,11 +172,20 @@ export default function RepositoryDetails() {
     }
     let active = true
     setDependenciesLoading(true)
-    void getDependencies(repositoryId, 'python')
+    void getDependencies(repositoryId, 'all')
       .then((report) => {
         if (active) {
           setDependencies(report)
           setDependenciesError(null)
+          const python = report.ecosystems.find((item) => item.ecosystem === 'python')
+          const node = report.ecosystems.find((item) => item.ecosystem === 'node')
+          if (
+            python?.status === 'no_manifest' &&
+            node !== undefined &&
+            node.status !== 'no_manifest'
+          ) {
+            setDependencyEcosystem('node')
+          }
         }
       })
       .catch(() => {
@@ -246,7 +258,7 @@ export default function RepositoryDetails() {
   async function handleDependenciesRefresh() {
     setDependenciesRefreshing(true)
     try {
-      setDependencies(await getDependencies(repositoryId, 'python', true))
+      setDependencies(await getDependencies(repositoryId, 'all', true))
       setDependenciesError(null)
     } catch {
       setDependenciesError('Не удалось проверить зависимости.')
@@ -347,8 +359,8 @@ export default function RepositoryDetails() {
     }
   }
 
-  const pythonDependencies =
-    dependencies?.ecosystems.find((item) => item.ecosystem === 'python') ?? null
+  const selectedDependencies =
+    dependencies?.ecosystems.find((item) => item.ecosystem === dependencyEcosystem) ?? null
 
   return (
     <section className="space-y-6">
@@ -628,16 +640,45 @@ export default function RepositoryDetails() {
                 Зависимости
               </h2>
               <div className="flex items-center gap-2">
-                <DependencyBadge report={pythonDependencies} />
+                <DependencyBadge report={selectedDependencies} />
                 <button
                   type="button"
                   onClick={() => void handleDependenciesRefresh()}
                   disabled={dependenciesRefreshing || dependenciesLoading}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {dependenciesRefreshing ? 'Проверка…' : 'Проверить снова'}
+                  {dependenciesRefreshing ? 'Проверка…' : 'Проверить всё'}
                 </button>
               </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 px-4 py-2 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setDependencyEcosystem('python')}
+                aria-pressed={dependencyEcosystem === 'python'}
+                className={`rounded-md px-3 py-1 text-sm font-medium ${
+                  dependencyEcosystem === 'python'
+                    ? 'bg-primary text-white'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                Python
+              </button>
+              <button
+                type="button"
+                onClick={() => setDependencyEcosystem('node')}
+                aria-pressed={dependencyEcosystem === 'node'}
+                className={`rounded-md px-3 py-1 text-sm font-medium ${
+                  dependencyEcosystem === 'node'
+                    ? 'bg-primary text-white'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                Node
+              </button>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+                Всего устаревших: {dependencies?.summary.outdated ?? 0}
+              </span>
             </div>
             <div className="p-4">
               {dependenciesLoading ? (
@@ -648,63 +689,67 @@ export default function RepositoryDetails() {
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
                   {dependenciesError}
                 </p>
-              ) : pythonDependencies === null ? (
+              ) : selectedDependencies === null ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Нет данных о зависимостях.
                 </p>
               ) : (
                 <>
-                  {pythonDependencies.status === 'no_manifest' && (
+                  {selectedDependencies.status === 'no_manifest' && (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      requirements.txt не найден.
+                      {selectedDependencies.manifest === 'package.json'
+                        ? 'package.json не найден.'
+                        : 'requirements.txt не найден.'}
                     </p>
                   )}
-                  {pythonDependencies.status === 'parse_error' && (
+                  {selectedDependencies.status === 'parse_error' && (
                     <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
-                      {pythonDependencies.error ?? 'Ошибка разбора requirements.txt.'}
+                      {selectedDependencies.error ??
+                        `Ошибка разбора ${selectedDependencies.manifest ?? 'манифеста'}.`}
                     </p>
                   )}
-                  {pythonDependencies.status === 'unavailable' && (
+                  {selectedDependencies.status === 'unavailable' && (
                     <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                      {dependencyErrorMessage(pythonDependencies.error)}
+                      {dependencyErrorMessage(selectedDependencies.error)}
                     </p>
                   )}
-                  {pythonDependencies.status !== 'no_manifest' &&
-                    pythonDependencies.status !== 'parse_error' && (
+                  {selectedDependencies.status !== 'no_manifest' &&
+                    selectedDependencies.status !== 'parse_error' && (
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <DependencyCounter
                           label="Устарели"
-                          value={pythonDependencies.outdated}
+                          value={selectedDependencies.outdated}
                           tone="amber"
                         />
                         <DependencyCounter
                           label="Актуальны"
-                          value={pythonDependencies.up_to_date}
+                          value={selectedDependencies.up_to_date}
                           tone="emerald"
                         />
                         <DependencyCounter
                           label="Неизвестны"
-                          value={pythonDependencies.unknown}
+                          value={selectedDependencies.unknown}
                           tone="slate"
                         />
                         <DependencyCounter
                           label="Игнорируются"
-                          value={pythonDependencies.ignored}
+                          value={selectedDependencies.ignored}
                           tone="slate"
                         />
                       </div>
                     )}
-                  {pythonDependencies.packages.length > 0 ? (
+                  {selectedDependencies.packages.length > 0 ? (
                     <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
-                      {pythonDependencies.packages.map((item) => (
+                      {selectedDependencies.packages.map((item) => (
                         <DependencyPackageRow
                           key={`${item.name}-${item.manifest_line ?? item.declared}`}
                           item={item}
+                          ecosystem={selectedDependencies.ecosystem}
                         />
                       ))}
                     </ul>
                   ) : (
-                    pythonDependencies.status === 'ok' && (
+                    selectedDependencies.status === 'ok' && (
                       <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
                         Зависимости не объявлены.
                       </p>
@@ -712,7 +757,8 @@ export default function RepositoryDetails() {
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
                     Проверено: {formatDate(dependencies?.checked_at)} · источник:{' '}
-                    {dependencySourceLabel(pythonDependencies.source)}
+                    {dependencySourceLabel(selectedDependencies.source)} · всего устаревших:{' '}
+                    {dependencies?.summary.outdated ?? 0}
                   </p>
                 </>
               )}
@@ -1098,7 +1144,13 @@ function DependencyCounter({
   )
 }
 
-function DependencyPackageRow({ item }: { item: DependencyPackage }) {
+function DependencyPackageRow({
+  item,
+  ecosystem,
+}: {
+  item: DependencyPackage
+  ecosystem: 'python' | 'node'
+}) {
   const statusClass =
     item.status === 'outdated'
       ? 'bg-amber-100 text-amber-800'
@@ -1111,11 +1163,15 @@ function DependencyPackageRow({ item }: { item: DependencyPackage }) {
       : item.severity === 'minor'
         ? 'bg-amber-100 text-amber-800'
         : 'bg-slate-100 text-slate-600'
+  const projectUrl =
+    ecosystem === 'python'
+      ? `https://pypi.org/project/${encodeURIComponent(item.name)}/`
+      : `https://www.npmjs.com/package/${encodeURIComponent(item.name)}`
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
       <div className="min-w-0">
         <a
-          href={`https://pypi.org/project/${encodeURIComponent(item.name)}/`}
+          href={projectUrl}
           target="_blank"
           rel="noreferrer"
           className="font-mono text-sm font-medium text-primary hover:underline"

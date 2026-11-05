@@ -17,6 +17,7 @@ from app.logging import configure_logging
 from app.middleware import RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
+from app.providers.npm_client import NpmClient
 from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
@@ -91,9 +92,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cache_ttl_seconds=resolved.docker_status_ttl_seconds,
     )
     pypi_client = PypiClient(timeout_seconds=resolved.dependency_http_timeout)
+    npm_client = NpmClient(timeout_seconds=resolved.dependency_http_timeout)
     dependency_service = DependencyService(
         session_factory,
         pypi_client,
+        npm_client,
         cache_ttl_seconds=resolved.dependency_cache_ttl_seconds,
         concurrency=resolved.dependency_check_concurrency,
     )
@@ -154,6 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.ci_service = ci_service
     application.state.docker_service = docker_service
     application.state.pypi_client = pypi_client
+    application.state.npm_client = npm_client
     application.state.dependency_service = dependency_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service

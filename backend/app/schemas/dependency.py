@@ -45,9 +45,20 @@ class DependencyEcosystemReport(BaseModel):
     error: str | None = None
 
 
+class DependencySummary(BaseModel):
+    """Combined counts across all requested ecosystems."""
+
+    total: int = Field(default=0, ge=0)
+    outdated: int = Field(default=0, ge=0)
+    up_to_date: int = Field(default=0, ge=0)
+    unknown: int = Field(default=0, ge=0)
+    ignored: int = Field(default=0, ge=0)
+
+
 class DependencyReport(BaseModel):
     """API response for ``GET /repositories/{id}/dependencies``."""
 
     repository_id: int
     checked_at: datetime
     ecosystems: list[DependencyEcosystemReport] = Field(default_factory=list)
+    summary: DependencySummary = Field(default_factory=DependencySummary)

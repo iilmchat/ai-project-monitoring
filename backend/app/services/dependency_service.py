@@ -1,4 +1,4 @@
-"""Python dependency checks with a persistent TTL cache (S25-001…S25-004)."""
+"""Python/Node dependency checks with a persistent TTL cache (S25–S26)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.base import utcnow
 from app.models.entities import DependencyCache
-from app.providers.pypi_client import PackageVersionResult
+from app.providers.package_versions import PackageVersionResult
 from app.schemas.dependency import (
     DependencyEcosystemReport,
     DependencyPackage,
@@ -21,14 +21,18 @@ from app.schemas.dependency import (
     DependencyReport,
     DependencySeverity,
     DependencySource,
+    DependencySummary,
 )
 from app.services.dependency_parser import (
     ParsedRequirement,
     parse_requirements,
 )
+from app.services.node_parser import parse_package_json
 
 IGNORED_KINDS = frozenset({"vcs", "path", "workspace"})
 LookupSource = Literal["registry", "cache", "stale_cache", "none"]
+RegistryPrefix = Literal["pypi", "npm"]
+Ecosystem = Literal["python", "node"]
 
 
 class LatestVersionRegistry(Protocol):
@@ -52,19 +56,21 @@ class _Lookup:
 
 
 class DependencyService:
-    """Check declared Python dependencies without executing package managers."""
+    """Check declared dependencies without executing package managers."""
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        registry: LatestVersionRegistry,
+        pypi_registry: LatestVersionRegistry,
+        npm_registry: LatestVersionRegistry | None = None,
         *,
         cache_ttl_seconds: int = 86400,
         concurrency: int = 4,
         max_include_depth: int = 3,
     ) -> None:
         self._session_factory = session_factory
-        self._registry = registry
+        self._pypi_registry = pypi_registry
+        self._npm_registry = npm_registry
         self._ttl = max(cache_ttl_seconds, 0)
         self._concurrency = max(concurrency, 1)
         self._max_include_depth = max(max_include_depth, 0)
@@ -79,11 +85,19 @@ class DependencyService:
         ecosystem: str | None = None,
         refresh: bool = False,
     ) -> DependencyReport:
-        """Build a dependency report for one repository."""
-        if ecosystem not in (None, "python", "node"):
+        """Build a dependency report for one repository.
+
+        ``ecosystem`` accepts ``python``, ``node``, ``all`` or ``None``.
+        ``None`` and ``all`` both produce the combined report.
+        """
+        if ecosystem not in (None, "python", "node", "all"):
             raise ValueError(f"unsupported ecosystem: {ecosystem}")
 
-        requested = ["python", "node"] if ecosystem is None else [ecosystem]
+        requested: list[Ecosystem] = (
+            ["python", "node"]
+            if ecosystem in (None, "all")
+            else [ecosystem]  # type: ignore[list-item]
+        )
         reports: list[DependencyEcosystemReport] = []
         for name in requested:
             if name == "python":
@@ -91,11 +105,22 @@ class DependencyService:
                     await self._python_report(repo_path, refresh=refresh)
                 )
             else:
-                reports.append(self._node_report(repo_path))
+                reports.append(
+                    await self._node_report(repo_path, refresh=refresh)
+                )
+
+        summary = DependencySummary(
+            total=sum(item.total for item in reports),
+            outdated=sum(item.outdated for item in reports),
+            up_to_date=sum(item.up_to_date for item in reports),
+            unknown=sum(item.unknown for item in reports),
+            ignored=sum(item.ignored for item in reports),
+        )
         return DependencyReport(
             repository_id=repository_id,
             checked_at=utcnow(),
             ecosystems=reports,
+            summary=summary,
         )
 
     async def _python_report(
@@ -122,10 +147,66 @@ class DependencyService:
                 source="none",
                 error=parsed.error,
             )
+        return await self._check_requirements(
+            parsed.packages,
+            ecosystem="python",
+            manifest="requirements.txt",
+            registry_prefix="pypi",
+            registry=self._pypi_registry,
+            refresh=refresh,
+        )
 
+    async def _node_report(
+        self,
+        repo_path: str,
+        *,
+        refresh: bool,
+    ) -> DependencyEcosystemReport:
+        parsed = parse_package_json(Path(repo_path))
+        if not parsed.manifest_found:
+            return _empty_report(
+                ecosystem="node",
+                manifest="package.json",
+                status="no_manifest",
+            )
+        if parsed.error is not None:
+            return DependencyEcosystemReport(
+                ecosystem="node",
+                manifest="package.json",
+                status="parse_error",
+                source="none",
+                error=parsed.error,
+            )
+        if self._npm_registry is None:
+            return DependencyEcosystemReport(
+                ecosystem="node",
+                manifest="package.json",
+                status="unavailable",
+                source="none",
+                error="npm_client_not_configured",
+            )
+        return await self._check_requirements(
+            parsed.packages,
+            ecosystem="node",
+            manifest="package.json",
+            registry_prefix="npm",
+            registry=self._npm_registry,
+            refresh=refresh,
+        )
+
+    async def _check_requirements(
+        self,
+        requirements: list[ParsedRequirement],
+        *,
+        ecosystem: Ecosystem,
+        manifest: str,
+        registry_prefix: RegistryPrefix,
+        registry: LatestVersionRegistry,
+        refresh: bool,
+    ) -> DependencyEcosystemReport:
         semaphore = asyncio.Semaphore(self._concurrency)
         tasks: list[asyncio.Task[_Lookup]] = []
-        for requirement in parsed.packages:
+        for requirement in requirements:
             if requirement.kind in IGNORED_KINDS:
                 tasks.append(asyncio.create_task(_ignored_lookup()))
             else:
@@ -133,6 +214,8 @@ class DependencyService:
                     asyncio.create_task(
                         self._lookup(
                             requirement.name,
+                            registry_prefix=registry_prefix,
+                            registry=registry,
                             refresh=refresh,
                             semaphore=semaphore,
                         )
@@ -140,17 +223,16 @@ class DependencyService:
                 )
         lookups = await asyncio.gather(*tasks)
 
-        packages: list[DependencyPackage] = []
-        for requirement, lookup in zip(parsed.packages, lookups, strict=True):
-            packages.append(
-                _package_report(requirement, lookup)
-            )
-
+        packages = [
+            _package_report(requirement, lookup)
+            for requirement, lookup in zip(requirements, lookups, strict=True)
+        ]
         checked = [
             lookup
-            for requirement, lookup in zip(parsed.packages, lookups, strict=True)
+            for requirement, lookup in zip(requirements, lookups, strict=True)
             if requirement.kind not in IGNORED_KINDS
         ]
+        counts = _count_statuses(packages)
         source = _aggregate_source(checked)
         error = next((item.error for item in checked if item.error), None)
         status = (
@@ -158,10 +240,9 @@ class DependencyService:
             if checked and all(item.error is not None and item.latest is None for item in checked)
             else "ok"
         )
-        counts = _count_statuses(packages)
         return DependencyEcosystemReport(
-            ecosystem="python",
-            manifest="requirements.txt",
+            ecosystem=ecosystem,
+            manifest=manifest,
             status=status,
             source=source,
             total=len(packages),
@@ -173,31 +254,16 @@ class DependencyService:
             error=error,
         )
 
-    def _node_report(self, repo_path: str) -> DependencyEcosystemReport:
-        manifest = Path(repo_path) / "package.json"
-        if not manifest.is_file():
-            return _empty_report(
-                ecosystem="node",
-                manifest="package.json",
-                status="no_manifest",
-            )
-        # The Node parser/client is implemented in Sprint 26.
-        return DependencyEcosystemReport(
-            ecosystem="node",
-            manifest="package.json",
-            status="unavailable",
-            source="none",
-            error="node_not_implemented",
-        )
-
     async def _lookup(
         self,
         package: str,
         *,
+        registry_prefix: RegistryPrefix,
+        registry: LatestVersionRegistry,
         refresh: bool,
         semaphore: asyncio.Semaphore,
     ) -> _Lookup:
-        key = f"pypi:{package}"
+        key = f"{registry_prefix}:{package}"
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             cached = await self._read_cache(key)
@@ -206,7 +272,7 @@ class DependencyService:
 
             try:
                 async with semaphore:
-                    result = await self._registry.get_latest_version(package)
+                    result = await registry.get_latest_version(package)
             except Exception:
                 result = PackageVersionResult(
                     latest=None,
@@ -215,7 +281,7 @@ class DependencyService:
                 )
 
             if result.status in {"ok", "not_found"}:
-                await self._write_cache(key, package, result)
+                await self._write_cache(key, registry_prefix, package, result)
                 return _Lookup(latest=result.latest, source="registry")
             if cached is not None:
                 return _Lookup(
@@ -239,6 +305,7 @@ class DependencyService:
     async def _write_cache(
         self,
         key: str,
+        registry_prefix: RegistryPrefix,
         package: str,
         result: PackageVersionResult,
     ) -> None:
@@ -246,7 +313,11 @@ class DependencyService:
         async with self._cache_write_lock, self._session_factory() as session:
             row = await session.get(DependencyCache, key)
             if row is None:
-                row = DependencyCache(key=key, ecosystem="pypi", package=package)
+                row = DependencyCache(
+                    key=key,
+                    ecosystem=registry_prefix,
+                    package=package,
+                )
                 session.add(row)
             row.latest_version = result.latest
             row.etag = result.etag
@@ -269,7 +340,7 @@ async def _ignored_lookup() -> _Lookup:
 
 def _empty_report(
     *,
-    ecosystem: Literal["python", "node"],
+    ecosystem: Ecosystem,
     manifest: str,
     status: Literal["no_manifest", "parse_error"],
 ) -> DependencyEcosystemReport:
@@ -294,7 +365,7 @@ def _package_report(
             status="ignored",
             kind=requirement.kind,
             manifest_line=requirement.manifest_line,
-            manifest_section=None,
+            manifest_section=requirement.manifest_section,
         )
 
     status, severity = _classify(requirement.current, lookup.latest)
@@ -307,7 +378,7 @@ def _package_report(
         kind=requirement.kind,
         severity=severity,
         manifest_line=requirement.manifest_line,
-        manifest_section=None,
+        manifest_section=requirement.manifest_section,
     )
 
 

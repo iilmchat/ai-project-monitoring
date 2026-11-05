@@ -113,6 +113,7 @@ const dependenciesNoManifest: DependencyReport = {
       error: null,
     },
   ],
+  summary: { total: 0, outdated: 0, up_to_date: 0, unknown: 0, ignored: 0 },
 }
 
 function renderDetails() {
@@ -233,6 +234,55 @@ describe('RepositoryDetails actions', () => {
     expect(screen.getByText('Нет манифеста')).toBeInTheDocument()
   })
 
+  it('switches to Node dependencies when package.json is the only manifest', async () => {
+    vi.mocked(getDependencies).mockResolvedValue({
+      repository_id: 1,
+      checked_at: '2026-11-05T10:00:00Z',
+      ecosystems: [
+        dependenciesNoManifest.ecosystems[0],
+        {
+          ecosystem: 'node',
+          manifest: 'package.json',
+          status: 'ok',
+          source: 'registry',
+          total: 1,
+          outdated: 1,
+          up_to_date: 0,
+          unknown: 0,
+          ignored: 0,
+          packages: [
+            {
+              name: 'react',
+              declared: '^19.0.0',
+              current: '19.0.0',
+              latest: '19.2.0',
+              status: 'outdated',
+              kind: 'range',
+              severity: 'minor',
+              manifest_line: null,
+              manifest_section: 'dependencies',
+            },
+          ],
+          error: null,
+        },
+      ],
+      summary: { total: 1, outdated: 1, up_to_date: 0, unknown: 0, ignored: 0 },
+    })
+
+    renderDetails()
+
+    expect(await screen.findByRole('button', { name: 'Node' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByText('react')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'react' })).toHaveAttribute(
+      'href',
+      'https://www.npmjs.com/package/react',
+    )
+    expect(screen.getByText('1 устарели')).toBeInTheDocument()
+  })
+
   it('renders Python dependency counters and outdated packages', async () => {
     vi.mocked(getDependencies).mockResolvedValue({
       repository_id: 1,
@@ -275,6 +325,7 @@ describe('RepositoryDetails actions', () => {
           error: null,
         },
       ],
+      summary: { total: 2, outdated: 1, up_to_date: 1, unknown: 0, ignored: 0 },
     })
 
     renderDetails()

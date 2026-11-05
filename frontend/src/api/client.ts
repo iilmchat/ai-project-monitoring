@@ -190,7 +190,7 @@ export async function getDockerStatus(
 
 export async function getDependencies(
   repositoryId: number,
-  ecosystem: 'python' | 'node' = 'python',
+  ecosystem: 'python' | 'node' | 'all' = 'all',
   refresh = false,
 ): Promise<DependencyReport> {
   return request<DependencyReport>(`/repositories/${repositoryId}/dependencies`, {

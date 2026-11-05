@@ -3,36 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Literal
 from urllib.parse import quote
 
 import httpx
 
+from app.providers.package_versions import PackageVersionResult, RegistryLookupStatus
+
 PYPI_API = "https://pypi.org"
 USER_AGENT = "IIRuchating/0.5"
 
-PypiLookupStatus = Literal[
-    "ok",
-    "not_found",
-    "rate_limited",
-    "unavailable",
-    "timeout",
-]
-
-
-@dataclass(frozen=True, slots=True)
-class PackageVersionResult:
-    """Latest version lookup result for one package."""
-
-    latest: str | None
-    status: PypiLookupStatus
-    error: str | None = None
-    etag: str | None = None
-
-    @property
-    def available(self) -> bool:
-        return self.status == "ok"
+PypiLookupStatus = RegistryLookupStatus
 
 
 class PypiClient:
@@ -143,4 +123,10 @@ class PypiClient:
         )
 
 
-__all__ = ["PYPI_API", "PackageVersionResult", "PypiClient", "PypiLookupStatus"]
+__all__ = [
+    "PYPI_API",
+    "PackageVersionResult",
+    "PypiClient",
+    "PypiLookupStatus",
+    "RegistryLookupStatus",
+]

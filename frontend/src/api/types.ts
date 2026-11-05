@@ -200,10 +200,19 @@ export interface DependencyEcosystemReport {
   error: string | null
 }
 
+export interface DependencySummary {
+  total: number
+  outdated: number
+  up_to_date: number
+  unknown: number
+  ignored: number
+}
+
 export interface DependencyReport {
   repository_id: number
   checked_at: string
   ecosystems: DependencyEcosystemReport[]
+  summary: DependencySummary
 }
 
 export type HeatmapData = Record<string, number>
