@@ -22,10 +22,22 @@ ALLOWED_KEYS = frozenset(
         "gitflic_token",
         "webhook_secret",
         "default_canonical_provider",
+        "llm_enabled",
+        "llm_base_url",
+        "llm_model",
+        "llm_api_key",
+        "llm_timeout_seconds",
+        "llm_max_diff_chars",
+        "llm_allow_remote",
     }
 )
-SECRET_KEYS = frozenset({"github_token", "gitflic_token", "webhook_secret"})
+SECRET_KEYS = frozenset(
+    {"github_token", "gitflic_token", "webhook_secret", "llm_api_key"}
+)
+BOOL_KEYS = frozenset({"llm_enabled", "llm_allow_remote"})
+INT_KEYS = frozenset({"llm_timeout_seconds", "llm_max_diff_chars"})
 CANONICAL_PROVIDERS = frozenset({"github", "gitflic"})
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
 def mask_secret(value: str | None) -> str:
@@ -61,7 +73,16 @@ class SettingsService:
         for key in ALLOWED_KEYS:
             value = stored.get(key)
             if value is None:
-                value = getattr(self._settings, key)
+                raw = getattr(self._settings, key)
+                if key in BOOL_KEYS:
+                    value = "true" if bool(raw) else "false"
+                elif key in INT_KEYS:
+                    try:
+                        value = str(int(float(raw)))
+                    except (TypeError, ValueError):
+                        value = None
+                else:
+                    value = str(raw) if raw is not None else None
             values[key] = value
         return values
 
@@ -87,6 +108,29 @@ class SettingsService:
                 raise ValueError(
                     "default_canonical_provider must be 'github' or 'gitflic'"
                 )
+            if key == "llm_api_key" and not str(value).strip():
+                # Empty API key means "keep the current value".
+                continue
+            if key == "llm_base_url":
+                url = str(value).strip()
+                if url and not url.startswith(("http://", "https://")):
+                    raise ValueError("llm_base_url must start with http:// or https://")
+                updates[key] = url
+                continue
+            if key in BOOL_KEYS:
+                updates[key] = (
+                    "true" if str(value).strip().lower() in _TRUTHY else "false"
+                )
+                continue
+            if key in INT_KEYS:
+                try:
+                    number = int(value)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{key} must be an integer") from exc
+                if number <= 0:
+                    raise ValueError(f"{key} must be positive")
+                updates[key] = str(number)
+                continue
             updates[key] = str(value).strip()
 
         if updates:
@@ -110,7 +154,16 @@ class SettingsService:
 
     def _apply(self, values: dict[str, str | None]) -> None:
         for key, value in values.items():
-            if key in ALLOWED_KEYS and value is not None:
+            if key not in ALLOWED_KEYS or value is None:
+                continue
+            if key in BOOL_KEYS:
+                setattr(self._settings, key, value.strip().lower() in _TRUTHY)
+            elif key in INT_KEYS:
+                try:
+                    setattr(self._settings, key, int(value))
+                except (TypeError, ValueError):
+                    continue
+            else:
                 setattr(self._settings, key, value)
         if self._github is not None:
             self._github.set_token(self._settings.github_token)

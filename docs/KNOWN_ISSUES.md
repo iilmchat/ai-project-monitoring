@@ -138,7 +138,9 @@
 
 **Workaround:** использовать модель поменьше/побыстрее; увеличить `LLM_TIMEOUT_SECONDS`; повторить запрос; для CVE — сверять `fixed_version`/ссылки с OSV; всегда проверять сгенерированный commit message перед коммитом.
 
-**План (Sprint 32–33):** timeout 30 с, circuit breaker, валидация Conventional Commits и fallback-черновик; для CVE — только grounded OSV-контекст, проверка `osv_id`/ссылок, `ai_cache` 7 дней, явные метки `source=fallback`/`truncated` в UI. Галлюцинации полностью не исключаются — решение остаётся за пользователем.
+**Решение (Sprint 32, commit message):** timeout 30 с, remote-guard, ошибки → `503` + toast в UI, сгенерированный текст показывается в редактируемой модалке и не коммитится без явного подтверждения. Circuit breaker и строгая валидация Conventional Commits не реализованы — это кандидаты в Sprint 33+.
+
+**План (Sprint 33, CVE):** только grounded OSV-контекст, проверка `osv_id`/ссылок, `ai_cache` 7 дней, явные метки `source=fallback`/`cached` в UI. Галлюцинации полностью не исключаются — решение остаётся за пользователем.
 
 ---
 

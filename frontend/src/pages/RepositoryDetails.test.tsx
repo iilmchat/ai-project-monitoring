@@ -16,9 +16,14 @@ import {
   getRecommendations,
   getRepositories,
   getSecurity,
+  getSettings,
   getStatus,
+  generateCommitMessage,
+  refreshRepository,
+  runAction,
 } from '../api/client'
 import type {
+  AppSettings,
   DashboardRepository,
   DependencyReport,
   DockerStatus,
@@ -42,7 +47,9 @@ vi.mock('../api/client', () => ({
   getRecommendations: vi.fn(),
   getRepositories: vi.fn(),
   getSecurity: vi.fn(),
+  getSettings: vi.fn(),
   getStatus: vi.fn(),
+  generateCommitMessage: vi.fn(),
   refreshMirror: vi.fn(),
   refreshRepository: vi.fn(),
   runAction: vi.fn(),
@@ -202,6 +209,21 @@ const cleanInsights: InsightsReport = {
   error: null,
 }
 
+const appSettings: AppSettings = {
+  scan_roots: '',
+  github_token: '',
+  gitflic_token: '',
+  webhook_secret: '',
+  default_canonical_provider: 'github',
+  llm_enabled: false,
+  llm_base_url: 'http://127.0.0.1:1234/v1',
+  llm_model: 'qwen2.5-coder-7b-instruct',
+  llm_api_key: '',
+  llm_timeout_seconds: 30,
+  llm_max_diff_chars: 10000,
+  llm_allow_remote: false,
+}
+
 function renderDetails() {
   return render(
     <ThemeProvider>
@@ -240,6 +262,20 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getDependencies).mockResolvedValue(dependenciesNoManifest)
     vi.mocked(getSecurity).mockResolvedValue(cleanSecurity)
     vi.mocked(getInsights).mockResolvedValue(cleanInsights)
+    vi.mocked(getSettings).mockResolvedValue(appSettings)
+    vi.mocked(refreshRepository).mockResolvedValue(status)
+    vi.mocked(generateCommitMessage).mockResolvedValue({
+      repository_id: 1,
+      message: 'feat: generated message',
+      source: 'llm',
+      provider: 'lmstudio',
+      model: 'qwen2.5-coder-7b-instruct',
+      truncated: false,
+      diff_chars: 42,
+      files_changed: 1,
+      warnings: [],
+      generated_at: '2026-11-06T10:00:00Z',
+    })
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',
@@ -547,5 +583,59 @@ describe('RepositoryDetails actions', () => {
     renderDetails()
 
     expect(await screen.findByText('Нет активности.')).toBeInTheDocument()
+  })
+
+  it('generates a commit message for dirty repositories when LLM is enabled', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      ...appSettings,
+      llm_enabled: true,
+    })
+    const user = userEvent.setup()
+    renderDetails()
+
+    const generate = await screen.findByRole('button', {
+      name: 'Сгенерировать коммит',
+    })
+    await user.click(generate)
+
+    expect(
+      await screen.findByDisplayValue('feat: generated message'),
+    ).toBeInTheDocument()
+    expect(generateCommitMessage).toHaveBeenCalledWith(1)
+  })
+
+  it('commits the edited message after explicit confirmation', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      ...appSettings,
+      llm_enabled: true,
+    })
+    vi.mocked(runAction).mockResolvedValue({
+      id: 1,
+      repository_id: 1,
+      action: 'commit',
+      command: 'git commit -m "feat: generated message"',
+      status: 'success',
+      exit_code: 0,
+      output: '[main abc123] feat: generated message',
+      error: null,
+      duration_ms: 12,
+      actor: 'local',
+      created_at: '2026-11-06T10:00:00Z',
+    })
+    const user = userEvent.setup()
+    renderDetails()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Сгенерировать коммит' }),
+    )
+    await screen.findByDisplayValue('feat: generated message')
+    await user.click(
+      screen.getByRole('checkbox', {
+        name: /Я понимаю, что действие создаст коммит/,
+      }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Выполнить коммит' }))
+
+    expect(runAction).toHaveBeenCalledWith(1, 'commit', 'feat: generated message')
   })
 })

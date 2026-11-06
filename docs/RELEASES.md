@@ -4,6 +4,28 @@
 
 ---
 
+## Спринт 32: LLM Provider & AI Commit Messages (v0.7.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S32-001: `LLMService` — OpenAI-совместимый `POST /v1/chat/completions` (LM Studio/Ollama), timeout 30 с, remote-guard, очистка ответа; ошибки → `None`.
+- [x] S32-002: settings `llm_enabled/base_url/model/api_key/timeout/max_diff_chars/allow_remote`, маскировка ключа, секция «AI / LLM» в UI.
+- [x] S32-003: `git diff HEAD` + лимит 10000 символов с `[diff truncated]`, `CommitMessageSuggestion`.
+- [x] S32-004: `POST /repositories/{id}/ai/commit-message`; `commit` в `ActionService` с `confirm=true`, сообщением и `action_log`.
+- [x] S32-005: кнопка «Сгенерировать коммит», модалка с лоадером/textarea/копированием и подтверждённым коммитом, toast при ошибке LLM.
+- [x] S32-006: `test_llm.py` (13 тестов), SPEC §3.18.1, ARCHITECTURE §15, ADR-0010, CHANGELOG/RELEASES.
+
+### Результаты
+
+- Backend-тесты: 188 passed
+- Frontend-тесты: 34 passed
+- Read-only: AI-эндпоинт не коммитит; `commit` — отдельное действие с подтверждением.
+- Diff/промпты не логируются; `llm_api_key` маскируется.
+
+---
+
 ## Релиз v0.6.0 — «Security & Insights»
 
 **Дата:** 2026-11-06 · **Тег:** `v0.6.0`

@@ -24,7 +24,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.base import utcnow
 from app.db.session import get_session
-from app.git.command_backend import get_conflicts
+from app.git.command_backend import get_conflicts, get_worktree_diff
 from app.git.pygit2_backend import (
     GitStatusError,
     compare_refs,
@@ -37,6 +37,7 @@ from app.schemas.action import (
     ActionRequest,
     BulkActionRequest,
 )
+from app.schemas.ai import CommitMessageSuggestion
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.dependency import DependencyReport
 from app.schemas.docker import DockerStatusResponse
@@ -69,6 +70,7 @@ from app.services.compare_cache import CompareCache
 from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
 from app.services.insights_service import InsightsService
+from app.services.llm_service import LLMService
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
 from app.services.security_service import SecurityService
@@ -109,6 +111,11 @@ def _security_service(request: Request) -> SecurityService:
 
 def _insights_service(request: Request) -> InsightsService:
     service: InsightsService = request.app.state.insights_service
+    return service
+
+
+def _llm_service(request: Request) -> LLMService:
+    service: LLMService = request.app.state.llm_service
     return service
 
 
@@ -262,6 +269,75 @@ async def repository_insights(
         repository.path,
         days=days,
         refresh=refresh,
+    )
+
+
+def _count_diff_files(diff: str) -> int:
+    return sum(1 for line in diff.splitlines() if line.startswith("diff --git "))
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/commit-message",
+    response_model=CommitMessageSuggestion,
+)
+async def generate_commit_message(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CommitMessageSuggestion:
+    repository = await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    if not service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="llm_disabled",
+        )
+    if not service.remote_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="llm_remote_not_allowed",
+        )
+
+    diff_result = await asyncio.to_thread(
+        get_worktree_diff, repository.path, 10
+    )
+    if not diff_result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=diff_result.error or "git_diff_failed",
+        )
+    if not diff_result.stdout.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нет изменений для коммита",
+        )
+
+    original = diff_result.stdout
+    max_chars = max(int(request.app.state.settings.llm_max_diff_chars), 100)
+    truncated = len(original) > max_chars
+    prepared = original
+    warnings: list[str] = []
+    if truncated:
+        prepared = f"{original[:max_chars]}\n[diff truncated]"
+        warnings.append("diff_truncated")
+
+    message = await service.generate_commit_message(prepared)
+    if message is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM недоступна. Проверьте настройки.",
+        )
+
+    return CommitMessageSuggestion(
+        repository_id=repository_id,
+        message=message,
+        provider=service.provider,
+        model=service.model,
+        truncated=truncated,
+        diff_chars=len(original),
+        files_changed=_count_diff_files(original),
+        warnings=warnings,
+        generated_at=utcnow(),
     )
 
 
@@ -479,13 +555,21 @@ async def run_repository_action(
     repository = await _get_repository(session, repository_id)
     try:
         entry = await _action_service(request).execute_action(
-            session, repository, action, confirm=payload.confirm
+            session,
+            repository,
+            action,
+            confirm=payload.confirm,
+            message=payload.message,
         )
     except UnknownActionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
     except ConfirmationRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except ActionNotAllowedError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc

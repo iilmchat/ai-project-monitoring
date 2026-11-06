@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -14,7 +14,9 @@ import {
   getRecommendations,
   getRepositories,
   getSecurity,
+  getSettings,
   getStatus,
+  generateCommitMessage,
   refreshMirror,
   refreshRepository,
   runAction,
@@ -99,6 +101,15 @@ export default function RepositoryDetails() {
   const [insightsLoading, setInsightsLoading] = useState(!invalidId)
   const [insightsRefreshing, setInsightsRefreshing] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
+  const [llmEnabled, setLlmEnabled] = useState(false)
+  const [commitOpen, setCommitOpen] = useState(false)
+  const [commitLoading, setCommitLoading] = useState(false)
+  const [commitMessage, setCommitMessage] = useState('')
+  const [commitConfirmed, setCommitConfirmed] = useState(false)
+  const [commitRunning, setCommitRunning] = useState(false)
+  const [commitNotice, setCommitNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<number | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -275,6 +286,31 @@ export default function RepositoryDetails() {
     }
   }, [invalidId, repositoryId])
 
+  useEffect(() => {
+    if (invalidId) {
+      return
+    }
+    let active = true
+    void getSettings()
+      .then((settings) => {
+        if (active) {
+          setLlmEnabled(settings.llm_enabled)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [invalidId])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current !== null) {
+        window.clearTimeout(toastTimer.current)
+      }
+    }
+  }, [])
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
@@ -360,6 +396,72 @@ export default function RepositoryDetails() {
       setInsightsError('Не удалось загрузить инсайты.')
     } finally {
       setInsightsRefreshing(false)
+    }
+  }
+
+  function showToast(message: string) {
+    setToast(message)
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current)
+    }
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimer.current = null
+    }, 2500)
+  }
+
+  async function openCommitModal() {
+    setCommitOpen(true)
+    setCommitConfirmed(false)
+    setCommitMessage('')
+    setCommitNotice(null)
+    setCommitLoading(true)
+    try {
+      const suggestion = await generateCommitMessage(repositoryId)
+      setCommitMessage(suggestion.message)
+      if (suggestion.truncated) {
+        setCommitNotice('Diff был обрезан — проверьте сообщение внимательно.')
+      }
+    } catch {
+      setCommitOpen(false)
+      showToast('LLM недоступна. Проверьте настройки.')
+    } finally {
+      setCommitLoading(false)
+    }
+  }
+
+  async function handleCopyCommitMessage() {
+    try {
+      await navigator.clipboard.writeText(commitMessage)
+      showToast('Сообщение скопировано')
+    } catch {
+      showToast('Не удалось скопировать сообщение')
+    }
+  }
+
+  async function handleCommit() {
+    const message = commitMessage.trim()
+    if (!message || !commitConfirmed) {
+      return
+    }
+    setCommitRunning(true)
+    try {
+      await runAction(repositoryId, 'commit', message)
+      setCommitOpen(false)
+      setCommitConfirmed(false)
+      showToast('Коммит создан')
+      const [updated, log, tips] = await Promise.all([
+        refreshRepository(repositoryId, false),
+        getLog(repositoryId, 10),
+        getRecommendations(repositoryId),
+      ])
+      setStatus(updated)
+      setCommits(log)
+      setRecommendations(tips)
+    } catch {
+      showToast('Не удалось выполнить коммит')
+    } finally {
+      setCommitRunning(false)
     }
   }
 
@@ -482,14 +584,27 @@ export default function RepositoryDetails() {
             {repository?.alias ?? repository?.path ?? `Репозиторий #${id}`}
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleRefresh()}
-          disabled={refreshing}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {refreshing ? 'Обновление…' : 'Обновить'}
-        </button>
+        <div className="flex items-center gap-2">
+          {status !== null &&
+            status.dirty.modified + status.dirty.staged > 0 &&
+            llmEnabled && (
+              <button
+                type="button"
+                onClick={() => void openCommitModal()}
+                className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+              >
+                Сгенерировать коммит
+              </button>
+            )}
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {refreshing ? 'Обновление…' : 'Обновить'}
+          </button>
+        </div>
       </div>
 
       {(error ?? (invalidId ? 'Некорректный идентификатор репозитория.' : null)) && (
@@ -1427,6 +1542,96 @@ export default function RepositoryDetails() {
             </div>
           )}
         </>
+      )}
+
+      {commitOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="commit-message-title"
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+          >
+            <h2
+              id="commit-message-title"
+              className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+            >
+              Сгенерировать коммит
+            </h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Проверьте и отредактируйте сообщение перед коммитом. Автоматически
+              ничего не коммитится.
+            </p>
+            {commitLoading ? (
+              <p className="mt-6 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                Генерация сообщения…
+              </p>
+            ) : (
+              <>
+                {commitNotice && (
+                  <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                    {commitNotice}
+                  </p>
+                )}
+                <textarea
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.target.value)}
+                  rows={6}
+                  className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <label className="mt-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={commitConfirmed}
+                    onChange={(event) => setCommitConfirmed(event.target.checked)}
+                    className="mt-1"
+                  />
+                  Я понимаю, что действие создаст коммит в репозитории.
+                </label>
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  Будут закоммичены только изменения в индексе (`git add`).
+                </p>
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCommitOpen(false)}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyCommitMessage()}
+                    disabled={!commitMessage.trim()}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Скопировать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCommit()}
+                    disabled={
+                      !commitMessage.trim() || !commitConfirmed || commitRunning
+                    }
+                    className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {commitRunning ? 'Коммит…' : 'Выполнить коммит'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xl dark:bg-slate-100 dark:text-slate-900"
+        >
+          {toast}
+        </div>
       )}
     </section>
   )

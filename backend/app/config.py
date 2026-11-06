@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     insights_git_timeout_seconds: float = 10.0
     insights_hotspots_limit: int = 5
     insights_hotspots_days: int = 90
+    llm_enabled: bool = False
+    llm_base_url: str = "http://127.0.0.1:1234/v1"
+    llm_model: str = "qwen2.5-coder-7b-instruct"
+    llm_api_key: str = ""
+    llm_timeout_seconds: float = 30.0
+    llm_max_diff_chars: int = 10000
+    llm_allow_remote: bool = False
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

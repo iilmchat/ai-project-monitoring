@@ -3,6 +3,7 @@ import type {
   AppSettings,
   CIStatus,
   CommitInfo,
+  CommitMessageSuggestion,
   CompareResponse,
   ConflictsResponse,
   DashboardResponse,
@@ -150,11 +151,24 @@ export async function getMirrorCandidates(): Promise<MirrorCandidates> {
   return request<MirrorCandidates>('/mirror/candidates')
 }
 
-export async function runAction(repositoryId: number, action: string): Promise<ActionLog> {
+export async function runAction(
+  repositoryId: number,
+  action: string,
+  message?: string,
+): Promise<ActionLog> {
   return request<ActionLog>(`/repositories/${repositoryId}/actions/${action}`, {
     method: 'POST',
-    body: { confirm: true },
+    body: message === undefined ? { confirm: true } : { confirm: true, message },
   })
+}
+
+export async function generateCommitMessage(
+  repositoryId: number,
+): Promise<CommitMessageSuggestion> {
+  return request<CommitMessageSuggestion>(
+    `/repositories/${repositoryId}/ai/commit-message`,
+    { method: 'POST' },
+  )
 }
 
 export async function runMirrorAction(

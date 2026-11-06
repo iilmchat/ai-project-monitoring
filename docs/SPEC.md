@@ -3,10 +3,11 @@
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
-AI §3.18, global analytics §3.19 и dependency updates §3.20 — **план v0.7.0**
-(спринты 32–34); контракты зафиксированы до реализации.
+AI §3.18 (commit message) — в Sprint 32; CVE-explain, global analytics §3.19 и
+dependency updates §3.20 — **план v0.7.0** (спринты 33–34); контракты
+зафиксированы до реализации.
 
-**Версия:** v0.7.0 «AI & Global Analytics» (планирование) · **Обновлено:** 2026-11-06
+**Версия:** v0.7.0 «AI & Global Analytics» (в разработке; Sprint 32 выполнен) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -251,11 +252,15 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
 | POST | `/repositories/{id}/actions/{action}` | `{confirm: true}` | `ActionLog` |
+| POST | `/repositories/{id}/actions/commit` | `{confirm: true, message}` | `ActionLog` (v0.7.0) |
 | POST | `/repositories/{id}/actions/update-dependencies` | `{confirm: true, ecosystem?, packages?}` | `ActionLog` (v0.7.0, план) |
 | POST | `/mirror/actions/{action}` | `{confirm: true, repository_id}` | `ActionLog` |
 | GET | `/admin/actions` | `repository_id?`, `limit?` | `ActionLog[]` |
 
 - `action ∈ {pull, push, stash}`; `mirror action = push-mirror`.
+- `commit` (v0.7.0) выполняется только с `confirm=true` и непустым `message`
+  (≤ 2000 символов); без сообщения → 400. Аудит — `action_log`
+  (`action="commit"`), автоматического коммита из AI-модалки нет.
 - Без `confirm=true` → 400; неизвестное действие → 400.
 - `update-dependencies` (v0.7.0) — отдельное действие Sprint 34; требует чистого
   worktree (`409 dirty_worktree`), пишет `action_log` даже при отказе/ошибке.
@@ -304,24 +309,26 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 | Метод | Путь | Тело / Ответ |
 |-------|------|--------------|
-| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_allow_remote}` |
+| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote}` |
 | PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
 
 Токены, `webhook_secret` и `llm_api_key` в ответе **маскируются**
 (`ghp_****1234`, `sk-****1234`). Разрешённые ключи: `scan_roots`,
 `github_token`, `gitflic_token`, `webhook_secret`, `default_canonical_provider`,
 `llm_enabled`, `llm_base_url`, `llm_model`, `llm_api_key`,
-`llm_timeout_seconds`, `llm_allow_remote`. Значения хранятся в `app_settings`;
-при старте подхватываются в конфиг (fallback — `config.py`).
+`llm_timeout_seconds`, `llm_max_diff_chars`, `llm_allow_remote`. Значения
+хранятся в `app_settings`; при старте подхватываются в конфиг
+(fallback — `config.py`).
 
-**LLM-настройки (v0.7.0, план):**
+**LLM-настройки (v0.7.0, Sprint 32 — реализовано):**
 
 - `llm_enabled` (default **false**) — AI-функции выключены до явного включения.
-- `llm_base_url` (default `http://127.0.0.1:11434/v1`) — Ollama; LM Studio —
-  `http://127.0.0.1:1234/v1`.
-- `llm_model` (default `qwen2.5-coder:7b`).
+- `llm_base_url` (default `http://127.0.0.1:1234/v1`) — LM Studio; Ollama —
+  `http://127.0.0.1:11434/v1`.
+- `llm_model` (default `qwen2.5-coder-7b-instruct`).
 - `llm_api_key` — опционально; для локальных серверов обычно пустой.
 - `llm_timeout_seconds` (default 30).
+- `llm_max_diff_chars` (default 10000) — лимит diff для генерации коммита.
 - `llm_allow_remote` (default **false**) — не-loopback endpoint запрещён, пока
   пользователь явно не разрешит.
 - Пустое поле `llm_api_key` при PATCH означает «не менять».
@@ -789,7 +796,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.18. AI assistant (v0.7.0, Sprint 32–33, план)
+### 3.18. AI assistant (v0.7.0; commit message — Sprint 32, CVE explain — план Sprint 33)
 
 Локальный LLM (Ollama / LM Studio) через OpenAI-совместимый API. Эндпоинты
 **только читают** репозиторий и ничего не коммитят; результат — черновик,
@@ -799,7 +806,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/repositories/{id}/ai/commit-message` | `{include_untracked?: bool, max_diff_bytes?: int}` | `CommitMessageSuggestion` |
+| POST | `/repositories/{id}/ai/commit-message` | — | `CommitMessageSuggestion` |
 
 `CommitMessageSuggestion`:
 
@@ -807,12 +814,11 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 {
   "repository_id": 1,
   "message": "feat(api): add repository security endpoint",
-  "subject": "feat(api): add repository security endpoint",
-  "body": null,
   "source": "llm",
-  "provider": "ollama",
-  "model": "qwen2.5-coder:7b",
+  "provider": "lmstudio",
+  "model": "qwen2.5-coder-7b-instruct",
   "truncated": false,
+  "diff_chars": 4200,
   "files_changed": 3,
   "warnings": [],
   "generated_at": "2026-11-06T10:00:00Z"
@@ -821,27 +827,32 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 **Правила:**
 
-- Требуется `dirty.modified + dirty.staged > 0`; иначе `422 no_changes`.
-  Untracked-файлы по умолчанию не входят в diff (`include_untracked=false`).
+- Требуется хотя бы один tracked-изменённый файл
+  (`dirty.modified + dirty.staged > 0`); иначе `400` с
+  `detail="Нет изменений для коммита"`. Пустой `git diff HEAD` — тот же ответ.
 - Источник diff: `git diff HEAD --no-color --no-ext-diff --unified=3`
-  (staged + unstaged); бинарные файлы исключаются.
-- `max_diff_bytes` (default **65536**, 1024..131072); при обрезке
-  `truncated=true`, `warnings=["truncated_diff"]`. Обрезка — по границе файла.
+  (staged + unstaged); бинарные файлы не дают текстового diff.
+- Лимит `LLM_MAX_DIFF_CHARS` (default **10000** символов). При обрезке
+  добавляется строка `[diff truncated]`, `truncated=true`,
+  `warnings=["diff_truncated"]`.
 - `llm_enabled=false` → `409 llm_disabled`; не-loopback endpoint без
   `llm_allow_remote=true` → `409 llm_remote_not_allowed`.
-- Промпт: Conventional Commits, subject ≤ 72 символов, опциональное тело.
-  Diff передаётся как данные; инструкции внутри diff игнорируются.
-- Ответ валидируется regex
-  `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+`;
-  Markdown-обёртки снимаются. Невалидный/пустой ответ → fallback.
-- Fallback (timeout/connection/5xx/невалидный ответ): `chore: update N files`
-  с телом по группам файлов, `source="fallback"`, `provider=null`,
-  `warnings=["llm_unavailable"]`; HTTP 200.
+- Промпт: «Ты — senior разработчик. Напиши commit message в формате
+  Conventional Commits (feat/fix/docs/refactor). Опиши изменения кратко и по
+  делу. Ответь только текстом коммита, без кавычек.» Diff передаётся как
+  данные, не как инструкции.
+- `LLM` timeout `LLM_TIMEOUT_SECONDS` (default **30**). При недоступности,
+  таймауте, 5xx или невалидном ответе — `503` с
+  `detail="LLM недоступна. Проверьте настройки."`; fallback-сообщение не
+  генерируется.
+- Markdown-обёртки и окружающие кавычки снимаются; пустой ответ считается
+  ошибкой LLM.
 - Diff, промпт и ответ LLM **не** сохраняются в БД и не логируются (только
-  метаданные: байты, модель, source, длительность).
-- `source ∈ {llm, fallback}`; `provider ∈ {ollama, lmstudio, openai_compatible} | null`.
+  метаданные: модель, символы diff, source, длительность).
+- `source` пока всегда `llm`;
+  `provider ∈ {ollama, lmstudio, openai_compatible}`.
 
-#### 3.18.2. Объяснение CVE
+#### 3.18.2. Объяснение CVE (план, Sprint 33)
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
@@ -1092,7 +1103,7 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 | Библиотека Git | **pygit2** для status/discovery/log/compare; shell `git` (subprocess) для fetch/rev-list |
 | Fetch | `git fetch --all --prune`, таймаут 30 с; ошибка → `remote_status=unavailable` |
 | Read-only | Операции чтения не изменяют рабочую директорию и индекс |
-| Мутации | `fetch`/`pull`/`push`/`stash`/`push_mirror` — только `POST .../actions/{action}` с `confirm=true` и аудитом `action_log` (v0.2.0); `update-dependencies` — только §3.20 (v0.7.0) |
+| Мутации | `fetch`/`pull`/`push`/`stash`/`push_mirror`/`commit` — только `POST .../actions/{action}` с `confirm=true` и аудитом `action_log` (commit — v0.7.0); `update-dependencies` — только §3.20 (v0.7.0) |
 | Глубина сканирования | `SCAN_DEPTH` (default 3) |
 | Исключения сканирования | `.git`, `node_modules`, `.venv`, `vendor`, `dist`, `build`, `target` |
 | Параллелизм сканирования | `SCAN_CONCURRENCY` (default 4) |
@@ -1107,7 +1118,7 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
-| **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:11434/v1`), `LLM_MODEL` (default `qwen2.5-coder:7b`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_BYTES` (default 65536), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
+| **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false); diff/промпты не логируются; `AI_CACHE_TTL_SECONDS` — Sprint 33** |
 | **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 60), `GLOBAL_ANALYTICS_LIMIT` (default 20); по умолчанию только `dependency_cache`, `refresh=true` — registry с concurrency ≤ 4** |
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_BYTES` (default 32768); только `confirm=true` + чистый worktree + `action_log`** |
 
@@ -1178,15 +1189,16 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 - [x] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
-### 6.4. v0.7.0 (план, спринты 32–34)
+### 6.4. v0.7.0 (в работе: Sprint 32 выполнен)
 
-- [ ] AI: `POST /repositories/{id}/ai/commit-message` возвращает
-      `CommitMessageSuggestion` по §3.18.1; LLM timeout ≤ 30 с, ошибки →
-      fallback, HTTP 200.
-- [ ] AI: diff ограничен `LLM_MAX_DIFF_BYTES`, бинарники исключены; diff,
-      промпты и `llm_api_key` не попадают в логи/БД.
-- [ ] AI: не-loopback endpoint блокируется без `LLM_ALLOW_REMOTE=true`;
-      сгенерированное сообщение валидно как Conventional Commits.
+- [x] AI: `POST /repositories/{id}/ai/commit-message` возвращает
+      `CommitMessageSuggestion` по §3.18.1; `400` без изменений, `409` при
+      выключенном LLM/remote, `503` при недоступной LLM.
+- [x] AI: diff ограничен `LLM_MAX_DIFF_CHARS` и помечается `[diff truncated]`;
+      бинарники не дают текстового diff; diff, промпты и `llm_api_key` не
+      попадают в логи/БД.
+- [x] AI: не-loopback endpoint блокируется без `LLM_ALLOW_REMOTE=true`;
+      сообщение показывается в редактируемой модалке и не коммитится само.
 - [ ] AI: `POST /repositories/{id}/ai/cve-explain` опирается на OSV, кэшируется
       в `ai_cache` на 7 дней и не выдумывает `fixed_version`/ссылки.
 - [ ] Global: `GET /dashboard/global-dependencies` агрегирует tracked-репозитории,
@@ -1239,7 +1251,7 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
 (реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
-план v0.7.0.
+v0.7.0 (AI commit реализован, остальное — план).
 
 ### 9.1 Таблица репозиториев
 
@@ -1381,21 +1393,22 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 - Импорт не затрагивает `localStorage`-ключи других версий; после импорта
   store обновляется реактивно, без перезагрузки.
 
-### 9.12 AI, глобальные зависимости и обновления (v0.7.0, план)
+### 9.12 AI, глобальные зависимости и обновления (v0.7.0; AI commit — Sprint 32, остальное — план)
 
-**AI / LLM:**
+**AI / LLM (commit message — реализовано):**
 
-- Settings: секция «AI / LLM» (endpoint, model, API key, timeout,
-  `allow_remote`), маскировка ключа, кнопка проверки соединения.
-- Предупреждение, если endpoint не loopback: код проекта отправляется на
-  внешний сервис; без явного `allow_remote` сохранение блокируется.
+- Settings: секция «AI / LLM» (enabled, endpoint, model, API key, timeout,
+  max diff, `allow_remote`), маскировка ключа.
+- Предупреждение, если endpoint не loopback: код проекта может быть отправлен
+  на внешний сервис; без явного `allow_remote` запрос блокируется.
 - Кнопка «Сгенерировать коммит» видна только при `dirty` и `llm_enabled`;
-  открывает модалку с subject/body, `source`, `truncated`, кнопкой «Копировать».
-  Автоматического `git commit` нет; сообщение можно отредактировать.
-- В блоке «Безопасность» у уязвимости — «Объяснить»: модалка с лоадером,
-  объяснением, `fixed_version`, ссылками и пометкой `cached`/`fallback`.
-- Ошибки LLM показываются как состояние («LLM недоступен, показан черновик»),
-  не ломая карточку; таймаут отменяем.
+  открывает модалку с лоадером и редактируемым `<textarea>`, кнопками
+  «Скопировать» и «Выполнить коммит» (только после явного чекбокса).
+  Автоматического `git commit` нет.
+- Ошибки LLM показываются toast «LLM недоступна. Проверьте настройки.»,
+  не ломая карточку; diff-обрезка отражается предупреждением в модалке.
+- CVE-объяснение (план Sprint 33): модалка с `fixed_version`, ссылками и
+  пометкой `cached`/`fallback`.
 
 **Global dependencies:**
 

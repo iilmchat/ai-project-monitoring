@@ -19,8 +19,11 @@ from app.models.entities import ActionLog, Repository, RepositoryStatus
 
 logger = structlog.get_logger(__name__)
 
-MUTATION_ACTIONS = frozenset({"fetch", "pull", "push", "push_mirror", "stash"})
+MUTATION_ACTIONS = frozenset(
+    {"fetch", "pull", "push", "push_mirror", "stash", "commit"}
+)
 MAX_OUTPUT_CHARS = 4000
+MAX_COMMIT_MESSAGE_CHARS = 2000
 
 
 class ActionError(Exception):
@@ -52,6 +55,7 @@ class ActionService:
         action: str,
         *,
         confirm: bool,
+        message: str | None = None,
     ) -> ActionLog:
         if not confirm:
             raise ConfirmationRequiredError("Action requires confirmation")
@@ -71,6 +75,8 @@ class ActionService:
         elif normalized == "push":
             branch = await self._current_branch(session, repository.id)
             args = ["push", "origin", branch]
+        elif normalized == "commit":
+            args = ["commit", "-m", _validated_commit_message(message)]
         else:
             args = ["stash", "save", "Auto-stash from IIRuchating"]
 
@@ -150,6 +156,19 @@ class ActionService:
             select(RepositoryStatus).where(RepositoryStatus.repository_id == repository_id)
         )
         return row.branch if row is not None and row.branch else "main"
+
+
+def _validated_commit_message(message: str | None) -> str:
+    if message is None:
+        raise ActionNotAllowedError("commit message is required")
+    cleaned = message.strip()
+    if not cleaned or "\x00" in cleaned:
+        raise ActionNotAllowedError("commit message is empty or invalid")
+    if len(cleaned) > MAX_COMMIT_MESSAGE_CHARS:
+        raise ActionNotAllowedError(
+            f"commit message is longer than {MAX_COMMIT_MESSAGE_CHARS} chars"
+        )
+    return cleaned
 
 
 __all__ = [

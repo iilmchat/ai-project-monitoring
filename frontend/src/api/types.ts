@@ -346,6 +346,13 @@ export interface AppSettings {
   gitflic_token: string
   webhook_secret: string
   default_canonical_provider: string
+  llm_enabled: boolean
+  llm_base_url: string
+  llm_model: string
+  llm_api_key: string
+  llm_timeout_seconds: number
+  llm_max_diff_chars: number
+  llm_allow_remote: boolean
 }
 
 export interface SettingsUpdate {
@@ -354,6 +361,26 @@ export interface SettingsUpdate {
   gitflic_token?: string
   webhook_secret?: string
   default_canonical_provider?: 'github' | 'gitflic'
+  llm_enabled?: boolean
+  llm_base_url?: string
+  llm_model?: string
+  llm_api_key?: string
+  llm_timeout_seconds?: number
+  llm_max_diff_chars?: number
+  llm_allow_remote?: boolean
+}
+
+export interface CommitMessageSuggestion {
+  repository_id: number
+  message: string
+  source: 'llm'
+  provider: string
+  model: string
+  truncated: boolean
+  diff_chars: number
+  files_changed: number
+  warnings: string[]
+  generated_at: string
 }
 
 export interface DashboardResponse {

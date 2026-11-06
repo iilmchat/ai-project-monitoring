@@ -27,6 +27,7 @@ from app.services.compare_cache import CompareCache
 from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
 from app.services.insights_service import InsightsService
+from app.services.llm_service import LLMService
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
@@ -123,6 +124,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hotspots_limit=resolved.insights_hotspots_limit,
         hotspots_days=resolved.insights_hotspots_days,
     )
+    llm_service = LLMService(resolved)
     mirror_scheduler = MirrorScheduler(
         mirror_service,
         session_factory,
@@ -185,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.osv_client = osv_client
     application.state.security_service = security_service
     application.state.insights_service = insights_service
+    application.state.llm_service = llm_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

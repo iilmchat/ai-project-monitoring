@@ -2,8 +2,18 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(ai): `LLMService` — OpenAI-совместимый клиент (LM Studio/Ollama), timeout 30 с, remote-guard, очистка Markdown/кавычек; ошибки → `None` (S32-001).
+- feat(settings): `llm_enabled`, `llm_base_url`, `llm_model`, `llm_api_key` (маскируется), timeout, max diff и `llm_allow_remote` в `GET/PATCH /settings` и на странице настроек (S32-002).
+- feat(api): `POST /repositories/{id}/ai/commit-message` — `git diff HEAD`, лимит 10000 символов с `[diff truncated]`, `CommitMessageSuggestion` (S32-003).
+- feat(actions): действие `commit` с `confirm=true` и сообщением (≤ 2000 символов), запись в `action_log` (S32-004).
+- feat(ui): кнопка «Сгенерировать коммит» для dirty-репозиториев, модалка с лоадером, редактируемым текстом, копированием и подтверждённым коммитом (S32-005).
+- test(ai): успешная генерация, timeout/connection/5xx, disabled, remote-guard, API 400/409/503, truncation, commit action и маскировка ключа (S32-006).
+
 ### Документация
 
+- docs(ai): SPEC §3.12/§3.18.1, ARCHITECTURE §15, ADR-0010, CHANGELOG/RELEASES (S32-006).
 - docs(planning): план v0.7.0 — LLM (commit message, CVE explain), global dependencies, dependency updates; SPEC §3.18–3.20, ARCHITECTURE §15–17, KI-013/014 (S31-001..S31-003).
 
 ## [0.6.0] - 2026-11-06

@@ -159,6 +159,24 @@ def get_conflicts(repository_path: str | Path, timeout: float = 10) -> list[str]
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def get_worktree_diff(
+    repository_path: str | Path,
+    timeout: float = 10,
+) -> CommandResult:
+    """Return staged + unstaged changes against HEAD (read-only)."""
+    return run_git(
+        [
+            "diff",
+            "HEAD",
+            "--no-color",
+            "--no-ext-diff",
+            "--unified=3",
+        ],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+
+
 def commit_dates(
     repository_path: str | Path,
     since: str,
@@ -227,6 +245,7 @@ __all__ = [
     "fetch_all",
     "get_conflicts",
     "get_remote_url",
+    "get_worktree_diff",
     "is_repo_dirty_fast",
     "rev_list_counts",
     "run_git",

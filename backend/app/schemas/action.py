@@ -12,6 +12,7 @@ class ActionRequest(BaseModel):
 
     confirm: bool = False
     repository_id: int | None = None
+    message: str | None = None
 
 
 class BulkActionRequest(BaseModel):

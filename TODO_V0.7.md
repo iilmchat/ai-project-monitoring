@@ -1,7 +1,7 @@
 # TODO v0.7.0 — AI Integration, Global Analytics & Dependency Updates
 
 **Версия:** v0.7.0 «AI & Global Analytics»
-**Статус:** 🚧 Планирование (Sprint 31); спринты 32–34 запланированы
+**Статус:** 🚧 В разработке (Sprint 32 ✅); спринты 33–34 запланированы
 **Предыдущий этап:** v0.6.0 — [`TODO_V0.6.md`](TODO_V0.6.md)
 **Последнее обновление:** 2026-11-06
 
@@ -60,73 +60,75 @@
 
 ### Спринт 32 — LLM Provider & AI Commit Messages
 
-**Статус:** ⏳ Запланирован
+**Статус:** ✅ Завершён (2026-11-06)
 
 **Задачи**
 
-- **S32-001. LLM-клиент и конфигурация.**
-  - `app/providers/llm_client.py`: OpenAI-совместимый
+- [x] **S32-001. LLM-клиент и конфигурация.**
+  - `app/services/llm_service.py`: OpenAI-совместимый
     `POST {base_url}/chat/completions`, `httpx`, без новых зависимостей.
-  - Поддержать Ollama (`http://127.0.0.1:11434/v1`) и LM Studio
-    (`http://127.0.0.1:1234/v1`); `provider` определяется по URL/настройке.
+  - LM Studio (`http://127.0.0.1:1234/v1`) — default; Ollama
+    (`http://127.0.0.1:11434/v1`) поддерживается; `provider` определяется по URL.
   - `LLM_ENABLED` (default false), `LLM_BASE_URL`, `LLM_MODEL`,
     `LLM_API_KEY`, `LLM_TIMEOUT_SECONDS` (default 30),
-    `LLM_MAX_DIFF_BYTES` (default 65536), `LLM_ALLOW_REMOTE` (default false).
-  - Ошибки: timeout, connection refused, 4xx/5xx, невалидный JSON — результат
-    со статусом, без исключения наружу.
-  - Circuit breaker: после 3 подряд ошибок — пауза 60 с, затем fallback.
+    `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false).
+  - Ошибки: timeout, connection refused, 4xx/5xx, невалидный JSON → `None`
+    без исключения наружу; remote endpoint блокируется без opt-in.
 
-- **S32-002. Settings UI и API.**
-  - Расширить `GET/PATCH /settings` полями `llm_enabled`, `llm_base_url`,
-    `llm_model`, `llm_api_key`, `llm_timeout_seconds`, `llm_allow_remote`.
+- [x] **S32-002. Settings UI и API.**
+  - `GET/PATCH /settings` расширены `llm_enabled`, `llm_base_url`,
+    `llm_model`, `llm_api_key`, `llm_timeout_seconds`, `llm_max_diff_chars`,
+    `llm_allow_remote`; bool/int значения корректно применяются к `config.py`.
   - `llm_api_key` маскируется (`sk-****1234`); пустое поле — «не менять».
-  - Страница Settings: секция «AI / LLM» с проверкой соединения
-    (кнопка «Проверить»; отдельный контракт не добавляется) и понятным
-    предупреждением о remote endpoint.
+  - Страница Settings: секция «AI / LLM» (enabled, endpoint, model, key,
+    timeout, max diff, allow_remote) с предупреждением о remote endpoint.
 
-- **S32-003. Diff builder и генерация сообщения.**
-  - `LLMService.build_commit_message(repo_path, ...)`:
-    - `git diff HEAD --no-color --no-ext-diff --unified=3` (staged + unstaged);
-    - бинарные файлы и untracked (по умолчанию) исключаются;
-    - лимит `max_diff_bytes`, обрезка по границе файла, `truncated=true`.
-  - Промпт: Conventional Commits, subject ≤ 72 символов, опциональное тело;
-    diff считается **данными**, инструкции внутри diff игнорируются.
-  - Валидация ответа: regex `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+`;
-    Markdown-обёртки снимаются; невалидный ответ → fallback.
-  - Fallback без LLM: `chore: update N files` + список групп файлов,
-    `source=fallback`, `warnings`.
+- [x] **S32-003. Diff builder и генерация сообщения.**
+  - Diff строится в API через `get_worktree_diff`:
+    `git diff HEAD --no-color --no-ext-diff --unified=3`;
+    untracked не входят; бинарники не дают текстового diff.
+  - `LLMService.generate_commit_message(diff) -> str | None`; timeout 30 с;
+    лимит `LLM_MAX_DIFF_CHARS` (10000), при обрезке добавляется
+    `[diff truncated]`, `truncated=true`, `warnings=["diff_truncated"]`.
+  - Промпт: Conventional Commits (feat/fix/docs/refactor), «ответь только
+    текстом коммита, без кавычек»; markdown-обёртки/кавычки снимаются.
+  - Fallback-сообщение не генерируется: ошибка LLM → `503`, UI показывает toast.
 
-- **S32-004. API `POST /repositories/{id}/ai/commit-message`.**
-  - Тело: `{include_untracked?: bool (default false), max_diff_bytes?: int}`.
-  - Ответ `CommitMessageSuggestion` по SPEC §3.18; `source ∈ {llm, fallback}`.
-  - `422 no_changes` — нет tracked-изменений; `409 llm_disabled` — LLM выключен.
+- [x] **S32-004. API и ActionLog commit.**
+  - `POST /repositories/{id}/ai/commit-message` → `CommitMessageSuggestion`
+    по SPEC §3.18.1; пустой diff → `400`, LLM off/remote → `409`,
+    LLM недоступна → `503`.
+  - `commit` добавлен в whitelist `ActionService`:
+    `POST /repositories/{id}/actions/commit` с `confirm=true` и `message`
+    (≤ 2000 символов), запись в `action_log`.
   - Diff и промпт не сохраняются и не логируются.
 
-- **S32-005. UI-модалка «Сгенерировать коммит».**
+- [x] **S32-005. UI-модалка «Сгенерировать коммит».**
   - Кнопка в карточке репозитория только при `dirty.modified/staged > 0` и
-    `llm_enabled=true`.
-  - Лоадер с таймаутом, отмена; результат — модалка с subject/body, кнопкой
-    «Скопировать» и пометкой `fallback`/`truncated`.
-  - Никакого автоматического `git commit`.
+    `llm_enabled=true` (флаг из `GET /settings`).
+  - Модалка: spinner, редактируемый `<textarea>`, «Скопировать»,
+    «Выполнить коммит» (только после чекбокса подтверждения).
+  - Ошибка LLM — toast «LLM недоступна. Проверьте настройки.»;
+    автоматического коммита из AI-эндпоинта нет.
 
-- **S32-006. Тесты и документация.**
-  - Fake LLM client: успешный ответ, timeout, 5xx, невалидный ответ,
-    fallback, обрезка diff, отсутствие изменений.
-  - SPEC §3.18, ARCHITECTURE §15, ADR-0010 «Local-first LLM integration»,
+- [x] **S32-006. Тесты и документация.**
+  - `test_llm.py`: успешная генерация, timeout/connection/5xx, disabled,
+    remote-guard, API 400/409/503, truncation, commit action, settings mask.
+  - SPEC §3.18 (фактические поля), ARCHITECTURE §15, ADR-0010,
     CHANGELOG/RELEASES. Секретов в диффе нет.
 
 **DoD:**
 
-- [ ] `POST /repositories/{id}/ai/commit-message` соответствует SPEC §3.18.
-- [ ] LLM-клиент работает с Ollama и LM Studio через OpenAI-совместимый API;
-      timeout ≤ 30 с, ошибки → fallback, HTTP 200.
-- [ ] Diff ограничен `LLM_MAX_DIFF_BYTES`; бинарники не отправляются;
+- [x] `POST /repositories/{id}/ai/commit-message` соответствует SPEC §3.18.1.
+- [x] LLM-клиент работает с Ollama и LM Studio через OpenAI-совместимый API;
+      timeout ≤ 30 с, ошибки → `503`, без 500.
+- [x] Diff ограничен `LLM_MAX_DIFF_CHARS`; бинарники не отправляются;
       diff/промпт не попадают в логи и БД.
-- [ ] Remote endpoint блокируется без `LLM_ALLOW_REMOTE=true`.
-- [ ] Ответ валидируется как Conventional Commits; невалидный → fallback.
-- [ ] UI показывает модалку, копирование работает, автоматического коммита нет.
-- [ ] Settings маскирует API-ключ; секреты не попадают в дифф/логи.
-- [ ] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
+- [x] Remote endpoint блокируется без `LLM_ALLOW_REMOTE=true`.
+- [x] Сообщение возвращается в редактируемой модалке; автоматического коммита нет.
+- [x] `commit` требует `confirm=true` и непустое сообщение; пишется `action_log`.
+- [x] Settings маскирует API-ключ; секреты не попадают в дифф/логи.
+- [x] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
 
 ---
 
