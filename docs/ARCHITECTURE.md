@@ -2,8 +2,8 @@
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
-§12 (security) — в Sprint 28. Разделы §13–14 — **план v0.6.0**
-(Sprint 29–30); они фиксируют проектное решение до реализации.
+§12 (security) — в Sprint 28; §13 (insights) — в Sprint 29. Раздел §14 —
+**план v0.6.0** (Sprint 30); он фиксирует проектное решение до реализации.
 
 ---
 
@@ -336,7 +336,7 @@ DashboardCharts.tsx
 - Оба блока загружаются лениво и не участвуют в первичном запросе `/dashboard`.
 - Управляющих действий нет: только просмотр и `?refresh=true`.
 
-### 9.7. Security и Insights (v0.6.0; security — Sprint 28, insights — план Sprint 29)
+### 9.7. Security и Insights (v0.6.0; Sprint 28–29)
 
 ```
 <SecurityPanel repoId>
@@ -350,7 +350,7 @@ DashboardCharts.tsx
 <InsightsPanel repoId>
   ├─ useInsights(repoId, days) → GET /repositories/{id}/insights
   ├─ HotspotsList  — top-5 paths + relative bar
-  └─ CommitSparkline — daily/weekly buckets
+  └─ InsightsSparkline — daily commit-frequency area chart
 ```
 
 - Оба блока — `React.lazy`, монтируются при раскрытии карточки/деталей; dashboard
@@ -703,10 +703,12 @@ gitleaks) фиксируется в ADR-0009 (Sprint 28).
 
 ---
 
-## 13. Insights (v0.6.0, Sprint 29 — план)
+## 13. Insights (v0.6.0, Sprint 29)
 
 **Задача.** Показать, какие файлы чаще всего меняются (кандидаты на
 рефакторинг) и как часто ветка получает коммиты (DORA-lite proxy).
+
+**Статус:** реализовано (`app/services/insights_service.py`).
 
 ### 13.1. Почему subprocess, а не pygit2
 
@@ -715,65 +717,68 @@ diff на большом репозитории дороже и требует �
 --name-only` уже отдаёт готовый список и корректно работает с pack-файлами.
 Поэтому используется `git` CLI, но **строго** через контролируемый runner:
 
-- `asyncio.create_subprocess_exec("git", "-C", repo.path, "log", ...)`;
+- `asyncio.create_subprocess_exec("git", "-C", repo.path, ...)`;
 - `env` с `GIT_OPTIONAL_LOCKS=0`, без интерактива и pager (`--no-pager`);
 - timeout 10 с, kill процесса, лимит stdout 8 MiB;
 - stderr не пробрасывается в ответ (только в structlog без путей/содержимого).
 
-Event loop не блокируется: ожидание процесса асинхронное. Для коротких вызовов
-допустим `asyncio.to_thread`, но subprocess-вариант предпочтителен.
+Интерфейс `GitRunner` injectable: unit-тесты подменяют его фейком, интеграционный
+тест работает с реальным временным репозиторием.
 
 ### 13.2. Поток
 
 ```
 GET /repositories/{id}/insights?days=30
   → InsightsService
-      ├─ resolve_branch(): upstream → main → master → HEAD
-      ├─ cache lookup (repo_id, branch, days; 300 с)
-      ├─ hotspots:
-      │    git log --since="<days> days ago" --no-merges --name-only --pretty=format:
-      ├─ sparkline:
-      │    git log --since="<days> days ago" --format=%ad --date=short <branch>
-      ├─ rev-list count:
-      │    git rev-list --count --since="<days> days ago" <branch>
+      ├─ resolve_branch(): main → master → HEAD
+      ├─ cache lookup (repo_path, days; 300 с)
+      ├─ hotspots (параллельно):
+      │    git log --no-merges --name-only --since="3 months ago" --format=
+      ├─ commit frequency (параллельно):
+      │    git log <branch> --since="<days> days ago" --format=%ad --date=short
       └─ normalize → InsightsReport
 ```
 
 ### 13.3. Hotspots
 
-- `changes` — число коммитов, где путь появился в `--name-only`; один коммит
-  считается один раз на путь (дедупликация внутри коммита).
-- Merge-коммиты исключены: они дублируют изменения из PR и раздувают churn.
-- Топ-5 (`INSIGHTS_HOTSPOTS_LIMIT`), сортировка `changes desc, path asc`.
-- `share = changes / total_commits_analyzed`; `authors` и `last_commit`
-  собираются из тех же строк лога (author/date).
+- Источник: `git log --no-merges --name-only --since="3 months ago"`.
+  Merge-коммиты исключены: они дублируют изменения из PR и раздувают churn.
+- `count` — число коммитов, где путь появился в выводе (не строки diff).
+- Фильтры: удалённые файлы (проверка `is_file()`), `*.md`, lock-файлы
+  (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `poetry.lock`, `uv.lock`,
+  `Cargo.lock`, `go.sum`, `*-lock.json`, `*.lock`), generated (`*.min.js`,
+  `*.min.css`, `*.map`, `*.snap`) и каталоги `node_modules`, `.venv`, `vendor`,
+  `dist`, `build`, `target`, `__pycache__`, `.git`.
+- Топ-5 (`INSIGHTS_HOTSPOTS_LIMIT`), сортировка `count desc, file asc`.
 - Rename detection отключён: `--name-only` показывает новое имя только с
   момента переименования. Это осознанное ограничение (стоимость `-M` на
   больших историях), фиксируется в UI/доках.
-- Битые/удалённые файлы остаются в статистике как исторические пути.
 
 ### 13.4. DORA-lite
 
-- `deployment_frequency` — **прокси**: коммиты в ветке за окно, не реальные
-  деплои. UI явно подписывает «commit frequency».
-- `commits` включает merge-коммиты (каждый push в `main` — потенциальный
-  деплой); `merge_commits` отдаётся отдельно.
-- `sparkline`: daily при `days ≤ 90`, weekly при 91–365; нулевые бакеты
-  заполняются, чтобы график не «склеивал» даты.
-- `per_day`/`per_week` — производные, округление до 2 знаков.
+- `commit_frequency` — **прокси**: коммиты в ветке за окно, не реальные деплои.
+  UI явно подписывает «commit frequency».
+- Ветка: `main` → `master` → текущая ветка HEAD. Если не найдена —
+  `status=no_branch`.
+- Коммиты включают merge (каждый push в ветку — потенциальный деплой).
+- `commit_frequency` содержит все дни окна (`days` точек, заканчивая сегодня),
+  нулевые дни заполняются, чтобы график не «склеивал» даты.
+- `summary.per_day = commits / days`, `per_week = per_day * 7`, округление до
+  2 знаков.
 
 ### 13.5. Ограничения и деградация
 
-- `status=no_branch` — ветка не определена; `shallow_clone` — есть
-  `.git/shallow`, числа могут быть занижены; `timeout` — git не успел;
-  `unavailable` — ошибка Git.
-- Пустая история — валидный `ok` с пустыми списками.
-- In-memory кэш 300 с, ключ `repo_id + branch + days`; `refresh=true` обходит.
-- Ограничение stdout защищает память на репозиториях с сотнями тысяч файлов.
+- `status ∈ {ok, partial, no_branch, shallow_clone, timeout, unavailable}`.
+  Приоритет: timeout → unavailable (обе команды не удались) → no_branch →
+  shallow_clone → partial (одна из команд) → ok.
+- `shallow_clone` (`.git/shallow`) — числа могут быть занижены; это видно в UI.
+- Нет коммитов в окне — валидный `ok` с пустыми `hotspots` и нулевым графиком.
+- In-memory кэш 300 с, ключ `repo_path + days`; `refresh=true` обходит.
+- Лимит stdout 8 MiB защищает память; превышение → `partial`/`output_too_large`.
 
 ### 13.6. Read-only
 
-- Только `git log` и `git rev-list`; `fetch`, `checkout`, `reset`, `clean`
+- Только `git log` и `git rev-parse`; `fetch`, `checkout`, `reset`, `clean`
   отсутствуют (grep-аудит).
 - `GIT_OPTIONAL_LOCKS=0` предотвращает случайную запись lock-файлов.
 - Рабочая директория и индекс не изменяются; анализ не требует сети.

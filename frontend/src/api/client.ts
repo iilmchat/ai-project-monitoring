@@ -9,6 +9,7 @@ import type {
   DependencyReport,
   DockerStatus,
   HeatmapData,
+  InsightsReport,
   MirrorCandidates,
   MirrorPolicyUpdate,
   MirrorStatus,
@@ -206,6 +207,16 @@ export async function getSecurity(
 ): Promise<SecurityReport> {
   return request<SecurityReport>(`/repositories/${repositoryId}/security`, {
     query: { refresh, min_severity: minSeverity },
+  })
+}
+
+export async function getInsights(
+  repositoryId: number,
+  days = 30,
+  refresh = false,
+): Promise<InsightsReport> {
+  return request<InsightsReport>(`/repositories/${repositoryId}/insights`, {
+    query: { days, refresh },
   })
 }
 

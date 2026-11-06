@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -8,6 +8,7 @@ import {
   getConflicts,
   getDependencies,
   getDockerStatus,
+  getInsights,
   getLog,
   getMirror,
   getRecommendations,
@@ -31,6 +32,7 @@ import type {
   DockerContainer,
   DockerPort,
   DockerStatus,
+  InsightsReport,
   MirrorProviderStatus,
   MirrorStatus,
   Recommendation,
@@ -50,6 +52,8 @@ const EXECUTABLE_ACTIONS: Record<string, string> = {
   pull: 'pull',
   'pull-rebase': 'pull',
 }
+
+const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
 
 interface ActionPrompt {
   kind: 'local' | 'mirror'
@@ -91,6 +95,10 @@ export default function RepositoryDetails() {
   const [securityLoading, setSecurityLoading] = useState(!invalidId)
   const [securityRefreshing, setSecurityRefreshing] = useState(false)
   const [securityError, setSecurityError] = useState<string | null>(null)
+  const [insights, setInsights] = useState<InsightsReport | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(!invalidId)
+  const [insightsRefreshing, setInsightsRefreshing] = useState(false)
+  const [insightsError, setInsightsError] = useState<string | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -239,6 +247,34 @@ export default function RepositoryDetails() {
     }
   }, [invalidId, repositoryId])
 
+  useEffect(() => {
+    if (invalidId) {
+      return
+    }
+    let active = true
+    setInsightsLoading(true)
+    void getInsights(repositoryId)
+      .then((report) => {
+        if (active) {
+          setInsights(report)
+          setInsightsError(null)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setInsightsError('Не удалось загрузить инсайты.')
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setInsightsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [invalidId, repositoryId])
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
@@ -312,6 +348,18 @@ export default function RepositoryDetails() {
       setSecurityError('Не удалось проверить безопасность.')
     } finally {
       setSecurityRefreshing(false)
+    }
+  }
+
+  async function handleInsightsRefresh() {
+    setInsightsRefreshing(true)
+    try {
+      setInsights(await getInsights(repositoryId, 30, true))
+      setInsightsError(null)
+    } catch {
+      setInsightsError('Не удалось загрузить инсайты.')
+    } finally {
+      setInsightsRefreshing(false)
     }
   }
 
@@ -415,6 +463,13 @@ export default function RepositoryDetails() {
   const securitySecrets = security?.secrets.findings ?? []
   const securityHasCritical =
     (security?.summary.critical ?? 0) + (security?.summary.high ?? 0) > 0
+
+  const insightsHotspots = insights?.hotspots ?? []
+  const insightsCommits = insights?.summary.commits ?? 0
+  const maxHotspotCount = insightsHotspots.reduce(
+    (max, item) => Math.max(max, item.count),
+    0,
+  )
 
   return (
     <section className="space-y-6">
@@ -921,6 +976,139 @@ export default function RepositoryDetails() {
             </div>
           </div>
 
+          <div
+            data-testid="hotspots-block"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Технический долг (Hotspots)
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  за {insights?.window.hotspots_days ?? 90} дней
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleInsightsRefresh()}
+                  disabled={insightsRefreshing || insightsLoading}
+                  className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {insightsRefreshing ? 'Обновление…' : 'Обновить'}
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {insightsLoading ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Анализ истории…
+                </p>
+              ) : insightsError ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  {insightsError}
+                </p>
+              ) : insights === null ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Нет данных о hotspots.
+                </p>
+              ) : (
+                <>
+                  {insightsNotice(insights) && (
+                    <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                      {insightsNotice(insights)}
+                    </p>
+                  )}
+                  {insightsHotspots.length > 0 ? (
+                    <ul className="space-y-3">
+                      {insightsHotspots.map((item) => (
+                        <li
+                          key={item.file}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="truncate font-mono text-xs text-slate-700 dark:text-slate-300"
+                              title={item.file}
+                            >
+                              {item.file}
+                            </p>
+                            <div className="mt-1 h-1.5 rounded bg-slate-100 dark:bg-slate-800">
+                              <div
+                                className="h-1.5 rounded bg-primary"
+                                style={{
+                                  width: `${
+                                    maxHotspotCount > 0
+                                      ? Math.round((item.count / maxHotspotCount) * 100)
+                                      : 0
+                                  }%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                            {item.count}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Нет данных о hotspots.
+                    </p>
+                  )}
+                  <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                    Кандидаты на рефакторинг · merge-коммиты исключены
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div
+            data-testid="activity-block"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Активность (30 дней)
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                коммитов: {insightsCommits}
+              </span>
+            </div>
+            <div className="p-4">
+              {insightsLoading ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Загрузка активности…
+                </p>
+              ) : insightsError ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  {insightsError}
+                </p>
+              ) : insights === null || insightsCommits === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Нет активности.
+                </p>
+              ) : (
+                <>
+                  <Suspense
+                    fallback={
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Загрузка графика…
+                      </p>
+                    }
+                  >
+                    <InsightsSparkline data={insights.commit_frequency} />
+                  </Suspense>
+                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                    Прокси DORA (commit frequency):{' '}
+                    {insights.summary.per_week.toFixed(2)} коммитов в неделю
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1385,6 +1573,23 @@ function dependencySourceLabel(source: DependencyEcosystemReport['source']): str
       return 'устаревший кэш'
     default:
       return '—'
+  }
+}
+
+function insightsNotice(report: InsightsReport): string | null {
+  switch (report.status) {
+    case 'timeout':
+      return 'Git не ответил за 10 секунд. Данные могут быть неполными.'
+    case 'unavailable':
+      return 'Не удалось прочитать историю Git.'
+    case 'no_branch':
+      return 'Ветка не определена — частота коммитов недоступна.'
+    case 'shallow_clone':
+      return 'Shallow clone: числа могут быть занижены.'
+    case 'partial':
+      return 'Часть данных недоступна (история Git прочитана не полностью).'
+    default:
+      return null
   }
 }
 

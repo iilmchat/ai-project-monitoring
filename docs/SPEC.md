@@ -2,7 +2,7 @@
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
-Security §3.16 — в Sprint 28; Insights §3.17 — **план** (Sprint 29).
+Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 
 **Версия:** v0.6.0 «Security, Insights & Collaboration» (в разработке) · **Обновлено:** 2026-11-06
 
@@ -667,10 +667,12 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.17. Insights — Hotspots и DORA-lite (v0.6.0, Sprint 29, план)
+### 3.17. Insights — Hotspots и DORA-lite (v0.6.0, Sprint 29)
 
 Анализ Git-истории репозитория: файлы с высоким churn и частота коммитов в
-ветке. Только чтение (`git log`, `git rev-list`); `fetch` не выполняется.
+ветке. Только чтение (`git log`, `git rev-parse`); `fetch` не выполняется.
+
+**Статус реализации:** Sprint 29 — реализовано (`InsightsService`).
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -682,38 +684,25 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 {
   "repository_id": 1,
   "checked_at": "2026-11-06T10:00:00Z",
+  "status": "ok",
   "window": {
     "days": 30,
-    "since": "2026-10-07",
+    "since": "2026-10-08",
     "until": "2026-11-06",
-    "branch": "main"
+    "branch": "main",
+    "hotspots_days": 90
   },
-  "hotspots": {
-    "status": "ok",
-    "total_commits_analyzed": 84,
-    "files": [
-      {
-        "path": "backend/app/services/status_service.py",
-        "changes": 17,
-        "authors": 2,
-        "share": 0.12,
-        "last_commit": "2026-11-05T18:20:00Z"
-      }
-    ],
-    "error": null
-  },
-  "deployment_frequency": {
-    "status": "ok",
+  "hotspots": [
+    {"file": "backend/app/services/status_service.py", "count": 17}
+  ],
+  "commit_frequency": [
+    {"date": "2026-10-08", "count": 3},
+    {"date": "2026-10-09", "count": 0}
+  ],
+  "summary": {
     "commits": 42,
-    "merge_commits": 6,
     "per_day": 1.4,
-    "per_week": 9.8,
-    "bucket": "day",
-    "sparkline": [
-      {"date": "2026-10-07", "commits": 3},
-      {"date": "2026-10-08", "commits": 0}
-    ],
-    "error": null
+    "per_week": 9.8
   },
   "error": null
 }
@@ -721,46 +710,54 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 #### 3.17.1. Hotspots
 
-- Окно: `days` (default 30, максимум 365), `since = today - days`.
-- `changes` — число коммитов в окне, затронувших путь (не строки diff);
-  merge-коммиты исключены (`--no-merges`).
-- По умолчанию возвращается **топ-5** (`INSIGHTS_HOTSPOTS_LIMIT`), сортировка:
-  `changes` desc, при равенстве — `path` asc (детерминизм).
-- `share = changes / total_commits_analyzed` (0..1, 2 знака).
-- `authors` — число уникальных авторов, менявших файл; `last_commit` — дата
-  последнего такого коммита.
-- Переименования не отслеживаются (без rename detection) — churn до переезда
+- Окно фиксировано: `INSIGHTS_HOTSPOTS_DAYS` (default **90** ≈ 3 месяца),
+  команда `git log --no-merges --name-only --since="3 months ago" --format=`.
+- `count` — число коммитов, затронувших файл (не строки diff); merge-коммиты
+  исключены, один коммит считается один раз на файл.
+- Возвращается **топ-5** (`INSIGHTS_HOTSPOTS_LIMIT`), сортировка `count` desc,
+  при равенстве — `file` asc (детерминизм).
+- Фильтруются:
+  - удалённые/отсутствующие в рабочей директории файлы;
+  - документация `*.md`;
+  - lock-файлы (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`,
+    `poetry.lock`, `uv.lock`, `Cargo.lock`, `go.sum`, `*-lock.json`, `*.lock`);
+  - generated/minified (`*.min.js`, `*.min.css`, `*.map`, `*.snap`);
+  - каталоги `node_modules`, `.venv`, `venv`, `vendor`, `dist`, `build`,
+    `target`, `__pycache__`, `.git`.
+- Переименования не отслеживаются (без rename detection): churn до переезда
   остаётся на старом пути.
-- `hotspots.status ∈ {ok, no_branch, shallow_clone, timeout, unavailable}`.
-  Пустая история → `status=ok`, `files=[]`.
+- Нет коммитов в окне или всё отфильтровано → `hotspots=[]`, `status=ok`.
 
-#### 3.17.2. DORA-lite (Deployment Frequency)
+#### 3.17.2. DORA-lite (Commit Frequency)
 
 - Это **прокси** частоты поставки по коммитам в ветке, а не учёт реальных
   деплоев; UI подписывает блок как «commit frequency».
-- `branch` определяется по порядку: upstream-ветка → `main` → `master` →
-  текущая ветка HEAD. Если ветка не найдена — `status=no_branch`.
-- `commits` — все коммиты, достижимые из tip ветки за окно (merge включены);
-  `merge_commits` — подмножество merge-коммитов, отдаётся отдельно для
-  прозрачности.
-- `bucket`: `day` при `days ≤ 90`, иначе `week`; `sparkline` содержит все
-  бакеты окна, включая нулевые.
-- `per_day = commits / days`, `per_week = per_day * 7`, округление до 2 знаков.
-- `deployment_frequency.status ∈ {ok, no_branch, shallow_clone, unavailable}`.
+- `branch` определяется по порядку: `main` → `master` → текущая ветка HEAD.
+  Если ни одна не найдена — `status=no_branch`, `branch=null`.
+- Команда `git log <branch> --since="<days> days ago" --format=%ad --date=short`;
+  merge-коммиты включены (каждый push в ветку — потенциальный деплой).
+- `commit_frequency` содержит **все дни окна** (`days` точек, заканчивая
+  сегодняшним), пропуски заполняются `count=0`.
+- `summary.commits = Σ count`; `per_day = commits / days`,
+  `per_week = per_day * 7`, округление до 2 знаков.
 - Shallow clone (`.git/shallow`) даёт `status=shallow_clone`: числа могут быть
   занижены, вместо тихой неверной картины.
 
-#### 3.17.3. Кэш и производительность
+#### 3.17.3. Статусы, кэш и производительность
 
+- `status ∈ {ok, partial, no_branch, shallow_clone, timeout, unavailable}`.
+  Приоритет: `timeout` → `unavailable` (обе команды не удались) →
+  `no_branch` → `shallow_clone` → `partial` (одна из команд) → `ok`.
+- `error` — код причины: `timeout`, `git_unavailable`, `branch_not_found`,
+  `partial`, `output_too_large`; для `ok`/`shallow_clone` — `null`.
 - In-memory кэш `INSIGHTS_CACHE_TTL_SECONDS` (default **300**), ключ
-  `repository_id + branch + days`; `refresh=true` обходит кэш.
-- Git-вызовы асинхронные (subprocess), таймаут `INSIGHTS_GIT_TIMEOUT_SECONDS`
-  (default **10**); при timeout процесс завершается, ответ `status=timeout`,
-  HTTP 200.
-- Размер stdout ограничен; для больших репозиториев анализ может быть
-  неполным — это отражается в статусе, а не в 500.
-- `error` верхнего уровня — только для непредвиденных ошибок; штатные
-  ограничения выражаются статусами блоков.
+  `repo_path + days`; `refresh=true` обходит кэш.
+- Git-вызовы асинхронные (`asyncio.create_subprocess_exec`), таймаут
+  `INSIGHTS_GIT_TIMEOUT_SECONDS` (default **10**); при timeout процесс
+  убивается, ответ — `status=timeout`, HTTP 200.
+- Размер stdout ограничен **8 MiB**; превышение → `status=partial`,
+  `error=output_too_large`, а не 500.
+- `GIT_OPTIONAL_LOCKS=0`; рабочая директория и индекс не изменяются.
 
 ---
 
@@ -864,7 +861,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 | **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25) и `package.json` (Node, Sprint 26) в корне (+ относительные `-r` include)** |
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
-| **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5); только `git log`/`git rev-list`, без fetch** |
+| **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
 
 ---
 
@@ -922,11 +919,11 @@ security_cache(             -- v0.6.0 (Sprint 28)
       история Git — нет; в ответе только masked preview.
 - [x] Secrets: лимиты файлов/размера соблюдаются; `# iiruchating:ignore-secret`
       и `include_secrets=false` работают.
-- [ ] Insights: `GET /repositories/{id}/insights` возвращает топ-5 hotspots и
+- [x] Insights: `GET /repositories/{id}/insights` возвращает топ-5 hotspots и
       commit frequency по §3.17; Git-вызовы не блокируют event loop.
-- [ ] Insights: timeout ≤ 10 с, кэш 300 с, `refresh=true`; пустая история и
+- [x] Insights: timeout ≤ 10 с, кэш 300 с, `refresh=true`; пустая история и
       shallow clone дают статус, а не 500.
-- [ ] Read-only: нет установки/обновления пакетов, fetch/checkout/reset и
+- [x] Read-only: нет установки/обновления пакетов, fetch/checkout/reset и
       записи в репозиторий (grep-аудит); секреты не попадают в логи и диффы.
 - [ ] Collaboration: Markdown-сводка копируется и отражает фильтры;
       export/import workspace сохраняет views и колонки, не экспортирует токены.
@@ -1063,7 +1060,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - Кнопка «Проверить снова» → `?refresh=true`; автоматического обновления пакетов нет.
 - Блоки lazy; счётчик в карточке не требует раскрытия списка.
 
-### 9.10 Security и Insights (v0.6.0; security — Sprint 28, insights — план Sprint 29)
+### 9.10 Security и Insights (v0.6.0; Sprint 28–29)
 
 **Security:**
 

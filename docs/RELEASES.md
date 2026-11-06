@@ -4,6 +4,27 @@
 
 ---
 
+## Спринт 29: Tech Debt & Insights (v0.6.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S29-001: `InsightsService` — churn hotspots (`git log --no-merges --name-only --since="3 months ago"`), топ-5, фильтры lock/docs/generated/удалённых файлов.
+- [x] S29-001: DORA-lite commit frequency (`git log <branch> --format=%ad --date=short`) с заполнением пустых дней и summary `commits/per_day/per_week`.
+- [x] S29-001: `asyncio.create_subprocess_exec` runner, `GIT_OPTIONAL_LOCKS=0`, timeout 10 с, лимит stdout 8 MiB, in-memory кэш 300 с.
+- [x] S29-002: `GET /api/v1/repositories/{id}/insights` (`days`, `refresh`).
+- [x] S29-003: UI — блоки «Технический долг (Hotspots)» и «Активность (30 дней)» с lazy `recharts` sparkline.
+- [x] S29-004: тесты (`test_insights.py`), SPEC §3.17, ARCHITECTURE §13, CHANGELOG/RELEASES.
+
+### Результаты
+
+- Backend-тесты: 175 passed
+- Frontend-тесты: 23 passed
+- Entry bundle: 85.59 kB gzip; `InsightsSparkline` — 6.55 kB gzip (lazy), `RepositoryDetails` — 9.37 kB gzip.
+
+---
+
 ## Спринт 28: Supply Chain Security (v0.6.0)
 
 **Дата:** 2026-11-06 · **Статус:** ✅ Завершён

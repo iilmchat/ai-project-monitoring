@@ -295,6 +295,49 @@ export interface SecurityReport {
   error: string | null
 }
 
+export type InsightsStatus =
+  | 'ok'
+  | 'partial'
+  | 'no_branch'
+  | 'shallow_clone'
+  | 'timeout'
+  | 'unavailable'
+
+export interface InsightsWindow {
+  days: number
+  since: string
+  until: string
+  branch: string | null
+  hotspots_days: number
+}
+
+export interface Hotspot {
+  file: string
+  count: number
+}
+
+export interface CommitFrequencyPoint {
+  date: string
+  count: number
+}
+
+export interface InsightsSummary {
+  commits: number
+  per_day: number
+  per_week: number
+}
+
+export interface InsightsReport {
+  repository_id: number
+  checked_at: string
+  status: InsightsStatus
+  window: InsightsWindow
+  hotspots: Hotspot[]
+  commit_frequency: CommitFrequencyPoint[]
+  summary: InsightsSummary
+  error: string | null
+}
+
 export type HeatmapData = Record<string, number>
 
 export interface AppSettings {

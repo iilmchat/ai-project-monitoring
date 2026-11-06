@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     secret_scan_max_files: int = 5000
     secret_scan_max_file_bytes: int = 1048576
     secret_scan_ttl_seconds: int = 300
+    insights_cache_ttl_seconds: int = 300
+    insights_git_timeout_seconds: float = 10.0
+    insights_hotspots_limit: int = 5
+    insights_hotspots_days: int = 90
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

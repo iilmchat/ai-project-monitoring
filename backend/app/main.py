@@ -26,6 +26,7 @@ from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
 from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
+from app.services.insights_service import InsightsService
 from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
@@ -116,6 +117,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         secret_scan_max_file_bytes=resolved.secret_scan_max_file_bytes,
         secret_scan_ttl_seconds=resolved.secret_scan_ttl_seconds,
     )
+    insights_service = InsightsService(
+        cache_ttl_seconds=resolved.insights_cache_ttl_seconds,
+        timeout_seconds=resolved.insights_git_timeout_seconds,
+        hotspots_limit=resolved.insights_hotspots_limit,
+        hotspots_days=resolved.insights_hotspots_days,
+    )
     mirror_scheduler = MirrorScheduler(
         mirror_service,
         session_factory,
@@ -177,6 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.dependency_service = dependency_service
     application.state.osv_client = osv_client
     application.state.security_service = security_service
+    application.state.insights_service = insights_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

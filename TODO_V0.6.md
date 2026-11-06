@@ -1,7 +1,7 @@
 # TODO v0.6.0 — Security, Insights & Collaboration
 
 **Версия:** v0.6.0 «Security, Insights & Collaboration»
-**Статус:** 🚧 В разработке (Sprint 28 ✅); спринты 29–30 запланированы
+**Статус:** 🚧 В разработке (Sprint 28–29 ✅); спринт 30 запланирован
 **Предыдущий этап:** v0.5.0 — [`TODO_V0.5.md`](TODO_V0.5.md)
 **Последнее обновление:** 2026-11-06
 
@@ -136,11 +136,11 @@
 
 ### Спринт 29 — Tech Debt & Insights
 
-**Статус:** ⏳ Запланирован
+**Статус:** ✅ Завершён (2026-11-06)
 
 **Задачи**
 
-- **S29-001. Git-log runner для InsightsService.**
+- [x] **S29-001. Git-log runner для InsightsService.**
   - `asyncio.create_subprocess_exec` (или `asyncio.to_thread`) с `cwd=repo.path`,
     `GIT_OPTIONAL_LOCKS=0`; только `git log` / `git rev-list`.
   - Таймаут `INSIGHTS_GIT_TIMEOUT_SECONDS=10`; при превышении процесс
@@ -149,53 +149,55 @@
     дают 500.
   - Определение ветки: upstream → `main` → `master` → текущая ветка HEAD.
 
-- **S29-002. Hotspots.**
-  - `git log --since=<days> --no-merges --name-only --pretty=format:` в окне
-    (default 30 дней, max 365).
-  - `changes` = число коммитов, затронувших путь (не строк diff); топ-5 по
-    `changes` desc, при равенстве — `path` asc; `share` = changes / сумма.
+- [x] **S29-002. Hotspots.**
+  - `git log --no-merges --name-only --since="3 months ago" --format=`
+    (окно ≈90 дней, `INSIGHTS_HOTSPOTS_DAYS`).
+  - `count` = число коммитов, затронувших файл (не строк diff); топ-5 по
+    `count` desc, при равенстве — `file` asc.
+  - Фильтры: удалённые файлы, `*.md`, lock-файлы, generated/minified,
+    `node_modules`/`.venv`/`vendor`/`dist`/`build`/`target`.
   - Переименования не отслеживаются (`--name-only`, без rename detection) —
     ограничение фиксируется в документации.
-  - Пустая история → `files=[]`, `status=ok`; shallow clone → `shallow_clone`.
+  - Пустая история → `hotspots=[]`, `status=ok`; shallow clone → `shallow_clone`.
 
-- **S29-003. DORA-lite (Deployment Frequency).**
-  - `git rev-list --count <branch> --since=<window>`; `merge_commits` считается
-    отдельно (`--merges`), `commits` включает все коммиты ветки.
-  - Sparkline: `git log --format=%ad --date=short --since=<window>`; bucket =
-    `day` для окон ≤ 90 дней, `week` для 91–365; пустые дни заполняются нулём.
+- [x] **S29-003. DORA-lite (Deployment Frequency).**
+  - `git log <branch> --since="<days> days ago" --format=%ad --date=short`;
+    merge-коммиты включены, отдельный `merge_commits` не отдаётся.
+  - `commit_frequency` — daily-точки за всё окно; пустые дни заполняются нулём.
   - `per_day` / `per_week` — производные, округление до 2 знаков.
   - Это **прокси** частоты поставки, а не фактический deploy-трекинг; явно
     указывается в ответе и UI.
 
-- **S29-004. API `GET /api/v1/repositories/{id}/insights`.**
+- [x] **S29-004. API `GET /api/v1/repositories/{id}/insights`.**
   - Параметры `days?: int (default 30, 1..365)`, `refresh?: bool`.
   - Ответ `InsightsReport` по SPEC §3.17; in-memory кэш
-    `INSIGHTS_CACHE_TTL_SECONDS=300`, ключ `repo_id + branch + days`.
+    `INSIGHTS_CACHE_TTL_SECONDS=300`, ключ `repo_path + days`.
 
-- **S29-005. UI-блок «Инсайты».**
+- [x] **S29-005. UI-блок «Инсайты».**
   - Топ-5 «горячих» файлов: путь (mono, обрезка + tooltip), число изменений,
     относительная полоса.
   - Sparkline commit frequency за окно + подпись «за 30 дней, прокси DORA».
   - Пустые/частичные состояния; блок lazy; кнопка «Обновить».
 
-- **S29-006. Тесты и документация.**
+- [x] **S29-006. Тесты и документация.**
   - Тесты на tmp-репозиториях: детерминированные истории, топ-5 и tie-break,
     merge-коммиты, пустая ветка, shallow clone, timeout (fake).
   - SPEC/ARCHITECTURE/CHANGELOG; отметить ограничения rename/shallow.
 
 **DoD:**
 
-- [ ] `GET /repositories/{id}/insights` соответствует SPEC §3.17.
-- [ ] Event loop не блокируется: Git-вызовы асинхронные, таймаут ≤ 10 с,
+- [x] `GET /repositories/{id}/insights` соответствует SPEC §3.17.
+- [x] Event loop не блокируется: Git-вызовы асинхронные, таймаут ≤ 10 с,
       зависший `git` не вешает API.
-- [ ] Hotspots детерминированы, top-5 по умолчанию, merge-коммиты исключены.
-- [ ] DORA-lite считает коммиты в ветке за окно; ветка и `merge_commits`
-      отражены в ответе; sparkline заполняет пустые дни.
-- [ ] Пустой репозиторий / нет ветки / shallow clone → состояние, не 500.
-- [ ] Read-only: только `git log`/`git rev-list`; нет fetch/checkout/reset
+- [x] Hotspots детерминированы, top-5 по умолчанию, merge-коммиты исключены,
+      lock/docs/generated пути отфильтрованы.
+- [x] DORA-lite считает коммиты в ветке за окно; `commit_frequency` заполняет
+      пустые дни, summary содержит `commits/per_day/per_week`.
+- [x] Пустой репозиторий / нет ветки / shallow clone → состояние, не 500.
+- [x] Read-only: только `git log`/`git rev-parse`; нет fetch/checkout/reset
       (grep-аудит).
-- [ ] Кэш 300 с и `refresh=true`; entry bundle в бюджете (блок lazy).
-- [ ] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
+- [x] Кэш 300 с и `refresh=true`; entry bundle в бюджете (блок lazy).
+- [x] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
 
 ---
 

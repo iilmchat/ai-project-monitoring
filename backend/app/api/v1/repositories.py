@@ -40,6 +40,7 @@ from app.schemas.action import (
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.dependency import DependencyReport
 from app.schemas.docker import DockerStatusResponse
+from app.schemas.insights import InsightsReport
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
     MirrorPolicyUpdate,
@@ -67,6 +68,7 @@ from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
 from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
+from app.services.insights_service import InsightsService
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
 from app.services.security_service import SecurityService
@@ -102,6 +104,11 @@ def _dependency_service(request: Request) -> DependencyService:
 
 def _security_service(request: Request) -> SecurityService:
     service: SecurityService = request.app.state.security_service
+    return service
+
+
+def _insights_service(request: Request) -> InsightsService:
+    service: InsightsService = request.app.state.insights_service
     return service
 
 
@@ -235,6 +242,26 @@ async def repository_security(
         refresh=refresh,
         include_secrets=include_secrets,
         min_severity=min_severity,
+    )
+
+
+@router.get(
+    "/repositories/{repository_id}/insights",
+    response_model=InsightsReport,
+)
+async def repository_insights(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+    refresh: Annotated[bool, Query()] = False,
+) -> InsightsReport:
+    repository = await _get_repository(session, repository_id)
+    return await _insights_service(request).get_report(
+        repository.id,
+        repository.path,
+        days=days,
+        refresh=refresh,
     )
 
 

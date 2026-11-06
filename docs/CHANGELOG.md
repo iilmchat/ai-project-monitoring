@@ -10,8 +10,16 @@
 - feat(api): `GET /api/v1/repositories/{id}/security` с `refresh`, `include_secrets`, `min_severity` (S28-003).
 - feat(ui): блок «Безопасность» — severity-бейджи, CVE/OSV-ссылки, `fixed_version`, красный алерт о секретах с masked preview (S28-004).
 - test(security): OSV-парсинг, CVSS, кэш/partial failure, secret-правила и маскирование, API-контракт (S28-005).
+- feat(insights): `InsightsService` — churn hotspots за 3 месяца (`git log --name-only --no-merges`), топ-5 с фильтрацией lock/docs/generated/удалённых файлов (S29-001).
+- feat(insights): DORA-lite commit frequency по дням с заполнением пустых дней и summary `commits/per_day/per_week` (S29-001).
+- feat(insights): асинхронный `asyncio.create_subprocess_exec` runner, timeout 10 с, in-memory кэш 300 с, статусы `partial/no_branch/shallow_clone/timeout` (S29-001).
+- feat(api): `GET /api/v1/repositories/{id}/insights` с `days` и `refresh` (S29-002).
+- feat(ui): блоки «Технический долг (Hotspots)» и «Активность (30 дней)» — lazy `recharts` sparkline, счётчики churn и пустые состояния (S29-003).
+- test(insights): парсинг git-log, фильтры, кэш, timeout/no_branch/shallow и реальный tmp-репозиторий (S29-004).
 
 ### Документация
+
+- docs(insights): SPEC §3.17 (фактические поля), ARCHITECTURE §13, CHANGELOG/RELEASES (S29-004).
 
 - docs(security): SPEC §3.16 (фактические поля), ARCHITECTURE §12, ADR-0009, KI-011/012 в матрицу (S28-005).
 - docs(planning): план v0.6.0 — supply-chain security (OSV.dev CVE, secret scanning), insights (hotspots, DORA-lite), collaboration/export; SPEC §3.16–3.17, ARCHITECTURE §12–14, KI-011/012 (S27-001..S27-003).

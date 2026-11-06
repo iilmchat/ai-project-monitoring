@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +10,7 @@ import {
   getConflicts,
   getDependencies,
   getDockerStatus,
+  getInsights,
   getLog,
   getMirror,
   getRecommendations,
@@ -20,10 +22,12 @@ import type {
   DashboardRepository,
   DependencyReport,
   DockerStatus,
+  InsightsReport,
   MirrorStatus,
   RepositoryStatus,
   SecurityReport,
 } from '../api/types'
+import { ThemeProvider } from '../theme/ThemeContext'
 import RepositoryDetails from './RepositoryDetails'
 
 vi.mock('../api/client', () => ({
@@ -32,6 +36,7 @@ vi.mock('../api/client', () => ({
   getConflicts: vi.fn(),
   getDependencies: vi.fn(),
   getDockerStatus: vi.fn(),
+  getInsights: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
   getRecommendations: vi.fn(),
@@ -43,6 +48,17 @@ vi.mock('../api/client', () => ({
   runAction: vi.fn(),
   runMirrorAction: vi.fn(),
   updateMirrorPolicy: vi.fn(),
+}))
+
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AreaChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Area: () => <div data-testid="area" />,
+  Tooltip: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
 }))
 
 const status: RepositoryStatus = {
@@ -166,13 +182,35 @@ const cleanSecurity: SecurityReport = {
   error: null,
 }
 
+const cleanInsights: InsightsReport = {
+  repository_id: 1,
+  checked_at: '2026-11-06T10:00:00Z',
+  status: 'ok',
+  window: {
+    days: 30,
+    since: '2026-10-08',
+    until: '2026-11-06',
+    branch: 'main',
+    hotspots_days: 90,
+  },
+  hotspots: [],
+  commit_frequency: Array.from({ length: 30 }, (_, index) => ({
+    date: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    count: 0,
+  })),
+  summary: { commits: 0, per_day: 0, per_week: 0 },
+  error: null,
+}
+
 function renderDetails() {
   return render(
-    <MemoryRouter initialEntries={['/repo/1']}>
-      <Routes>
-        <Route path="/repo/:id" element={<RepositoryDetails />} />
-      </Routes>
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={['/repo/1']}>
+        <Routes>
+          <Route path="/repo/:id" element={<RepositoryDetails />} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
@@ -201,6 +239,7 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)
     vi.mocked(getDependencies).mockResolvedValue(dependenciesNoManifest)
     vi.mocked(getSecurity).mockResolvedValue(cleanSecurity)
+    vi.mocked(getInsights).mockResolvedValue(cleanInsights)
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',
@@ -466,5 +505,47 @@ describe('RepositoryDetails actions', () => {
 
     const clean = await screen.findAllByText('Уязвимостей не найдено')
     expect(clean.length).toBeGreaterThan(0)
+  })
+
+  it('renders hotspots with churn counts', async () => {
+    vi.mocked(getInsights).mockResolvedValue({
+      ...cleanInsights,
+      hotspots: [
+        { file: 'backend/app/services/status_service.py', count: 7 },
+        { file: 'frontend/src/App.tsx', count: 3 },
+      ],
+    })
+
+    renderDetails()
+
+    const block = await screen.findByTestId('hotspots-block')
+    expect(
+      within(block).getByText('backend/app/services/status_service.py'),
+    ).toBeInTheDocument()
+    expect(within(block).getByText('7')).toBeInTheDocument()
+    expect(within(block).getByText('3')).toBeInTheDocument()
+  })
+
+  it('renders the activity sparkline for active repositories', async () => {
+    vi.mocked(getInsights).mockResolvedValue({
+      ...cleanInsights,
+      commit_frequency: cleanInsights.commit_frequency.map((point, index) =>
+        index === cleanInsights.commit_frequency.length - 1
+          ? { ...point, count: 5 }
+          : point,
+      ),
+      summary: { commits: 5, per_day: 0.17, per_week: 1.17 },
+    })
+
+    renderDetails()
+
+    expect(await screen.findByTestId('insights-sparkline')).toBeInTheDocument()
+    expect(screen.getByText('коммитов: 5')).toBeInTheDocument()
+  })
+
+  it('shows no activity when there are no commits', async () => {
+    renderDetails()
+
+    expect(await screen.findByText('Нет активности.')).toBeInTheDocument()
   })
 })
