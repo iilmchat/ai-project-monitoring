@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-—
+### Документация
+
+- docs(planning): план v0.7.0 — LLM (commit message, CVE explain), global dependencies, dependency updates; SPEC §3.18–3.20, ARCHITECTURE §15–17, KI-013/014 (S31-001..S31-003).
 
 ## [0.6.0] - 2026-11-06
 

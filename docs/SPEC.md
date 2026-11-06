@@ -3,8 +3,10 @@
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
+AI §3.18, global analytics §3.19 и dependency updates §3.20 — **план v0.7.0**
+(спринты 32–34); контракты зафиксированы до реализации.
 
-**Версия:** v0.6.0 «Security, Insights & Collaboration» · **Обновлено:** 2026-11-06
+**Версия:** v0.7.0 «AI & Global Analytics» (планирование) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -25,6 +27,9 @@ Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 | **R9** | **Polling + webhook**: периодическая сверка и мгновенная реакция на push |
 | **R10** | **Supply-chain security (v0.6.0): CVE-проверка зависимостей через OSV.dev и базовый поиск секретов — без изменения репозитория** |
 | **R11** | **Insights (v0.6.0): hotspots по churn и commit frequency (DORA-lite) из Git-истории** |
+| **R12** | **AI (v0.7.0): локальный LLM через OpenAI-совместимый API — черновик commit message и объяснение CVE без автоматических мутаций** |
+| **R13** | **Global analytics (v0.7.0): сводка версий популярных пакетов по всем tracked-репозиториям и кандидаты на унификацию** |
+| **R14** | **Dependency updates (v0.7.0): обновление пакетов только по явному подтверждению, на чистом worktree и с аудитом `action_log`** |
 
 **Вне области v0.1.0:** автоматический merge/rebase, CI-интеграция, мобильное приложение, мультипользовательский режим.
 
@@ -32,7 +37,7 @@ Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 
 ## 2. Роли
 
-В v0.1.0 — **один пользователь** (владелец локальной машины). Аутентификация отсутствует (bind на `127.0.0.1`). Провайдеры GitHub/GitFlic авторизуются персональными токенами (`GITHUB_TOKEN`, `GITFLIC_TOKEN`), хранятся в `.env`.
+В v0.1.0 — **один пользователь** (владелец локальной машины). Аутентификация отсутствует (bind на `127.0.0.1`). Провайдеры GitHub/GitFlic авторизуются персональными токенами (`GITHUB_TOKEN`, `GITFLIC_TOKEN`), хранятся в `.env`. LLM API key (если нужен) хранится в `app_settings`, маскируется в API и не экспортируется.
 
 ---
 
@@ -246,11 +251,15 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
 | POST | `/repositories/{id}/actions/{action}` | `{confirm: true}` | `ActionLog` |
+| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm: true, ecosystem?, packages?}` | `ActionLog` (v0.7.0, план) |
 | POST | `/mirror/actions/{action}` | `{confirm: true, repository_id}` | `ActionLog` |
 | GET | `/admin/actions` | `repository_id?`, `limit?` | `ActionLog[]` |
 
 - `action ∈ {pull, push, stash}`; `mirror action = push-mirror`.
 - Без `confirm=true` → 400; неизвестное действие → 400.
+- `update-dependencies` (v0.7.0) — отдельное действие Sprint 34; требует чистого
+  worktree (`409 dirty_worktree`), пишет `action_log` даже при отказе/ошибке.
+  Детали — §3.20.
 - Destructive-команды (`reset --hard`, `clean -f`, `push --force`, `checkout .`) отсутствуют.
 - `ActionLog`: `repository_id, action, command, status, exit_code, output, actor, created_at`.
 
@@ -276,6 +285,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 | POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true), body `{repo_ids?}` | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?`, body `{repo_ids?}` | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
+| POST | `/repositories/actions/update_dependencies_all` | `{repo_ids?}`, `ecosystem?`, body `{confirm:true}` | `202 {status:"accepted"}` (v0.7.0, план) |
 
 Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
 `repo_ids` (опционально) ограничивает операцию выбранными репозиториями; без него
@@ -284,6 +294,9 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 для `mirror_status ∈ {behind_gitflic, missing_on_gitflic}` и пишет `action_log` (`actor=bulk`).
 `migrate_to_gitflic` переводит `canonical_provider=github` на `gitflic` при заданном
 `gitflic_full_name`, меняет `mirror_policy` и пишет отчёт `{updated, skipped, total}` в лог.
+`update_dependencies_all` (v0.7.0) запускает §3.20 для выбранных `repo_ids`
+(или всех tracked) с concurrency 1–2; грязные репозитории пропускаются с
+`ActionLog.status=error`, `actor=bulk`.
 
 ---
 
@@ -291,13 +304,27 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 | Метод | Путь | Тело / Ответ |
 |-------|------|--------------|
-| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider}` |
+| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_allow_remote}` |
 | PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
 
-Токены и `webhook_secret` в ответе **маскируются** (`ghp_****1234`).
-Разрешённые ключи: `scan_roots`, `github_token`, `gitflic_token`, `webhook_secret`,
-`default_canonical_provider`. Значения хранятся в `app_settings`; при старте
-подхватываются в конфиг (fallback — `config.py`).
+Токены, `webhook_secret` и `llm_api_key` в ответе **маскируются**
+(`ghp_****1234`, `sk-****1234`). Разрешённые ключи: `scan_roots`,
+`github_token`, `gitflic_token`, `webhook_secret`, `default_canonical_provider`,
+`llm_enabled`, `llm_base_url`, `llm_model`, `llm_api_key`,
+`llm_timeout_seconds`, `llm_allow_remote`. Значения хранятся в `app_settings`;
+при старте подхватываются в конфиг (fallback — `config.py`).
+
+**LLM-настройки (v0.7.0, план):**
+
+- `llm_enabled` (default **false**) — AI-функции выключены до явного включения.
+- `llm_base_url` (default `http://127.0.0.1:11434/v1`) — Ollama; LM Studio —
+  `http://127.0.0.1:1234/v1`.
+- `llm_model` (default `qwen2.5-coder:7b`).
+- `llm_api_key` — опционально; для локальных серверов обычно пустой.
+- `llm_timeout_seconds` (default 30).
+- `llm_allow_remote` (default **false**) — не-loopback endpoint запрещён, пока
+  пользователь явно не разрешит.
+- Пустое поле `llm_api_key` при PATCH означает «не менять».
 
 ---
 
@@ -402,7 +429,8 @@ Docker API наружу не отдаётся, только нормализов
 ### 3.15. Dependency management (v0.5.0, Sprint 25–26)
 
 Проверка объявленных зависимостей по манифестам в корне репозитория.
-Файлы только читаются; `pip`/`npm`/`pnpm` не запускаются.
+Файлы только читаются; в рамках проверки зависимостей `pip`/`npm`/`pnpm`
+не запускаются (обновление пакетов — отдельное действие §3.20).
 
 **Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25;
 Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутствие
@@ -761,6 +789,215 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
+### 3.18. AI assistant (v0.7.0, Sprint 32–33, план)
+
+Локальный LLM (Ollama / LM Studio) через OpenAI-совместимый API. Эндпоинты
+**только читают** репозиторий и ничего не коммитят; результат — черновик,
+который пользователь подтверждает вручную.
+
+#### 3.18.1. Генерация commit message
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/repositories/{id}/ai/commit-message` | `{include_untracked?: bool, max_diff_bytes?: int}` | `CommitMessageSuggestion` |
+
+`CommitMessageSuggestion`:
+
+```json
+{
+  "repository_id": 1,
+  "message": "feat(api): add repository security endpoint",
+  "subject": "feat(api): add repository security endpoint",
+  "body": null,
+  "source": "llm",
+  "provider": "ollama",
+  "model": "qwen2.5-coder:7b",
+  "truncated": false,
+  "files_changed": 3,
+  "warnings": [],
+  "generated_at": "2026-11-06T10:00:00Z"
+}
+```
+
+**Правила:**
+
+- Требуется `dirty.modified + dirty.staged > 0`; иначе `422 no_changes`.
+  Untracked-файлы по умолчанию не входят в diff (`include_untracked=false`).
+- Источник diff: `git diff HEAD --no-color --no-ext-diff --unified=3`
+  (staged + unstaged); бинарные файлы исключаются.
+- `max_diff_bytes` (default **65536**, 1024..131072); при обрезке
+  `truncated=true`, `warnings=["truncated_diff"]`. Обрезка — по границе файла.
+- `llm_enabled=false` → `409 llm_disabled`; не-loopback endpoint без
+  `llm_allow_remote=true` → `409 llm_remote_not_allowed`.
+- Промпт: Conventional Commits, subject ≤ 72 символов, опциональное тело.
+  Diff передаётся как данные; инструкции внутри diff игнорируются.
+- Ответ валидируется regex
+  `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+`;
+  Markdown-обёртки снимаются. Невалидный/пустой ответ → fallback.
+- Fallback (timeout/connection/5xx/невалидный ответ): `chore: update N files`
+  с телом по группам файлов, `source="fallback"`, `provider=null`,
+  `warnings=["llm_unavailable"]`; HTTP 200.
+- Diff, промпт и ответ LLM **не** сохраняются в БД и не логируются (только
+  метаданные: байты, модель, source, длительность).
+- `source ∈ {llm, fallback}`; `provider ∈ {ollama, lmstudio, openai_compatible} | null`.
+
+#### 3.18.2. Объяснение CVE
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/repositories/{id}/ai/cve-explain` | `{osv_id, package?, version?, locale?}` | `CveExplanation` |
+
+`CveExplanation`:
+
+```json
+{
+  "osv_id": "GHSA-9wx4-h78v-vm56",
+  "package": "requests",
+  "version": "2.19.0",
+  "severity": "high",
+  "fixed_version": "2.20.0",
+  "explanation": "Уязвимость позволяет отправить учётные данные на чужой хост…",
+  "source": "llm",
+  "model": "qwen2.5-coder:7b",
+  "cached": false,
+  "references": ["https://github.com/advisories/GHSA-9wx4-h78v-vm56"],
+  "generated_at": "2026-11-06T10:00:00Z"
+}
+```
+
+**Правила:**
+
+- Факты берутся из `security_cache` или `GET /v1/vulns/{osv_id}` OSV.dev;
+  client-supplied `summary` не является единственным источником.
+- `locale ∈ {ru, en}` (default **ru**); commit messages всегда английские.
+- LLM получает только нормализованный advisory (id, summary, severity, affected,
+  fixed, references) и обязан не выдумывать факты; ответ содержит ссылки.
+- Кэш `ai_cache` (см. §4): ключ `cve-explain:<osv_id>:<locale>:<model>`,
+  TTL `AI_CACHE_TTL_SECONDS` (default **604800** = 7 дней); `cached=true` при
+  попадании.
+- OSV недоступен и кэша нет → `503 osv_unavailable`; LLM недоступен →
+  grounded-сводка из advisory, `source="fallback"`, HTTP 200.
+- `llm_enabled=false` → `409 llm_disabled`; `404 advisory_not_found` — OSV не
+  знает такой id.
+- Объяснение не содержит полных секретов и не влияет на `SecurityReport`.
+
+---
+
+### 3.19. Global dependencies (v0.7.0, Sprint 33, план)
+
+Сводка объявленных версий популярных пакетов по всем `tracked=true`
+репозиториям. Только чтение; пакеты не обновляются.
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/dashboard/global-dependencies` | `ecosystem?: python\|node\|all`, `limit?: int (default 20, 1..100)`, `outdated_only?: bool`, `refresh?: bool` | `GlobalDependencyReport` |
+
+`GlobalDependencyReport`:
+
+```json
+{
+  "checked_at": "2026-11-06T10:00:00Z",
+  "summary": {
+    "repositories": 34,
+    "repositories_with_manifests": 30,
+    "packages": 120,
+    "outdated_occurrences": 47,
+    "unification_candidates": 8,
+    "missing_latest": 3
+  },
+  "ecosystems": [
+    {
+      "ecosystem": "python",
+      "repositories": 28,
+      "packages": [
+        {
+          "name": "fastapi",
+          "latest": "0.116.0",
+          "repositories": 20,
+          "outdated_repositories": 14,
+          "versions": [
+            {"version": "0.110.0", "repositories": 8},
+            {"version": "0.115.6", "repositories": 6}
+          ],
+          "unification": "mixed",
+          "recommended_version": "0.115.6",
+          "status": "outdated"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "error": null
+}
+```
+
+**Правила:**
+
+- Агрегация: `requirements.txt` + `package.json` (те же парсеры, что §3.15);
+  пакеты без разрешимой версии попадают в `missing_latest`, а не в «current».
+- `limit` — топ-N по числу репозиториев (`repositories` desc, `name` asc).
+- `versions[]` — распределение declared-версий; `recommended_version` —
+  максимальная declared-версия среди репозиториев (кандидат на унификацию),
+  `latest` — последняя из registry-кэша.
+- `unification ∈ {aligned, mixed, unknown}`: одна версия / ≥2 версий / нет
+  разрешимых версий.
+- `status ∈ {current, outdated, unknown}`: `current`, если
+  `recommended_version >= latest`; `outdated`, если ниже; `unknown` без `latest`.
+- `summary.outdated_occurrences` — число пар repo×package с устаревшей версией;
+  `unification_candidates` — пакеты с `unification=mixed`.
+- По умолчанию сетевых вызовов нет: `latest` берётся из `dependency_cache`.
+  `refresh=true` обновляет stale-кэш через registry-клиенты (concurrency ≤ 4),
+  partial failure отражается в `ecosystems[].error`, HTTP 200.
+- In-memory кэш ответа 60 с; ключ `ecosystem + limit + outdated_only`.
+- `outdated_only=true` возвращает только пакеты со `status=outdated`.
+
+---
+
+### 3.20. Automated dependency updates (v0.7.0, Sprint 34, план)
+
+Явная мутация: обновление пакетов выбранного репозитория. Только при
+`confirm=true`, на чистом worktree и с аудитом. Вне этого действия система
+остаётся read-only.
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem?: python\|node\|all, packages?: string[]}` | `ActionLog` |
+| POST | `/repositories/actions/update_dependencies_all` | `{repo_ids?, ecosystem?}`, query/body `confirm=true` | `202 {status:"accepted"}` |
+
+**Preflight:**
+
+- `confirm != true` → `400 confirmation_required`.
+- Worktree грязный (`state=dirty`, `dirty.modified/staged/conflicted > 0`) →
+  `409 dirty_worktree`; действие не выполняется, но попытка пишется в
+  `action_log` (`status=error`).
+- Менеджер: Python — `requirements.txt` → `pip`; Node — `pnpm-lock.yaml` →
+  `pnpm`, иначе `package-lock.json`/`package.json` → `npm`. Если манифеста нет
+  для выбранного ecosystem → `409 no_manifest`.
+
+**Команды:**
+
+- Python (все): `pip install --upgrade -r requirements.txt`;
+  выбранные: `pip install --upgrade <package>...`.
+- Node (все): `pnpm update` / `npm update`;
+  выбранные: `pnpm update <package>...` / `npm update <package>...`.
+- Никаких `git`-мутаций, `--force`, `--legacy-peer-deps` и удаления lock-файлов.
+
+**Ограничения и аудит:**
+
+- Timeout `DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default **180**); по таймауту
+  процесс убивается, `ActionLog.status=error`, `error=timeout`.
+- Вывод ограничен 32 KiB; токены/credentials в URL редактируются
+  (`https://****@host/...`) перед записью в `action_log`.
+- `ActionLog`: `action="update-dependencies"`, `command`, `status`,
+  `exit_code`, `output`, `error`, `duration_ms`, `actor=local|bulk`.
+- Bulk: concurrency 1–2, `actor=bulk`; один упавший репозиторий не отменяет
+  остальные.
+- Обновление может изменить `package.json`/lockfile и окружение backend;
+  UI обязан предупредить пользователя (KI-014). Автоматического коммита нет.
+- ADR-0011 фиксирует preflight-политику и границы доверия.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
@@ -834,9 +1071,17 @@ security_cache(             -- v0.6.0 (Sprint 28)
   payload JSONB,            -- нормализованный ответ OSV.dev
   checked_at
 )
+
+ai_cache(                   -- v0.7.0 (план, Sprint 33)
+  key* TEXT PRIMARY KEY,    -- "cve-explain:GHSA-...:ru:qwen2.5-coder:7b"
+  kind TEXT,                -- cve_explain
+  model TEXT NULL,
+  payload JSONB,            -- {explanation, references, ...}
+  checked_at
+)
 ```
 
-Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`.
+Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`.
 
 ---
 
@@ -847,7 +1092,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 | Библиотека Git | **pygit2** для status/discovery/log/compare; shell `git` (subprocess) для fetch/rev-list |
 | Fetch | `git fetch --all --prune`, таймаут 30 с; ошибка → `remote_status=unavailable` |
 | Read-only | Операции чтения не изменяют рабочую директорию и индекс |
-| Мутации | `fetch`/`pull`/`push`/`stash`/`push_mirror` — только `POST .../actions/{action}` с `confirm=true` и аудитом `action_log` (v0.2.0) |
+| Мутации | `fetch`/`pull`/`push`/`stash`/`push_mirror` — только `POST .../actions/{action}` с `confirm=true` и аудитом `action_log` (v0.2.0); `update-dependencies` — только §3.20 (v0.7.0) |
 | Глубина сканирования | `SCAN_DEPTH` (default 3) |
 | Исключения сканирования | `.git`, `node_modules`, `.venv`, `vendor`, `dist`, `build`, `target` |
 | Параллелизм сканирования | `SCAN_CONCURRENCY` (default 4) |
@@ -862,6 +1107,9 @@ security_cache(             -- v0.6.0 (Sprint 28)
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
+| **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:11434/v1`), `LLM_MODEL` (default `qwen2.5-coder:7b`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_BYTES` (default 65536), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
+| **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 60), `GLOBAL_ANALYTICS_LIMIT` (default 20); по умолчанию только `dependency_cache`, `refresh=true` — registry с concurrency ≤ 4** |
+| **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_BYTES` (default 32768); только `confirm=true` + чистый worktree + `action_log`** |
 
 ---
 
@@ -930,6 +1178,31 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - [x] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
+### 6.4. v0.7.0 (план, спринты 32–34)
+
+- [ ] AI: `POST /repositories/{id}/ai/commit-message` возвращает
+      `CommitMessageSuggestion` по §3.18.1; LLM timeout ≤ 30 с, ошибки →
+      fallback, HTTP 200.
+- [ ] AI: diff ограничен `LLM_MAX_DIFF_BYTES`, бинарники исключены; diff,
+      промпты и `llm_api_key` не попадают в логи/БД.
+- [ ] AI: не-loopback endpoint блокируется без `LLM_ALLOW_REMOTE=true`;
+      сгенерированное сообщение валидно как Conventional Commits.
+- [ ] AI: `POST /repositories/{id}/ai/cve-explain` опирается на OSV, кэшируется
+      в `ai_cache` на 7 дней и не выдумывает `fixed_version`/ссылки.
+- [ ] Global: `GET /dashboard/global-dependencies` агрегирует tracked-репозитории,
+      считает `unification`/`recommended_version` и не делает N×registry
+      запросов без `refresh=true`.
+- [ ] Updates: обновление пакетов невозможно без `confirm=true` и на грязном
+      worktree (`409 dirty_worktree`); каждая попытка пишется в `action_log`.
+- [ ] Updates: timeout ≤ 180 с, вывод ограничен и очищен от токенов; bulk
+      обновляет выбранные репозитории с concurrency 1–2.
+- [ ] Read-only: AI и global analytics не меняют репозиторий; обновления — только
+      через §3.20 (grep-аудит destructive-команд).
+- [ ] UI: модалки commit/CVE, глобальный дашборд, подтверждение обновления;
+      пустые/частичные состояния, lazy-загрузка.
+- [ ] Релиз: docs-consistency audit, тег `v0.7.0` в GitHub и GitFlic,
+      `SHA(main)` совпадает.
+
 ---
 
 ## 7. Совместимость и версии
@@ -943,6 +1216,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 | GitHub REST API | v3 (2022-11-28) — v0.2.0 |
 | GitFlic REST API | актуальная (см. docs.gitflic.ru) — v0.2.0 |
 | OSV.dev API | v1 (`POST /v1/query`, `POST /v1/querybatch`) — v0.6.0 |
+| OpenAI-compatible LLM API | Ollama / LM Studio `/v1/chat/completions` — v0.7.0 |
 | SQLite / PostgreSQL | 3.45+ / 17 |
 | Docker SDK (docker-py) | 7.1.0 (Docker Engine API 1.40+) |
 | React / Vite / TypeScript | 19 / 8 / 7 |
@@ -956,14 +1230,16 @@ security_cache(             -- v0.6.0 (Sprint 28)
 | v0.4.0 | UX/UI, advanced table, saved views, command palette, a11y, Telegram, heatmap, export | `TODO_V0.4.md` |
 | v0.5.0 | тёмные графики M3, Docker-интеграция, зависимости Python/Node | `TODO_V0.5.md` |
 | v0.6.0 | supply-chain security (CVE, secrets), hotspots/DORA-lite, Markdown/workspace export | `TODO_V0.6.md` |
-| v0.7.0+ | серверная синхронизация представлений, история статусов, расширенные интеграции | `TODO.md` |
+| v0.7.0 | локальный LLM (commit message, CVE explain), global dependencies, обновление пакетов | `TODO_V0.7.md` |
+| v0.8.0+ | серверная синхронизация представлений, история статусов, расширенные интеграции | `TODO.md` |
 
 ---
 
 ## 9. UX/UI Guidelines
 
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
-(реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано).
+(реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
+план v0.7.0.
 
 ### 9.1 Таблица репозиториев
 
@@ -1104,3 +1380,37 @@ security_cache(             -- v0.6.0 (Sprint 28)
   репозиториев и данные security/insights.
 - Импорт не затрагивает `localStorage`-ключи других версий; после импорта
   store обновляется реактивно, без перезагрузки.
+
+### 9.12 AI, глобальные зависимости и обновления (v0.7.0, план)
+
+**AI / LLM:**
+
+- Settings: секция «AI / LLM» (endpoint, model, API key, timeout,
+  `allow_remote`), маскировка ключа, кнопка проверки соединения.
+- Предупреждение, если endpoint не loopback: код проекта отправляется на
+  внешний сервис; без явного `allow_remote` сохранение блокируется.
+- Кнопка «Сгенерировать коммит» видна только при `dirty` и `llm_enabled`;
+  открывает модалку с subject/body, `source`, `truncated`, кнопкой «Копировать».
+  Автоматического `git commit` нет; сообщение можно отредактировать.
+- В блоке «Безопасность» у уязвимости — «Объяснить»: модалка с лоадером,
+  объяснением, `fixed_version`, ссылками и пометкой `cached`/`fallback`.
+- Ошибки LLM показываются как состояние («LLM недоступен, показан черновик»),
+  не ломая карточку; таймаут отменяем.
+
+**Global dependencies:**
+
+- Отдельная страница/секция: топ-N пакетов, число репозиториев, распределение
+  версий, `recommended_version`, бейджи `aligned/mixed/outdated/unknown`.
+- Фильтры ecosystem и «только устаревшие»; счётчики `summary`.
+- `refresh` — явная кнопка; по умолчанию данные из кэша.
+- Пустое состояние «Нет манифестов»; partial error по ecosystem.
+
+**Dependency updates:**
+
+- Кнопка «Обновить пакеты» для выбранных проектов; модалка с перечнем
+  ecosystem/пакетов и предупреждением, что изменятся lockfile/окружение.
+- При `dirty_worktree` — понятная ошибка, действие не выполняется.
+- Прогресс/результат, ссылка на `ActionLog`; никаких автозапусков и
+  автоматических коммитов.
+- Цвет — не единственный носитель смысла; модалки с `role="dialog"` и
+  возвратом фокуса; блоки lazy, entry bundle в бюджете.
