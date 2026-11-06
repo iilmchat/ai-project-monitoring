@@ -1,8 +1,9 @@
 # TODO — план развития IIRuchating
 
 **Текущая версия:** v0.5.0 (релиз 2026-11-06)
+**Текущий этап:** v0.6.0 «Security, Insights & Collaboration» — [`TODO_V0.6.md`](TODO_V0.6.md) (планирование, Sprint 27)
 **Предыдущий этап:** v0.5.0 — [`TODO_V0.5.md`](TODO_V0.5.md)
-**Следующий этап:** v0.6.0+ — идеи из раздела 6
+**Дальше:** v0.7.0+ — идеи из раздела 6
 **Последнее обновление:** 2026-11-06
 
 ---
@@ -253,7 +254,7 @@
 
 ---
 
-## 6. Потенциально дальше (v0.6.0+)
+## 6. Потенциально дальше (v0.7.0+)
 
 | Направление | Что делать | Best practice |
 |---|---|---|
@@ -280,6 +281,8 @@
 | KI-008 (нет Conflict Manager) | Low | S21-002 | Resolved |
 | KI-009 (Docker socket на Windows) | Med | S24-002 | Accepted |
 | KI-010 (rate-limit PyPI/npm) | Med | S25-001, S26-002 | Resolved |
+| KI-011 (OSV.dev rate-limit) | Med | S28-002 | Accepted |
+| KI-012 (ложные срабатывания Secret Scanner) | Med | S28-003 | Accepted |
 
 Новые KI, обнаруженные в спринтах, добавляются в `docs/KNOWN_ISSUES.md` и в эту таблицу.
 

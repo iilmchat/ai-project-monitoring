@@ -2,7 +2,8 @@
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26.
-Разделы с пометкой «план» фиксируют проектное решение до реализации.
+Разделы §12–14 — **план v0.6.0** (Sprint 28–30); они фиксируют проектное
+решение до реализации.
 
 ---
 
@@ -17,6 +18,7 @@ FastAPI (backend)
   ├─ /api/v1/scan            — запуск/статус сканирования
   ├─ /api/v1/repositories    — CRUD, track/untrack, status, compare, recommendations,
   │                            mirror, mirror-policy, docker, dependencies
+  │                            security (v0.6.0), insights (v0.6.0)
   ├─ /api/v1/mirror          — candidates, poll
   ├─ /api/v1/webhooks        — GitHub / GitFlic (HMAC)
   ├─ /api/v1/dashboard       — агрегированная сводка
@@ -31,8 +33,11 @@ FastAPI (backend)
   ├─ Recommendation Service     — команды по состоянию (local + mirror)
   ├─ Docker Service (v0.5.0)    — read-only docker SDK (UDS/npipe), container status
   ├─ Dependency Service         — requirements.txt / package.json → PyPI / npm
+  ├─ Security Service (v0.6.0)  — OSV.dev CVE + regex secret scan (read-only)
+  ├─ Insights Service (v0.6.0)  — git log: hotspots, commit frequency (DORA-lite)
   └─ SQLite (или PostgreSQL)    — repositories, repository_status, repository_mirror_status,
-                                  scan_runs, webhook_events, dependency_cache
+                                  scan_runs, webhook_events, dependency_cache,
+                                  security_cache
 ```
 
 ---
@@ -50,11 +55,14 @@ app/services/*          бизнес-логика:
                           recommendation_service
                           docker_service          ← NEW (v0.5.0; docker SDK + matcher)
                           dependency_service      ← NEW (v0.5.0)
+                          security_service        ← NEW (v0.6.0)
+                          insights_service        ← NEW (v0.6.0)
 app/providers/*         клиенты внешних API:
                           github_client (REST v3)
                           gitflic_client (REST)
                           pypi_client             ← NEW (v0.5.0)
                           npm_client              ← NEW (v0.5.0)
+                          osv_client              ← NEW (v0.6.0)
                           base (rate-limit, retry, backoff)
 app/git/*               pygit2_backend, command_backend
 app/db/repositories     Repository-паттерн
@@ -69,6 +77,10 @@ app/errors.py           доменные исключения
 - Внешние API — **только** через `app/providers/*` (единая обработка rate-limit, retry, токенов).
 - Docker — только через `DockerService`; никаких прямых вызовов демона из роутеров.
 - Манифесты зависимостей читает `DependencyService`; `pip`/`npm`/`pnpm` не запускаются.
+- `SecurityService` работает только с OSV.dev и файлами рабочей директории;
+  полные значения секретов не покидают сервис.
+- Git-историю для `InsightsService` читает только `git log`/`git rev-list`
+  через контролируемый subprocess; `fetch`/`checkout` не вызываются.
 - Read-only операции не вызывают мутирующих Git-команд, lifecycle-операций Docker
   и установки пакетов.
 
@@ -219,9 +231,12 @@ Webhook **не заменяет** polling: если webhook не настрое�
 | `scan_runs` | история сканирований |
 | **`webhook_events`** | **события от GitHub/GitFlic (R9) — v0.2.0** |
 | **`dependency_cache`** | **TTL-кэш latest-версий PyPI/npm (24 ч) — v0.5.0** |
+| **`security_cache`** | **TTL-кэш ответов OSV.dev по `package@version` (6 ч) — v0.6.0** |
 
 Кэш локального статуса: `STATUS_TTL_SECONDS=60`. Кэш mirror-статуса: `MIRROR_STATUS_TTL_SECONDS=300`.
 Кэш Docker: `DOCKER_STATUS_TTL_SECONDS=30`. Кэш зависимостей: `DEPENDENCY_CACHE_TTL_SECONDS=86400`.
+Кэш security (OSV): `SECURITY_CACHE_TTL_SECONDS=21600`; secret-scan — in-memory 300 с.
+Кэш insights: in-memory `INSIGHTS_CACHE_TTL_SECONDS=300`.
 
 ---
 
@@ -320,6 +335,46 @@ DashboardCharts.tsx
   `declared → latest` с severity. Ошибка одного ecosystem не скрывает другой.
 - Оба блока загружаются лениво и не участвуют в первичном запросе `/dashboard`.
 - Управляющих действий нет: только просмотр и `?refresh=true`.
+
+### 9.7. Security и Insights (v0.6.0, план)
+
+```
+<SecurityPanel repoId>
+  ├─ useSecurity(repoId)   → GET /repositories/{id}/security
+  ├─ severity badges (critical/high/medium/low/unknown)
+  ├─ vulnerability list: package@version → fixed, CVE/GHSA links
+  └─ secrets: file:line + type + masked preview (full value never in DOM)
+```
+
+```
+<InsightsPanel repoId>
+  ├─ useInsights(repoId, days) → GET /repositories/{id}/insights
+  ├─ HotspotsList  — top-5 paths + relative bar
+  └─ CommitSparkline — daily/weekly buckets
+```
+
+- Оба блока — `React.lazy`, монтируются при раскрытии карточки/деталей; dashboard
+  не делает N запросов на первый рендер.
+- `version_source=lower_bound` и `unknown_packages` визуально отличаются от
+  проверенных «чистых» пакетов.
+- Секреты: сервер уже отдаёт только masked `preview`; клиент не пытается
+  восстановить значение и не пишет его в `localStorage`/логи.
+- Состояния `unavailable`, `partial`, `no_manifest`, `shallow_clone`, `timeout`
+  рендерятся как пояснение, а не как пустой график или 500.
+- Severity передаётся не только цветом: текстовая подпись + иконка; контраст AA
+  в light/dark.
+
+### 9.8. Collaboration export (v0.6.0, план)
+
+- **Markdown:** `buildDashboardMarkdown(summary, repositories, filters)` —
+  чистая функция, тестируется без DOM; экранирует `|`, не генерирует HTML;
+  копирование через `navigator.clipboard` с fallback и toast.
+- **Workspace JSON:** `exportWorkspace()` собирает `views` + `table` из Zustand
+  store; `importWorkspace(file)` валидирует `version`/схему/размер (≤ 1 MiB) и
+  применяет `replace`/`merge`; при ошибке store не меняется.
+- Экспорт не читает API и не содержит токенов/секретов; серверные эндпоинты не
+  добавляются.
+- После импорта — реактивное обновление store, без перезагрузки страницы.
 
 ---
 
@@ -515,11 +570,250 @@ GET /repositories/{id}/dependencies
 
 ---
 
-## 12. Что ещё не сделано (v0.6+)
+## 12. Security (v0.6.0, Sprint 28 — план)
 
-- Синхронизация saved views в БД (v0.6.0).
+**Задача.** Показать уязвимости в объявленных зависимостях и потенциальные
+секреты в рабочей директории, не устанавливая пакеты и не изменяя репозиторий.
+
+### 12.1. Поток
+
+```
+GET /repositories/{id}/security
+  → SecurityService
+      ├─ manifest parsing (переиспользует DependencyService v0.5.0)
+      ├─ version resolution → [{package, version, version_source}]
+      ├─ security_cache lookup (6 ч)
+      ├─ OsvClient.query_batch(...) для miss/stale
+      ├─ severity mapping + дедупликация по osv_id
+      ├─ SecretScanner.scan(repo.path)   (если include_secrets)
+      └─ normalize → SecurityReport
+```
+
+### 12.2. Версии и честность результата
+
+- `exact` — `==` в `requirements.txt` или точная версия в `package.json`.
+- `lower_bound` — нижняя граница диапазона (`>=`, `>`, `~=`, `^`, `~`).
+  OSV проверяет **эту** версию; в ответе `version_source=lower_bound`, UI
+  показывает пометку «диапазон».
+- Если версия не извлекается (`*`, `latest`, сложный диапазон, `ignored`-пакет),
+  пакет попадает в `unknown_packages` и **не** считается проверенным.
+  Это важнее, чем «красивый» нулевой отчёт: отсутствие данных не равно
+  отсутствию уязвимостей.
+- Транзитивные зависимости и lock-файлы не проверяются (как в v0.5.0).
+
+### 12.3. OSV.dev
+
+- Клиент `app/providers/osv_client.py`: `POST /v1/querybatch` с массивом
+  `queries: [{package: {name, ecosystem}, version}]`; fallback — поштучный
+  `POST /v1/query`.
+- Ecosystem: `PyPI` / `npm`.
+- Timeout 10 с, concurrency ≤ 4, backoff 0.5/1/2 с на 429/5xx (max 3 попытки).
+- Ответ нормализуется в `{osv_id, aliases, summary, severity, cvss, fixed}`
+  сразу на границе провайдера; сервис не работает с сырым JSON OSV.
+- 404/пустой результат по пакету — «уязвимостей нет», а не ошибка.
+- Ошибка batch-запроса деградирует до поштучных запросов; полная недоступность
+  OSV → `ecosystem.status=unavailable`.
+
+### 12.4. Severity
+
+| CVSS v3 | severity |
+|---------|----------|
+| ≥ 9.0 | `critical` |
+| 7.0–8.9 | `high` |
+| 4.0–6.9 | `medium` |
+| < 4.0 | `low` |
+| нет CVSS | severity из advisory, иначе `unknown` |
+
+CVSS берётся из `severity[].score` (vector → base score). Если у advisory
+несколько оценок, используется максимальная. `fixed_version` — минимальная
+`fixed`-версия среди `affected.ranges`; если её нет — `null` (исправления не
+известно).
+
+### 12.5. Кэш и деградация
+
+- `security_cache(key*, ecosystem, package, version, payload, checked_at)`,
+  ключ `osv:<ecosystem>:<package>:<version>`, TTL 6 ч.
+- Кэш переживает перезапуск; `refresh=true` обходит TTL только для запрошенного
+  репозитория.
+- Stale-while-revalidate: при 429/5xx/timeout отдаётся последний payload, отчёт
+  остаётся HTTP 200; `checked_at` показывает актуальность.
+- Пустой результат тоже кэшируется (negative cache), иначе «чистые» пакеты
+  будут дёргать OSV при каждом открытии.
+- Один ecosystem не влияет на другой; секреты считаются независимо.
+
+### 12.6. Secret Scanner
+
+**Источник файлов.** `git ls-files -z -co --exclude-standard` — tracked +
+untracked non-ignored. Это даёт «рабочую директорию» и уважает `.gitignore`,
+не обходя `node_modules`/`.venv`. История Git не читается.
+
+**Пайплайн:**
+
+1. Получить список путей (read-only команда, без `--cached`-мутаций).
+2. Отфильтровать каталоги/расширения, бинарные файлы (NUL-байт в первых 8 KiB),
+   размер > 1 MiB; остановиться на `SECRET_SCAN_MAX_FILES`.
+3. Прочитать файл как UTF-8 с `errors="replace"`, построчно применить regex.
+4. Совпадение → `{file, line, type, severity, confidence, preview}`; `preview`
+   строится маскированием (оставить префикс 4 символа и суффикс 4, остальное
+   `****`), полное значение сразу отбрасывается.
+5. Строка с `# iiruchating:ignore-secret` пропускается (подавление FP).
+6. Результат — in-memory кэш 300 с; в БД и логи не пишется.
+
+**Правила:**
+
+| type | regex (сокращённо) | severity |
+|------|-------------------|----------|
+| `aws_access_key` | `AKIA[0-9A-Z]{16}` | high |
+| `aws_secret_key` | assignment 40-char base64 рядом с `aws_secret` | high |
+| `github_token` | `gh[pousr]_[A-Za-z0-9]{36,}` | high |
+| `jwt` | `eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.` | medium |
+| `private_key` | `-----BEGIN (RSA\|OPENSSH\|EC\|PGP) PRIVATE KEY-----` | high |
+
+Regex-набор фиксирован; эвристики по entropy и пользовательские правила — вне
+scope v0.6.0 (высокий FP-rate). Ограничения — KI-012.
+
+### 12.7. Read-only и безопасность
+
+- Файлы только читаются; рабочая директория, индекс и `.git` не меняются.
+- `pip`/`npm`/`pnpm` не запускаются; shell для секретов не используется.
+- Полные секреты не попадают в ответ, логи, метрики, `action_log` и ошибки.
+- API local-only; результаты security не экспортируются в workspace JSON.
+- Сканирование ограничено по числу файлов и размеру — защита от DoS на
+  огромных деревьях.
+
+Решение о выборе OSV.dev и regex-подхода (вместо локальной базы advisories и
+gitleaks) фиксируется в ADR-0009 (Sprint 28).
+
+### 12.8. Конфигурация
+
+| Переменная | Назначение |
+|------------|------------|
+| `OSV_API_URL` | Base URL OSV.dev (default `https://api.osv.dev`) |
+| `SECURITY_CACHE_TTL_SECONDS` | TTL CVE-кэша (default 21600) |
+| `SECURITY_CHECK_CONCURRENCY` | Параллельные запросы (default 4) |
+| `SECURITY_HTTP_TIMEOUT` | Timeout OSV (default 10 с) |
+| `SECRET_SCAN_ENABLED` | Глобальный выключатель (default true) |
+| `SECRET_SCAN_MAX_FILES` | Лимит файлов (default 5000) |
+| `SECRET_SCAN_MAX_FILE_BYTES` | Лимит размера файла (default 1 MiB) |
+| `SECRET_SCAN_TTL_SECONDS` | TTL in-memory кэша (default 300) |
+
+---
+
+## 13. Insights (v0.6.0, Sprint 29 — план)
+
+**Задача.** Показать, какие файлы чаще всего меняются (кандидаты на
+рефакторинг) и как часто ветка получает коммиты (DORA-lite proxy).
+
+### 13.1. Почему subprocess, а не pygit2
+
+Для churn нужен список файлов **на каждый коммит** за окно. `pygit2`-revwalk +
+diff на большом репозитории дороже и требует ручного обхода деревьев; `git log
+--name-only` уже отдаёт готовый список и корректно работает с pack-файлами.
+Поэтому используется `git` CLI, но **строго** через контролируемый runner:
+
+- `asyncio.create_subprocess_exec("git", "-C", repo.path, "log", ...)`;
+- `env` с `GIT_OPTIONAL_LOCKS=0`, без интерактива и pager (`--no-pager`);
+- timeout 10 с, kill процесса, лимит stdout 8 MiB;
+- stderr не пробрасывается в ответ (только в structlog без путей/содержимого).
+
+Event loop не блокируется: ожидание процесса асинхронное. Для коротких вызовов
+допустим `asyncio.to_thread`, но subprocess-вариант предпочтителен.
+
+### 13.2. Поток
+
+```
+GET /repositories/{id}/insights?days=30
+  → InsightsService
+      ├─ resolve_branch(): upstream → main → master → HEAD
+      ├─ cache lookup (repo_id, branch, days; 300 с)
+      ├─ hotspots:
+      │    git log --since="<days> days ago" --no-merges --name-only --pretty=format:
+      ├─ sparkline:
+      │    git log --since="<days> days ago" --format=%ad --date=short <branch>
+      ├─ rev-list count:
+      │    git rev-list --count --since="<days> days ago" <branch>
+      └─ normalize → InsightsReport
+```
+
+### 13.3. Hotspots
+
+- `changes` — число коммитов, где путь появился в `--name-only`; один коммит
+  считается один раз на путь (дедупликация внутри коммита).
+- Merge-коммиты исключены: они дублируют изменения из PR и раздувают churn.
+- Топ-5 (`INSIGHTS_HOTSPOTS_LIMIT`), сортировка `changes desc, path asc`.
+- `share = changes / total_commits_analyzed`; `authors` и `last_commit`
+  собираются из тех же строк лога (author/date).
+- Rename detection отключён: `--name-only` показывает новое имя только с
+  момента переименования. Это осознанное ограничение (стоимость `-M` на
+  больших историях), фиксируется в UI/доках.
+- Битые/удалённые файлы остаются в статистике как исторические пути.
+
+### 13.4. DORA-lite
+
+- `deployment_frequency` — **прокси**: коммиты в ветке за окно, не реальные
+  деплои. UI явно подписывает «commit frequency».
+- `commits` включает merge-коммиты (каждый push в `main` — потенциальный
+  деплой); `merge_commits` отдаётся отдельно.
+- `sparkline`: daily при `days ≤ 90`, weekly при 91–365; нулевые бакеты
+  заполняются, чтобы график не «склеивал» даты.
+- `per_day`/`per_week` — производные, округление до 2 знаков.
+
+### 13.5. Ограничения и деградация
+
+- `status=no_branch` — ветка не определена; `shallow_clone` — есть
+  `.git/shallow`, числа могут быть занижены; `timeout` — git не успел;
+  `unavailable` — ошибка Git.
+- Пустая история — валидный `ok` с пустыми списками.
+- In-memory кэш 300 с, ключ `repo_id + branch + days`; `refresh=true` обходит.
+- Ограничение stdout защищает память на репозиториях с сотнями тысяч файлов.
+
+### 13.6. Read-only
+
+- Только `git log` и `git rev-list`; `fetch`, `checkout`, `reset`, `clean`
+  отсутствуют (grep-аудит).
+- `GIT_OPTIONAL_LOCKS=0` предотвращает случайную запись lock-файлов.
+- Рабочая директория и индекс не изменяются; анализ не требует сети.
+
+---
+
+## 14. Collaboration export (v0.6.0, Sprint 30 — план)
+
+### 14.1. Markdown Export
+
+- Чистая функция `buildDashboardMarkdown(snapshot)` на клиенте: вход — текущий
+  срез (summary, отфильтрованные репозитории, видимые колонки).
+- Выход — GFM: заголовок, дата, счётчики, таблица, список «требуют внимания».
+- Экранирование `|` и перевода строк в ячейках; HTML не генерируется.
+- Копирование — `navigator.clipboard.writeText`, fallback через скрытый
+  `textarea`; серверный эндпоинт не добавляется.
+
+### 14.2. Workspace Export/Import
+
+```
+{version: 1, exported_at, app_version,
+ views: [...],
+ table: {visible_columns, column_order, widths}}
+```
+
+- Экспорт собирается из Zustand store (`useViewsStore`, `useTableStore`);
+  токены/секреты/данные репозиториев не входят.
+- Импорт: лимит 1 MiB → `JSON.parse` → проверка `version` и структуры →
+  нормализация полей → `replace` или `merge` по имени view.
+- Ошибка валидации не меняет store; пользователь видит сообщение.
+- Ключи `views.v1` и `table.state.v1` остаются прежними; миграции store
+  переиспользуются, отдельного формата хранения нет.
+- После импорта store обновляется реактивно, без перезагрузки страницы.
+
+---
+
+## 15. Что ещё не сделано (v0.7+)
+
+- Синхронизация saved views в БД между устройствами (v0.7.0; в v0.6.0 — только
+  файловый export/import).
 - История статусов (trend: как часто репозиторий был `dirty`; как часто `behind_gitflic`).
 - Полноценный GitFlic Compare API (сейчас — compare внутри GitFlic, классификация по SHA/датам).
-- Docker lifecycle-операции (start/stop/restart/logs) — вне scope v0.5.0.
-- Транзитивные зависимости, lock-файлы, CVE-аудит — вне scope v0.5.0.
-- Приватные registry и аутентификация в PyPI/npm.
+- Docker lifecycle-операции (start/stop/restart/logs) — вне scope v0.6.0.
+- Транзитивные зависимости, lock-файлы, SBOM и лицензионный аудит.
+- Полное сканирование истории Git на секреты (gitleaks/trufflehog).
+- Приватные registry и аутентификация в PyPI/npm, OSV Enterprise.
+- Остальные DORA-метрики (lead time, change failure rate, MTTR).

@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-—
+### Документация
+
+- docs(planning): план v0.6.0 — supply-chain security (OSV.dev CVE, secret scanning), insights (hotspots, DORA-lite), collaboration/export; SPEC §3.16–3.17, ARCHITECTURE §12–14, KI-011/012 (S27-001..S27-003).
 
 ## [0.5.0] - 2026-11-06
 

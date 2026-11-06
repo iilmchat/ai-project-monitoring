@@ -296,4 +296,5 @@
 - Приватные registry/аутентификация (PyPI private index, npm private registry).
 - Docker Swarm, Kubernetes, удалённые Docker-хосты (кроме `DOCKER_HOST` для
   локального сокета).
-- Синхронизация Saved Views в БД и история статусов — v0.6.0+ (`TODO.md`).
+- Синхронизация Saved Views в БД и история статусов — v0.7.0+ (`TODO.md`);
+  в v0.6.0 — только файловый export/import workspace (`TODO_V0.6.md`).

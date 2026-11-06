@@ -109,7 +109,7 @@ pnpm --dir frontend dev
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.5.0** (2026-11-06) |
-| Спринты | 1–26 (v0.5.0 «Observability & Dependency Management») |
+| Спринты | 1–26 (v0.5.0); 27 — планирование v0.6.0 |
 | Тесты backend | **148** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **17** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 114.6 kB) |
@@ -125,7 +125,14 @@ pnpm --dir frontend dev
 - **Docker:** read-only статус контейнеров проекта (running/stopped, порт, health) в карточке репозитория.
 - **Dependencies:** проверка устаревших Python (`requirements.txt`) и Node (`package.json`) пакетов с TTL-кэшем 24 ч.
 
-**v0.6.0+:** синхронизация Saved Views в БД, история статусов и тренды, расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
+**v0.6.0 «Security, Insights & Collaboration»** — планируется
+([`TODO_V0.6.md`](TODO_V0.6.md)):
+
+- **Supply Chain Security (Sprint 28):** CVE-проверка Python/Node-зависимостей через OSV.dev (High/Critical) и базовый regex-поиск секретов в рабочей директории.
+- **Tech Debt & Insights (Sprint 29):** топ-5 «горячих» файлов по churn и commit frequency в `main` за 30 дней (DORA-lite, sparkline).
+- **Collaboration & Release (Sprint 30):** «Скопировать сводку в Markdown», экспорт/импорт workspace (Saved Views, колонки) в JSON и релиз `v0.6.0`.
+
+**v0.7.0+:** синхронизация Saved Views в БД, история статусов и тренды, расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
 
 ---
 
