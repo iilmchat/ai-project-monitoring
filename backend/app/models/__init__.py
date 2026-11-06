@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.models.entities import (
     ActionLog,
+    AICache,
     AppSetting,
     DependencyCache,
     Repository,
@@ -14,6 +15,7 @@ from app.models.entities import (
 )
 
 __all__ = [
+    "AICache",
     "ActionLog",
     "AppSetting",
     "DependencyCache",

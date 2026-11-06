@@ -3,11 +3,11 @@
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
-AI §3.18 (commit message) — в Sprint 32; CVE-explain, global analytics §3.19 и
-dependency updates §3.20 — **план v0.7.0** (спринты 33–34); контракты
-зафиксированы до реализации.
+AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33) и global
+analytics §3.19 — реализованы; dependency updates §3.20 — **план v0.7.0**
+(Sprint 34); контракт зафиксирован до реализации.
 
-**Версия:** v0.7.0 «AI & Global Analytics» (в разработке; Sprint 32 выполнен) · **Обновлено:** 2026-11-06
+**Версия:** v0.7.0 «AI & Global Analytics» (в разработке; Sprints 32–33 выполнены) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -796,7 +796,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.18. AI assistant (v0.7.0; commit message — Sprint 32, CVE explain — план Sprint 33)
+### 3.18. AI assistant (v0.7.0, Sprints 32–33)
 
 Локальный LLM (Ollama / LM Studio) через OpenAI-совместимый API. Эндпоинты
 **только читают** репозиторий и ничего не коммитят; результат — черновик,
@@ -852,115 +852,119 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 - `source` пока всегда `llm`;
   `provider ∈ {ollama, lmstudio, openai_compatible}`.
 
-#### 3.18.2. Объяснение CVE (план, Sprint 33)
+#### 3.18.2. Объяснение CVE (Sprint 33)
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/repositories/{id}/ai/cve-explain` | `{osv_id, package?, version?, locale?}` | `CveExplanation` |
+| POST | `/repositories/{id}/ai/cve-explain` | `{cve_id, summary}` | `CveExplanation` |
 
 `CveExplanation`:
 
 ```json
 {
-  "osv_id": "GHSA-9wx4-h78v-vm56",
-  "package": "requests",
-  "version": "2.19.0",
-  "severity": "high",
-  "fixed_version": "2.20.0",
-  "explanation": "Уязвимость позволяет отправить учётные данные на чужой хост…",
-  "source": "llm",
-  "model": "qwen2.5-coder:7b",
+  "explanation": "Уязвимость позволяет отправить учётные данные на чужой хост. Обновите пакет до 2.20.0.",
   "cached": false,
-  "references": ["https://github.com/advisories/GHSA-9wx4-h78v-vm56"],
+  "model": "qwen2.5-coder-7b-instruct",
   "generated_at": "2026-11-06T10:00:00Z"
 }
 ```
 
 **Правила:**
 
-- Факты берутся из `security_cache` или `GET /v1/vulns/{osv_id}` OSV.dev;
-  client-supplied `summary` не является единственным источником.
-- `locale ∈ {ru, en}` (default **ru**); commit messages всегда английские.
-- LLM получает только нормализованный advisory (id, summary, severity, affected,
-  fixed, references) и обязан не выдумывать факты; ответ содержит ссылки.
-- Кэш `ai_cache` (см. §4): ключ `cve-explain:<osv_id>:<locale>:<model>`,
-  TTL `AI_CACHE_TTL_SECONDS` (default **604800** = 7 дней); `cached=true` при
-  попадании.
-- OSV недоступен и кэша нет → `503 osv_unavailable`; LLM недоступен →
-  grounded-сводка из advisory, `source="fallback"`, HTTP 200.
-- `llm_enabled=false` → `409 llm_disabled`; `404 advisory_not_found` — OSV не
-  знает такой id.
-- Объяснение не содержит полных секретов и не влияет на `SecurityReport`.
+- `cve_id` (1..128) и `summary` (1..4000) обязательны; `summary` — описание
+  уязвимости, которое передаёт UI из `SecurityReport`.
+- Промпт: «Ты — эксперт по безопасности. Объясни разработчику простым языком,
+  в чем опасность уязвимости {cve_id} (описание: {summary}). Как её исправить?
+  Ответь кратко, 2-3 предложения.»
+- Кэш `ai_cache` (см. §4): ключ `cve-explain:<cve_id>:<model>`, TTL
+  `AI_CACHE_TTL_SECONDS` (default **604800** = 7 дней); при попадании
+  `cached=true` и LLM не вызывается.
+- `llm_enabled=false` → `409 llm_disabled`; не-loopback endpoint без
+  `llm_allow_remote=true` → `409 llm_remote_not_allowed`.
+- LLM timeout/недоступна → `503` с
+  `detail="LLM недоступна. Проверьте настройки."`; fallback-текст не
+  подставляется.
+- `repository_id` проверяется на существование (`404`); сам репозиторий не
+  читается и не меняется.
+- Объяснение не влияет на `SecurityReport`; в `ai_cache` хранится только текст
+  объяснения и модель.
 
 ---
 
-### 3.19. Global dependencies (v0.7.0, Sprint 33, план)
+### 3.19. Global dependencies (v0.7.0, Sprint 33)
 
 Сводка объявленных версий популярных пакетов по всем `tracked=true`
 репозиториям. Только чтение; пакеты не обновляются.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| GET | `/dashboard/global-dependencies` | `ecosystem?: python\|node\|all`, `limit?: int (default 20, 1..100)`, `outdated_only?: bool`, `refresh?: bool` | `GlobalDependencyReport` |
+| GET | `/dashboard/global-dependencies` | `refresh?: bool (default false)` | `GlobalDependencyReport` |
 
 `GlobalDependencyReport`:
 
 ```json
 {
   "checked_at": "2026-11-06T10:00:00Z",
+  "ecosystems": {
+    "python": [
+      {
+        "name": "fastapi",
+        "latest_version": "0.116.0",
+        "distribution": [
+          {"version": "0.110.0", "projects": ["alpha"]},
+          {"version": "0.115.0", "projects": ["beta"]}
+        ],
+        "versions_count": 2,
+        "projects_count": 2,
+        "unification_needed": true
+      }
+    ],
+    "node": [
+      {
+        "name": "react",
+        "latest_version": "19.2.0",
+        "distribution": [
+          {"version": "18.0.0", "projects": ["alpha"]},
+          {"version": "19.0.0", "projects": ["beta"]}
+        ],
+        "versions_count": 2,
+        "projects_count": 2,
+        "unification_needed": true
+      }
+    ]
+  },
   "summary": {
     "repositories": 34,
-    "repositories_with_manifests": 30,
     "packages": 120,
-    "outdated_occurrences": 47,
-    "unification_candidates": 8,
-    "missing_latest": 3
+    "unification_candidates": 8
   },
-  "ecosystems": [
-    {
-      "ecosystem": "python",
-      "repositories": 28,
-      "packages": [
-        {
-          "name": "fastapi",
-          "latest": "0.116.0",
-          "repositories": 20,
-          "outdated_repositories": 14,
-          "versions": [
-            {"version": "0.110.0", "repositories": 8},
-            {"version": "0.115.6", "repositories": 6}
-          ],
-          "unification": "mixed",
-          "recommended_version": "0.115.6",
-          "status": "outdated"
-        }
-      ],
-      "error": null
-    }
-  ],
   "error": null
 }
 ```
 
 **Правила:**
 
-- Агрегация: `requirements.txt` + `package.json` (те же парсеры, что §3.15);
-  пакеты без разрешимой версии попадают в `missing_latest`, а не в «current».
-- `limit` — топ-N по числу репозиториев (`repositories` desc, `name` asc).
-- `versions[]` — распределение declared-версий; `recommended_version` —
-  максимальная declared-версия среди репозиториев (кандидат на унификацию),
-  `latest` — последняя из registry-кэша.
-- `unification ∈ {aligned, mixed, unknown}`: одна версия / ≥2 версий / нет
-  разрешимых версий.
-- `status ∈ {current, outdated, unknown}`: `current`, если
-  `recommended_version >= latest`; `outdated`, если ниже; `unknown` без `latest`.
-- `summary.outdated_occurrences` — число пар repo×package с устаревшей версией;
-  `unification_candidates` — пакеты с `unification=mixed`.
-- По умолчанию сетевых вызовов нет: `latest` берётся из `dependency_cache`.
-  `refresh=true` обновляет stale-кэш через registry-клиенты (concurrency ≤ 4),
-  partial failure отражается в `ecosystems[].error`, HTTP 200.
-- In-memory кэш ответа 60 с; ключ `ecosystem + limit + outdated_only`.
-- `outdated_only=true` возвращает только пакеты со `status=outdated`.
+- Агрегация — `DependencyService.get_report(..., ecosystem="all")` для каждого
+  tracked-репозитория (парсеры §3.15 + registry latest / `dependency_cache`).
+  `providers` не вызываются повторно при попадании в кэш.
+- Версия проекта — `package.current` (`exact` или нижняя граница диапазона);
+  пакеты `ignored`/без версии не входят. Один проект учитывается один раз на
+  версию.
+- `distribution` — версия → список проектов (alias или basename пути),
+  сортировка по возрастанию версии.
+- `latest_version` — максимальная известная latest из отчётов
+  `DependencyService`; `null`, если реестр не ответил и кэша нет.
+- `unification_needed = versions_count > 1`; `projects_count` — уникальные
+  проекты, использующие пакет.
+- Пакеты сортируются по `projects_count` desc, `name` asc; возвращается не более
+  `GLOBAL_ANALYTICS_LIMIT` (default **50**). `summary.packages` считает все
+  пакеты до ограничения.
+- `summary.repositories` — число tracked-репозиториев;
+  `unification_candidates` — пакеты с `unification_needed=true`.
+- In-memory кэш ответа `GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default **3600** =
+  1 час); `refresh=true` обходит кэш и передаёт `refresh` в `DependencyService`.
+- Ошибка отдельного репозитория не скрывает остальные: `error="partial_errors"`,
+  HTTP 200.
 
 ---
 
@@ -1083,8 +1087,8 @@ security_cache(             -- v0.6.0 (Sprint 28)
   checked_at
 )
 
-ai_cache(                   -- v0.7.0 (план, Sprint 33)
-  key* TEXT PRIMARY KEY,    -- "cve-explain:GHSA-...:ru:qwen2.5-coder:7b"
+ai_cache(                   -- v0.7.0 (Sprint 33)
+  key* TEXT PRIMARY KEY,    -- "cve-explain:CVE-2026-1234:qwen2.5-coder-7b-instruct"
   kind TEXT,                -- cve_explain
   model TEXT NULL,
   payload JSONB,            -- {explanation, references, ...}
@@ -1118,8 +1122,8 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
-| **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false); diff/промпты не логируются; `AI_CACHE_TTL_SECONDS` — Sprint 33** |
-| **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 60), `GLOBAL_ANALYTICS_LIMIT` (default 20); по умолчанию только `dependency_cache`, `refresh=true` — registry с concurrency ≤ 4** |
+| **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
+| **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 3600), `GLOBAL_ANALYTICS_LIMIT` (default 50), `GLOBAL_ANALYTICS_CONCURRENCY` (default 4); агрегация через `DependencyService` + `dependency_cache`, `refresh=true` обходит кэш** |
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_BYTES` (default 32768); только `confirm=true` + чистый worktree + `action_log`** |
 
 ---
@@ -1189,7 +1193,7 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 - [x] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
-### 6.4. v0.7.0 (в работе: Sprint 32 выполнен)
+### 6.4. v0.7.0 (в работе: Sprint 32–33 выполнены)
 
 - [x] AI: `POST /repositories/{id}/ai/commit-message` возвращает
       `CommitMessageSuggestion` по §3.18.1; `400` без изменений, `409` при
@@ -1199,19 +1203,18 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
       попадают в логи/БД.
 - [x] AI: не-loopback endpoint блокируется без `LLM_ALLOW_REMOTE=true`;
       сообщение показывается в редактируемой модалке и не коммитится само.
-- [ ] AI: `POST /repositories/{id}/ai/cve-explain` опирается на OSV, кэшируется
-      в `ai_cache` на 7 дней и не выдумывает `fixed_version`/ссылки.
-- [ ] Global: `GET /dashboard/global-dependencies` агрегирует tracked-репозитории,
-      считает `unification`/`recommended_version` и не делает N×registry
-      запросов без `refresh=true`.
+- [x] AI: `POST /repositories/{id}/ai/cve-explain` возвращает объяснение LLM,
+      кэшируется в `ai_cache` на 7 дней; `409` при выключенном LLM/remote,
+      `503` при недоступной LLM.
+- [x] Global: `GET /dashboard/global-dependencies` агрегирует tracked-репозитории,
+      считает `distribution`/`unification_needed` и кэшируется на 1 час.
 - [ ] Updates: обновление пакетов невозможно без `confirm=true` и на грязном
       worktree (`409 dirty_worktree`); каждая попытка пишется в `action_log`.
 - [ ] Updates: timeout ≤ 180 с, вывод ограничен и очищен от токенов; bulk
       обновляет выбранные репозитории с concurrency 1–2.
 - [ ] Read-only: AI и global analytics не меняют репозиторий; обновления — только
       через §3.20 (grep-аудит destructive-команд).
-- [ ] UI: модалки commit/CVE, глобальный дашборд, подтверждение обновления;
-      пустые/частичные состояния, lazy-загрузка.
+- [ ] UI: подтверждение обновления пакетов; остальные AI/global-блоки готовы.
 - [ ] Релиз: docs-consistency audit, тег `v0.7.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
@@ -1251,7 +1254,7 @@ ai_cache(                   -- v0.7.0 (план, Sprint 33)
 
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
 (реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
-v0.7.0 (AI commit реализован, остальное — план).
+v0.7.0 (Sprints 32–33; updates — план).
 
 ### 9.1 Таблица репозиториев
 
@@ -1393,9 +1396,9 @@ v0.7.0 (AI commit реализован, остальное — план).
 - Импорт не затрагивает `localStorage`-ключи других версий; после импорта
   store обновляется реактивно, без перезагрузки.
 
-### 9.12 AI, глобальные зависимости и обновления (v0.7.0; AI commit — Sprint 32, остальное — план)
+### 9.12 AI, глобальные зависимости и обновления (v0.7.0; Sprints 32–33, updates — план)
 
-**AI / LLM (commit message — реализовано):**
+**AI / LLM (commit и CVE — реализовано):**
 
 - Settings: секция «AI / LLM» (enabled, endpoint, model, API key, timeout,
   max diff, `allow_remote`), маскировка ключа.
@@ -1407,16 +1410,18 @@ v0.7.0 (AI commit реализован, остальное — план).
   Автоматического `git commit` нет.
 - Ошибки LLM показываются toast «LLM недоступна. Проверьте настройки.»,
   не ломая карточку; diff-обрезка отражается предупреждением в модалке.
-- CVE-объяснение (план Sprint 33): модалка с `fixed_version`, ссылками и
-  пометкой `cached`/`fallback`.
+- В блоке «Безопасность» у уязвимости — «Объяснить» (при `llm_enabled`):
+  модалка с лоадером и текстом объяснения, ошибка LLM — в той же модалке.
+  Кнопка использует `CVE-*` (или `osv_id`), если CVE нет.
 
 **Global dependencies:**
 
-- Отдельная страница/секция: топ-N пакетов, число репозиториев, распределение
-  версий, `recommended_version`, бейджи `aligned/mixed/outdated/unknown`.
-- Фильтры ecosystem и «только устаревшие»; счётчики `summary`.
-- `refresh` — явная кнопка; по умолчанию данные из кэша.
-- Пустое состояние «Нет манифестов»; partial error по ecosystem.
+- Блок «Global Dependencies» на дашборде: таблица пакетов, ecosystem,
+  `latest_version`, распределение версий (с проектами в tooltip), число
+  проектов и бейдж «Унифицировать» при `unification_needed`.
+- Счётчики `summary` (пакеты/репозитории/кандидаты); `refresh` — явная кнопка.
+- Пустое состояние «Нет манифестов»; `partial_errors` — предупреждение.
+- Серверный кэш 1 час, поэтому повторные рендеры дашборда не парсят 34 проекта.
 
 **Dependency updates:**
 

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { bulkFetchAll, getDashboard, getHeatmap } from '../api/client'
+import { bulkFetchAll, getDashboard, getGlobalDependencies, getHeatmap } from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import { useTableStore } from '../store/useTableStore'
 import { ThemeProvider } from '../theme/ThemeContext'
@@ -14,6 +14,7 @@ vi.mock('../api/client', () => ({
   bulkSyncMirrorsAll: vi.fn(),
   exportRepositories: vi.fn(),
   getDashboard: vi.fn(),
+  getGlobalDependencies: vi.fn(),
   getHeatmap: vi.fn(),
   migrateToGitflic: vi.fn(),
   runAction: vi.fn(),
@@ -147,6 +148,12 @@ describe('Dashboard', () => {
     })
     vi.mocked(getDashboard).mockResolvedValue(dashboard)
     vi.mocked(getHeatmap).mockResolvedValue({})
+    vi.mocked(getGlobalDependencies).mockResolvedValue({
+      checked_at: '2026-11-06T10:00:00Z',
+      ecosystems: { python: [], node: [] },
+      summary: { repositories: 0, packages: 0, unification_candidates: 0 },
+      error: null,
+    })
   })
 
   it('renders summary cards and repository table', async () => {
@@ -262,5 +269,36 @@ describe('Dashboard', () => {
     expect(markdown).toContain('- Требуют внимания: 1')
     expect(markdown).toContain('- **beta** (`C:/work/beta`): dirty')
     expect(screen.getByText('Сводка скопирована')).toBeInTheDocument()
+  })
+
+  it('renders global dependency aggregation with unification badge', async () => {
+    vi.mocked(getGlobalDependencies).mockResolvedValue({
+      checked_at: '2026-11-06T10:00:00Z',
+      ecosystems: {
+        python: [
+          {
+            name: 'fastapi',
+            latest_version: '0.116.0',
+            distribution: [
+              { version: '0.110.0', projects: ['alpha'] },
+              { version: '0.115.0', projects: ['beta'] },
+            ],
+            versions_count: 2,
+            projects_count: 2,
+            unification_needed: true,
+          },
+        ],
+        node: [],
+      },
+      summary: { repositories: 2, packages: 1, unification_candidates: 1 },
+      error: null,
+    })
+
+    renderDashboard()
+
+    expect(await screen.findByTestId('global-dependencies')).toBeInTheDocument()
+    expect(await screen.findByText('fastapi')).toBeInTheDocument()
+    expect(screen.getByText('Унифицировать')).toBeInTheDocument()
+    expect(screen.getByText('0.116.0')).toBeInTheDocument()
   })
 })

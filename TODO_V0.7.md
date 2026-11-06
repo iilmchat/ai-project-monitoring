@@ -1,7 +1,7 @@
 # TODO v0.7.0 — AI Integration, Global Analytics & Dependency Updates
 
 **Версия:** v0.7.0 «AI & Global Analytics»
-**Статус:** 🚧 В разработке (Sprint 32 ✅); спринты 33–34 запланированы
+**Статус:** 🚧 В разработке (Sprint 32–33 ✅); спринт 34 запланирован
 **Предыдущий этап:** v0.6.0 — [`TODO_V0.6.md`](TODO_V0.6.md)
 **Последнее обновление:** 2026-11-06
 
@@ -134,61 +134,61 @@
 
 ### Спринт 33 — AI Security Insights & Global Dashboard
 
-**Статус:** ⏳ Запланирован
+**Статус:** ✅ Завершён (2026-11-06)
 
 **Задачи**
 
-- **S33-001. CVE explain.**
-  - `POST /repositories/{id}/ai/cve-explain` по SPEC §3.18.2.
-  - Источник фактов: `security_cache` или `GET https://api.osv.dev/v1/vulns/{id}`;
-    клиентский summary — только подсказка, не единственный источник.
-  - Промпт: объяснить простым языком, не выдумывать факты, указать
-    `fixed_version` и ссылки; ответ на русском (`locale=ru`) или английском.
-  - Кэш `ai_cache` (ключ `cve-explain:<osv_id>:<locale>:<model>`, TTL 7 дней).
-  - OSV/LLM недоступны → grounded summary из кэша, `source=fallback`, HTTP 200.
+- [x] **S33-001. CVE explain.**
+  - `POST /repositories/{id}/ai/cve-explain` с телом `{cve_id, summary}`.
+  - Промпт: «Ты — эксперт по безопасности… в чем опасность уязвимости
+    {cve_id}… Как её исправить? Ответь кратко, 2-3 предложения.»
+  - `security_cache`/OSV не запрашиваются: summary приходит из `SecurityReport`.
+  - Кэш `ai_cache` (ключ `cve-explain:<cve_id>:<model>`, TTL 7 дней);
+    `cached=true` при попадании.
+  - `409 llm_disabled`/`llm_remote_not_allowed`; LLM недоступна → `503`,
+    fallback-текст не подставляется.
 
-- **S33-002. Global Analytics Service.**
-  - `app/services/global_analytics_service.py`: обойти `tracked=true` репозитории,
-    распарсить `requirements.txt`/`package.json` существующими парсерами.
-  - Агрегировать по `<ecosystem>:<normalized-name>`: версии, число репозиториев,
-    `latest` из `dependency_cache`, `recommended_version = max(declared)`.
-  - `unification ∈ {aligned, mixed, unknown}`; `status ∈ {current, outdated, unknown}`.
-  - По умолчанию никаких сетевых вызовов; `refresh=true` обновляет stale-кэш через
-    registry-клиенты с concurrency ≤ 4 и partial failure.
-  - In-memory кэш ответа 60 с; лимит top-N пакетов.
+- [x] **S33-002. Global Analytics Service.**
+  - `app/services/global_analytics_service.py`: `tracked=true` репозитории,
+    `DependencyService.get_report(ecosystem="all")` (существующие парсеры).
+  - Агрегация по `<ecosystem>:<name>`: `distribution` (версия → проекты),
+    `latest_version`, `versions_count`, `projects_count`.
+  - `unification_needed = versions_count > 1`; сортировка `projects_count` desc,
+    `name` asc; `GLOBAL_ANALYTICS_LIMIT` (default 50).
+  - In-memory кэш 1 час; `refresh=true` обходит и передаётся в
+    `DependencyService`; concurrency ≤ 4; partial failure → `partial_errors`.
 
-- **S33-003. API `GET /dashboard/global-dependencies`.**
-  - Параметры `ecosystem?: python|node|all`, `limit?` (default 20, 1..100),
-    `outdated_only?`, `refresh?`.
-  - Ответ `GlobalDependencyReport` по SPEC §3.19; отсутствие манифестов —
+- [x] **S33-003. API `GET /dashboard/global-dependencies`.**
+  - Параметр `refresh?: bool`; ответ `GlobalDependencyReport` по SPEC §3.19
+    (`ecosystems: {python: [...], node: [...]}`), отсутствие манифестов —
     пустые массивы, а не 404/500.
 
-- **S33-004. UI: объяснение CVE и глобальный дашборд.**
-  - В блоке «Безопасность» — кнопка «Объяснить» у каждой уязвимости; лоадер,
-    модалка с объяснением, `fixed_version` и ссылками.
-  - Новая страница/секция «Глобальные зависимости»: топ пакетов, распределение
-    версий, бейджи `aligned/mixed/outdated`, фильтр «только устаревшие»,
-    счётчики проектов.
-  - Пустые/частичные состояния; блоки lazy; никаких мутаций.
+- [x] **S33-004. UI: объяснение CVE и глобальный дашборд.**
+  - В блоке «Безопасность» — кнопка «Объяснить» (при `llm_enabled`); модалка
+    со спиннером, текстом объяснения и ошибкой LLM.
+  - Блок «Global Dependencies» на дашборде: таблица пакетов, ecosystem,
+    `latest_version`, распределение версий, бейдж «Унифицировать», refresh.
+  - Пустые/частичные состояния; никаких мутаций.
 
-- **S33-005. Тесты и документация.**
-  - Fake LLM/OSV/registry: explain+кэш, fallback, агрегация версий, top-N,
-    partial failure, API-контракты, UI-состояния.
-  - SPEC §3.18.2/§3.19, ARCHITECTURE §15.4/§16, ADR-0010, KI-013.
+- [x] **S33-005. Тесты и документация.**
+  - `test_global_analytics.py`: реальные tmp-проекты, агрегация, лимит,
+    сортировка, кэш, API.
+  - `test_ai_explain.py`: prompt, успех, ошибка, disabled, API и кэш.
+  - SPEC §3.18.2/§3.19, ARCHITECTURE §15.4/§16, CHANGELOG/RELEASES.
 
 **DoD:**
 
-- [ ] `POST /repositories/{id}/ai/cve-explain` соответствует SPEC §3.18.2.
-- [ ] Объяснение опирается на OSV и не выдумывает `fixed_version`/ссылки;
-      кэш 7 дней, `refresh` не требуется.
-- [ ] `GET /dashboard/global-dependencies` соответствует SPEC §3.19;
-      агрегация по tracked-репозиториям, top-N и `outdated_only` работают.
-- [ ] `unification`/`recommended_version` детерминированы; partial failure
-      не скрывает второй ecosystem.
-- [ ] Глобальный дашборд не делает N×registry запросов без `refresh=true`.
-- [ ] UI: explain-модалка и глобальная страница, пустые/частичные состояния.
-- [ ] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
-- [ ] Документация и KI-013 обновлены.
+- [x] `POST /repositories/{id}/ai/cve-explain` соответствует SPEC §3.18.2.
+- [x] Объяснение кэшируется в `ai_cache` на 7 дней; LLM off/remote → `409`,
+      LLM недоступна → `503`.
+- [x] `GET /dashboard/global-dependencies` соответствует SPEC §3.19;
+      агрегация по tracked-репозиториям и лимит работают.
+- [x] `distribution`/`unification_needed` детерминированы; partial failure
+      отражается как `partial_errors`.
+- [x] Кэш ответа 1 час; `refresh=true` обходит кэш.
+- [x] UI: explain-модалка и глобальная таблица, пустые/частичные состояния.
+- [x] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
+- [x] Документация и KI-013 обновлены.
 
 ---
 

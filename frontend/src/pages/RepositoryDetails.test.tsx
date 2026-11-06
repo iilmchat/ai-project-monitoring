@@ -19,6 +19,7 @@ import {
   getSettings,
   getStatus,
   generateCommitMessage,
+  explainCve,
   refreshRepository,
   runAction,
 } from '../api/client'
@@ -50,6 +51,7 @@ vi.mock('../api/client', () => ({
   getSettings: vi.fn(),
   getStatus: vi.fn(),
   generateCommitMessage: vi.fn(),
+  explainCve: vi.fn(),
   refreshMirror: vi.fn(),
   refreshRepository: vi.fn(),
   runAction: vi.fn(),
@@ -274,6 +276,12 @@ describe('RepositoryDetails actions', () => {
       diff_chars: 42,
       files_changed: 1,
       warnings: [],
+      generated_at: '2026-11-06T10:00:00Z',
+    })
+    vi.mocked(explainCve).mockResolvedValue({
+      explanation: 'Уязвимость позволяет выполнить код.',
+      cached: false,
+      model: 'qwen2.5-coder-7b-instruct',
       generated_at: '2026-11-06T10:00:00Z',
     })
     vi.mocked(getCiStatus).mockResolvedValue({
@@ -637,5 +645,49 @@ describe('RepositoryDetails actions', () => {
     await user.click(screen.getByRole('button', { name: 'Выполнить коммит' }))
 
     expect(runAction).toHaveBeenCalledWith(1, 'commit', 'feat: generated message')
+  })
+
+  it('explains a CVE through the LLM', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      ...appSettings,
+      llm_enabled: true,
+    })
+    vi.mocked(getSecurity).mockResolvedValue({
+      ...cleanSecurity,
+      summary: { ...cleanSecurity.summary, vulnerable: 1, high: 1 },
+      ecosystems: [
+        {
+          ...cleanSecurity.ecosystems[0],
+          vulnerabilities: [
+            {
+              package: 'requests',
+              version: '2.19.0',
+              version_source: 'exact',
+              osv_id: 'GHSA-9wx4-h78v-vm56',
+              cve_ids: ['CVE-2018-18074'],
+              severity: 'high',
+              cvss_score: 7.5,
+              summary: 'Credentials could be sent to a different host',
+              fixed_version: '2.20.0',
+              references: [],
+            },
+          ],
+        },
+        cleanSecurity.ecosystems[1],
+      ],
+    })
+    const user = userEvent.setup()
+    renderDetails()
+
+    await user.click(await screen.findByRole('button', { name: 'Объяснить' }))
+
+    expect(
+      await screen.findByText('Уязвимость позволяет выполнить код.'),
+    ).toBeInTheDocument()
+    expect(explainCve).toHaveBeenCalledWith(
+      1,
+      'CVE-2018-18074',
+      'Credentials could be sent to a different host',
+    )
   })
 })

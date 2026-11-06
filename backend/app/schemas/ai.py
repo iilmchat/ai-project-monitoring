@@ -23,4 +23,24 @@ class CommitMessageSuggestion(BaseModel):
     generated_at: datetime
 
 
-__all__ = ["CommitMessageSuggestion"]
+class CveExplainRequest(BaseModel):
+    """Payload for ``POST /repositories/{id}/ai/cve-explain``."""
+
+    cve_id: str = Field(min_length=1, max_length=128)
+    summary: str = Field(min_length=1, max_length=4000)
+
+
+class CveExplanation(BaseModel):
+    """Result of CVE explanation."""
+
+    explanation: str
+    cached: bool = False
+    model: str | None = None
+    generated_at: datetime
+
+
+__all__ = [
+    "CommitMessageSuggestion",
+    "CveExplainRequest",
+    "CveExplanation",
+]

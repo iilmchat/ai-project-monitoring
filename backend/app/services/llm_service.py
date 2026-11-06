@@ -22,7 +22,11 @@ COMMIT_SYSTEM_PROMPT = (
     "Commits (feat/fix/docs/refactor). Опиши изменения кратко и по делу. "
     "Ответь только текстом коммита, без кавычек."
 )
+SECURITY_SYSTEM_PROMPT = (
+    "Ты — эксперт по безопасности. Отвечай кратко и только по фактам описания."
+)
 MAX_MESSAGE_CHARS = 2000
+MAX_EXPLANATION_CHARS = 2000
 
 
 class LLMService:
@@ -78,20 +82,52 @@ class LLMService:
 
     async def generate_commit_message(self, diff: str) -> str | None:
         """Return a generated commit message, or ``None`` on any failure."""
-        if not self.enabled or not diff.strip() or not self.remote_allowed():
+        if not diff.strip():
+            return None
+        return await self._complete(
+            COMMIT_SYSTEM_PROMPT,
+            f"Diff:\n{diff}",
+            max_tokens=512,
+            max_chars=MAX_MESSAGE_CHARS,
+        )
+
+    async def explain_cve(self, cve_id: str, summary: str) -> str | None:
+        """Return a short, developer-friendly CVE explanation."""
+        cve = cve_id.strip()
+        description = summary.strip()
+        if not cve or not description:
+            return None
+        prompt = (
+            "Ты — эксперт по безопасности. Объясни разработчику простым языком, "
+            f"в чем опасность уязвимости {cve} (описание: {description}). "
+            "Как её исправить? Ответь кратко, 2-3 предложения."
+        )
+        return await self._complete(
+            SECURITY_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=256,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
+    async def _complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int,
+        max_chars: int,
+    ) -> str | None:
+        if not self.enabled or not self.remote_allowed():
             return None
 
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": COMMIT_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Diff:\n{diff}",
-                },
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.2,
-            "max_tokens": 512,
+            "max_tokens": max_tokens,
             "stream": False,
         }
         headers = {"Accept": "application/json"}
@@ -144,7 +180,7 @@ class LLMService:
         message = _extract_message(body)
         if message is None:
             return None
-        return message[:MAX_MESSAGE_CHARS]
+        return message[:max_chars]
 
     def _endpoint(self) -> str:
         base = self.base_url
@@ -188,4 +224,10 @@ def _clean_message(value: str) -> str:
     return text.strip().strip('"').strip("'").strip()
 
 
-__all__ = ["COMMIT_SYSTEM_PROMPT", "MAX_MESSAGE_CHARS", "LLMService"]
+__all__ = [
+    "COMMIT_SYSTEM_PROMPT",
+    "MAX_EXPLANATION_CHARS",
+    "MAX_MESSAGE_CHARS",
+    "SECURITY_SYSTEM_PROMPT",
+    "LLMService",
+]

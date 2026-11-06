@@ -112,9 +112,9 @@ pnpm --dir frontend dev
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.6.0** (2026-11-06) |
-| Спринты | 1–30 (v0.6.0); 31–32 (v0.7.0, в работе) |
-| Тесты backend | **188** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **34** (Vitest + Testing Library) |
+| Спринты | 1–30 (v0.6.0); 31–33 (v0.7.0, в работе) |
+| Тесты backend | **198** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **36** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 100.9 kB, sparkline 6.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -135,7 +135,7 @@ pnpm --dir frontend dev
 - **Tech Debt & Insights (Sprint 29):** топ-5 «горячих» файлов по churn и commit frequency в `main` за 30 дней (DORA-lite, sparkline).
 - **Collaboration & Release (Sprint 30):** «Скопировать сводку в Markdown», экспорт/импорт workspace (Saved Views, колонки) в JSON и релиз `v0.6.0`.
 
-**v0.7.0 «AI & Global Analytics»** — в разработке (Sprint 32 завершён)
+**v0.7.0 «AI & Global Analytics»** — в разработке (Sprints 32–33 завершены)
 ([`TODO_V0.7.md`](TODO_V0.7.md)):
 
 - **LLM Provider & AI Commit Messages (Sprint 32):** Ollama/LM Studio через OpenAI-совместимый API, настройки в UI, генерация Conventional Commits по `git diff` с подтверждением в модалке.

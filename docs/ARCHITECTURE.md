@@ -3,8 +3,9 @@
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
 §12 (security) — в Sprint 28; §13 (insights) — в Sprint 29;
-§14 (collaboration export) — в Sprint 30. Разделы §15–17 — **план v0.7.0**
-(спринты 32–34); они фиксируют проектное решение до реализации.
+§14 (collaboration export) — в Sprint 30; §15 (LLM) — в Sprint 32–33;
+§16 (global analytics) — в Sprint 33; §17 (dependency updates) — **план**
+(Sprint 34).
 
 ---
 
@@ -247,13 +248,13 @@ Webhook **не заменяет** polling: если webhook не настрое�
 | **`webhook_events`** | **события от GitHub/GitFlic (R9) — v0.2.0** |
 | **`dependency_cache`** | **TTL-кэш latest-версий PyPI/npm (24 ч) — v0.5.0** |
 | **`security_cache`** | **TTL-кэш ответов OSV.dev по `package@version` (6 ч) — v0.6.0** |
-| **`ai_cache`** | **кэш CVE-объяснений по `osv_id + locale + model` (7 дней) — v0.7.0** |
+| **`ai_cache`** | **кэш CVE-объяснений по `cve_id + model` (7 дней) — v0.7.0** |
 
 Кэш локального статуса: `STATUS_TTL_SECONDS=60`. Кэш mirror-статуса: `MIRROR_STATUS_TTL_SECONDS=300`.
 Кэш Docker: `DOCKER_STATUS_TTL_SECONDS=30`. Кэш зависимостей: `DEPENDENCY_CACHE_TTL_SECONDS=86400`.
 Кэш security (OSV): `SECURITY_CACHE_TTL_SECONDS=21600`; secret-scan — in-memory 300 с.
 Кэш insights: in-memory `INSIGHTS_CACHE_TTL_SECONDS=300`.
-Кэш AI-объяснений: `AI_CACHE_TTL_SECONDS=604800`; global analytics — in-memory 60 с.
+Кэш AI-объяснений: `AI_CACHE_TTL_SECONDS=604800`; global analytics — in-memory 3600 с.
 
 ---
 
@@ -395,32 +396,30 @@ DashboardCharts.tsx
   не добавляются.
 - После импорта — реактивное обновление store, без перезагрузки страницы.
 
-### 9.9. AI, global dependencies и updates (v0.7.0; AI commit — Sprint 32, остальное — план)
+### 9.9. AI, global dependencies и updates (v0.7.0; Sprints 32–33, updates — план)
 
 ```
 <SettingsPage/>
-  └─ LlmSettings — base_url/model/api_key/timeout/allow_remote, test connection
+  └─ LlmSettings — enabled/base_url/model/api_key/timeout/max diff/allow_remote
 
 <RepositoryDetails/>
-  ├─ CommitMessageModal — dirty + llm_enabled → generate/copy, no auto-commit
-  ├─ CveExplainModal    — grounded OSV explanation, cached/fallback badge
-  └─ DependencyUpdateDialog — confirm + clean-worktree warning
+  ├─ CommitMessageModal — dirty + llm_enabled → generate/edit/copy/commit
+  ├─ CveExplainModal    — spinner → explanation (LLM/cache), error state
+  └─ DependencyUpdateDialog — confirm + clean-worktree warning (план)
 
-<GlobalDependenciesPage/>
-  ├─ GlobalSummary      — repositories/packages/outdated/unification
-  ├─ PackageTable       — versions distribution, recommended_version, badges
-  └─ filters            — ecosystem, outdated_only, limit
+<Dashboard/>
+  └─ GlobalDependencies — package table, versions distribution, "Унифицировать"
 ```
 
-- AI-модалки — lazy, с отменой запроса, скелетоном и ошибкой без падения
-  карточки; сгенерированный текст редактируемый, не коммитится автоматически.
-- CVE-объяснение показывает `source=fallback`/`cached`; ссылки открываются в
-  новой вкладке.
-- Global dependencies: `unification` и `status` дублируются текстом/иконкой, не
-  только цветом; пустые состояния и partial error.
-- Обновление пакетов: модалка требует явного подтверждения, показывает
-  ecosystem/manager, предупреждает об изменении lockfile; `dirty_worktree`
-  рендерится как ошибка, кнопка не запускает действие повторно.
+- AI-модалки с отменой/ошибкой без падения карточки; сгенерированный commit
+  message редактируемый и не коммитится автоматически.
+- CVE-объяснение показывает текст LLM (или ошибку недоступности); кнопка
+  появляется при `llm_enabled`.
+- Global dependencies: `unification_needed` дублируется текстовым бейджем, не
+  только цветом; пустые состояния и `partial_errors`.
+- Обновление пакетов (Sprint 34): модалка требует явного подтверждения,
+  показывает ecosystem/manager, предупреждает об изменении lockfile;
+  `dirty_worktree` рендерится как ошибка.
 - Новые тяжёлые блоки не входят в entry bundle (lazy, бюджет 100 kB gzip).
 
 ---
@@ -864,7 +863,7 @@ GET /repositories/{id}/insights?days=30
 
 ---
 
-## 15. LLMService (v0.7.0; commit message — Sprint 32, CVE — план Sprint 33)
+## 15. LLMService (v0.7.0; commit message — Sprint 32, CVE — Sprint 33)
 
 **Задача.** Дать локальному пользователю AI-помощника для commit message и
 объяснения CVE, не отправляя код на внешние сервисы по умолчанию и не выполняя
@@ -883,11 +882,11 @@ POST /repositories/{id}/ai/commit-message
             ├─ timeout LLM_TIMEOUT_SECONDS
             └─ cleanup ```/quotes → str | None
 
-POST /repositories/{id}/ai/cve-explain (план)
-  → LLMService.explain_cve(...)
-      ├─ security_cache / GET /v1/vulns/{id}
+POST /repositories/{id}/ai/cve-explain
+  → route:
       ├─ ai_cache lookup (7 дней)
-      └─ grounded explanation → CveExplanation
+      ├─ LLMService.explain_cve(cve_id, summary)
+      └─ cache explanation → CveExplanation
 ```
 
 ### 15.2. Клиент и конфигурация
@@ -920,31 +919,32 @@ POST /repositories/{id}/ai/cve-explain (план)
 - Никаких `git commit`, `git add` или записи в репозиторий из AI-эндпоинта.
   Отдельное действие `commit` требует `confirm=true` и сообщение (§3.9).
 
-### 15.4. CVE explain и `ai_cache` (план, Sprint 33)
+### 15.4. CVE explain и `ai_cache` (Sprint 33)
 
+- Эндпоинт `POST /repositories/{id}/ai/cve-explain` принимает `cve_id` и
+  `summary` (описание из `SecurityReport`); отдельный запрос в OSV не делается.
+- Промпт: «Ты — эксперт по безопасности… в чем опасность уязвимости
+  {cve_id}… Как её исправить? Ответь кратко, 2-3 предложения.»
 - `ai_cache(key*, kind, model, payload, checked_at)`, TTL 7 дней; ключ
-  `cve-explain:<osv_id>:<locale>:<model>`.
-- Источник фактов: `security_cache` или `GET /v1/vulns/{osv_id}`;
-  prompt содержит только нормализованный advisory.
-- Ответ: объяснение + `fixed_version` + `references`; LLM не должен добавлять
-  новые CVE/версии. Валидация: `osv_id` совпадает, ссылки из advisory.
-- OSV/LLM недоступны → `source=fallback`, объяснение из summary/advisory,
-  HTTP 200; `503 osv_unavailable` только если нет ни сети, ни кэша.
-- Кэш хранит только текст объяснения и ссылки, не diff и не секреты.
+  `cve-explain:<cve_id>:<model>`; `cached=true` при попадании.
+- `llm_enabled=false` / remote без opt-in → `409`; LLM timeout/5xx → `503`,
+  fallback-текст не подставляется.
+- В `ai_cache` хранится только текст объяснения и модель, не diff и не секреты.
+- Объяснение не влияет на `SecurityReport` и не кэширует advisory.
 
 ### 15.5. Приватность и read-only
 
 - По умолчанию трафик только на loopback; remote — явный opt-in с
   предупреждением в UI.
 - Diff, промпты, ответы не пишутся в `action_log`, structlog и БД (кроме
-  `ai_cache` текста CVE-объяснения в Sprint 33).
+  `ai_cache` текста CVE-объяснения).
 - Метаданные (модель, provider, source, факт ошибки) — можно логировать;
   содержимое diff и его размер в логи не попадают.
 - AI-эндпоинты не меняют рабочую директорию, индекс и `.git`.
 
 ---
 
-## 16. GlobalAnalyticsService (v0.7.0, Sprint 33 — план)
+## 16. GlobalAnalyticsService (v0.7.0, Sprint 33)
 
 **Задача.** Показать, какие популярные пакеты объявлены в разных версиях
 по всем проектам и где нужна унификация.
@@ -952,42 +952,41 @@ POST /repositories/{id}/ai/cve-explain (план)
 ### 16.1. Поток
 
 ```
-GET /dashboard/global-dependencies?ecosystem=all&limit=20
+GET /dashboard/global-dependencies?refresh=false
   → GlobalAnalyticsService
       ├─ tracked repositories (concurrency ≤ 4)
-      ├─ parse requirements.txt / package.json (v0.5.0 parsers)
-      ├─ aggregate <ecosystem>:<normalized-name> → versions[]
-      ├─ latest из dependency_cache (без сети)
-      ├─ optional refresh=true → registry clients, partial failure
+      ├─ DependencyService.get_report(ecosystem="all") для каждого
+      │    └─ парсеры v0.5.0 + registry latest / dependency_cache
+      ├─ aggregate <ecosystem>:<name> → version → projects
+      ├─ latest = max(package.latest) по проектам
       └─ top-N + summary → GlobalDependencyReport
 ```
 
 ### 16.2. Агрегация
 
-- По умолчанию **никаких** HTTP-запросов к PyPI/npm: `latest` только из
-  `dependency_cache`; отсутствующие — `missing_latest`.
-- `recommended_version` — максимальная declared-версия среди репозиториев
-  (кандидат на унификацию), не обязательно `latest`.
-- `unification`: `aligned` (одна версия), `mixed` (≥2), `unknown` (нет
-  разрешимых версий).
-- `status`: `current`, если `recommended_version >= latest`, иначе `outdated`;
-  без `latest` — `unknown`.
-- `summary.outdated_occurrences` — пары repo×package с устаревшей версией;
-  `unification_candidates` — пакеты `mixed`.
-- `versions[]` сортируется по убыванию числа репозиториев; пакеты — по
-  `repositories` desc, `name` asc; `limit` применяется после агрегации.
-- Ошибка одного репозитория/ecosystem не скрывает остальные: `error` на уровне
-  ecosystem, HTTP 200.
+- Версия проекта — `package.current` (`exact` или нижняя граница диапазона);
+  `ignored`-пакеты и пакеты без версии не входят.
+- `distribution` — версия → список уникальных проектов (alias или basename),
+  сортировка по возрастанию версии.
+- `latest_version` — максимальная известная latest из отчётов
+  `DependencyService`; `null`, если реестр не ответил и кэша нет.
+- `unification_needed = versions_count > 1`; `projects_count` — уникальные
+  проекты, использующие пакет.
+- Пакеты сортируются по `projects_count` desc, `name` asc; возвращается
+  `GLOBAL_ANALYTICS_LIMIT` (default 50). `summary.packages` считает все пакеты
+  до ограничения.
+- Ошибка одного репозитория не скрывает остальные: `error="partial_errors"`,
+  HTTP 200.
 
 ### 16.3. Кэш и производительность
 
-- In-memory кэш ответа `GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 60),
-  ключ `ecosystem + limit + outdated_only`.
-- `refresh=true` обновляет stale-записи `dependency_cache` через registry
-  clients с concurrency ≤ 4; ответ не блокирует дашборд.
-- Парсинг — синхронный и быстрый; тяжёлые операции — в `asyncio.to_thread`,
-  чтобы не блокировать event loop.
-- Никаких новых таблиц: агрегация каждый раз из манифестов + кэша.
+- In-memory кэш ответа `GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default **3600** =
+  1 час); `refresh=true` обходит кэш.
+- `refresh=true` передаётся в `DependencyService`, который обновляет stale
+  `dependency_cache` через registry-клиенты (concurrency ≤ 4).
+- Агрегация выполняется конкурентно (`GLOBAL_ANALYTICS_CONCURRENCY`, default 4),
+  но не блокирует event loop.
+- Никаких новых таблиц: агрегация строится из манифестов + существующего кэша.
 
 ---
 

@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_diff_chars: int = 10000
     llm_allow_remote: bool = False
+    ai_cache_ttl_seconds: int = 604800
+    global_analytics_cache_ttl_seconds: int = 3600
+    global_analytics_limit: int = 50
+    global_analytics_concurrency: int = 4
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

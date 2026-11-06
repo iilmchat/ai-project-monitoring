@@ -13,8 +13,10 @@ from app.db.session import get_session
 from app.models.entities import Repository
 from app.schemas.ci import CISummary
 from app.schemas.dashboard import DashboardRepository, DashboardResponse, DashboardSummary
+from app.schemas.global_analytics import GlobalDependencyReport
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
+from app.services.global_analytics_service import GlobalAnalyticsService
 from app.services.mirror_service import ATTENTION_STATUSES, snapshot_from_row
 from app.services.status_service import snapshot_from_row as status_snapshot_from_row
 
@@ -131,3 +133,15 @@ async def get_dashboard(
         )
 
     return DashboardResponse(summary=summary, repositories=items)
+
+
+@router.get(
+    "/dashboard/global-dependencies",
+    response_model=GlobalDependencyReport,
+)
+async def get_global_dependencies(
+    request: Request,
+    refresh: Annotated[bool, Query()] = False,
+) -> GlobalDependencyReport:
+    service: GlobalAnalyticsService = request.app.state.global_analytics_service
+    return await service.get_global_dependencies(refresh=refresh)

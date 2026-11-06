@@ -383,6 +383,43 @@ export interface CommitMessageSuggestion {
   generated_at: string
 }
 
+export interface CveExplanation {
+  explanation: string
+  cached: boolean
+  model: string | null
+  generated_at: string
+}
+
+export interface VersionDistribution {
+  version: string
+  projects: string[]
+}
+
+export interface GlobalDependencyPackage {
+  name: string
+  latest_version: string | null
+  distribution: VersionDistribution[]
+  versions_count: number
+  projects_count: number
+  unification_needed: boolean
+}
+
+export interface GlobalDependencySummary {
+  repositories: number
+  packages: number
+  unification_candidates: number
+}
+
+export interface GlobalDependencyReport {
+  checked_at: string
+  ecosystems: {
+    python: GlobalDependencyPackage[]
+    node: GlobalDependencyPackage[]
+  }
+  summary: GlobalDependencySummary
+  error: string | null
+}
+
 export interface DashboardResponse {
   summary: DashboardSummary
   repositories: DashboardRepository[]

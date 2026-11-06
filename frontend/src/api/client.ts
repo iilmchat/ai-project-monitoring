@@ -4,11 +4,13 @@ import type {
   CIStatus,
   CommitInfo,
   CommitMessageSuggestion,
+  CveExplanation,
   CompareResponse,
   ConflictsResponse,
   DashboardResponse,
   DependencyReport,
   DockerStatus,
+  GlobalDependencyReport,
   HeatmapData,
   InsightsReport,
   MirrorCandidates,
@@ -231,6 +233,28 @@ export async function getInsights(
 ): Promise<InsightsReport> {
   return request<InsightsReport>(`/repositories/${repositoryId}/insights`, {
     query: { days, refresh },
+  })
+}
+
+export async function explainCve(
+  repositoryId: number,
+  cveId: string,
+  summary: string,
+): Promise<CveExplanation> {
+  return request<CveExplanation>(
+    `/repositories/${repositoryId}/ai/cve-explain`,
+    {
+      method: 'POST',
+      body: { cve_id: cveId, summary },
+    },
+  )
+}
+
+export async function getGlobalDependencies(
+  refresh = false,
+): Promise<GlobalDependencyReport> {
+  return request<GlobalDependencyReport>('/dashboard/global-dependencies', {
+    query: { refresh },
   })
 }
 

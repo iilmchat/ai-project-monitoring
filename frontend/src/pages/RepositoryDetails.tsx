@@ -17,6 +17,7 @@ import {
   getSettings,
   getStatus,
   generateCommitMessage,
+  explainCve,
   refreshMirror,
   refreshRepository,
   runAction,
@@ -108,6 +109,11 @@ export default function RepositoryDetails() {
   const [commitConfirmed, setCommitConfirmed] = useState(false)
   const [commitRunning, setCommitRunning] = useState(false)
   const [commitNotice, setCommitNotice] = useState<string | null>(null)
+  const [cveOpen, setCveOpen] = useState(false)
+  const [cveLoading, setCveLoading] = useState(false)
+  const [cveTitle, setCveTitle] = useState('')
+  const [cveText, setCveText] = useState('')
+  const [cveError, setCveError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
@@ -462,6 +468,27 @@ export default function RepositoryDetails() {
       showToast('Не удалось выполнить коммит')
     } finally {
       setCommitRunning(false)
+    }
+  }
+
+  async function openCveExplain(item: SecurityVulnerability) {
+    const cveId = item.cve_ids[0] ?? item.osv_id
+    setCveOpen(true)
+    setCveTitle(cveId)
+    setCveText('')
+    setCveError(null)
+    setCveLoading(true)
+    try {
+      const result = await explainCve(
+        repositoryId,
+        cveId,
+        item.summary ?? `${item.package} ${item.version}`,
+      )
+      setCveText(result.explanation)
+    } catch {
+      setCveError('LLM недоступна. Проверьте настройки.')
+    } finally {
+      setCveLoading(false)
     }
   }
 
@@ -1066,6 +1093,11 @@ export default function RepositoryDetails() {
                         <SecurityVulnerabilityRow
                           key={`${vulnerability.package}-${vulnerability.osv_id}`}
                           item={vulnerability}
+                          onExplain={
+                            llmEnabled
+                              ? () => void openCveExplain(vulnerability)
+                              : undefined
+                          }
                         />
                       ))}
                     </ul>
@@ -1625,6 +1657,49 @@ export default function RepositoryDetails() {
         </div>
       )}
 
+      {cveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cve-explain-title"
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+          >
+            <h2
+              id="cve-explain-title"
+              className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+            >
+              Объяснение {cveTitle}
+            </h2>
+            <div className="mt-4">
+              {cveLoading ? (
+                <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  LLM объясняет уязвимость…
+                </p>
+              ) : cveError ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  {cveError}
+                </p>
+              ) : (
+                <p className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
+                  {cveText}
+                </p>
+              )}
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCveOpen(false)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div
           role="status"
@@ -1854,7 +1929,13 @@ function SecurityBadge({
   )
 }
 
-function SecurityVulnerabilityRow({ item }: { item: SecurityVulnerability }) {
+function SecurityVulnerabilityRow({
+  item,
+  onExplain,
+}: {
+  item: SecurityVulnerability
+  onExplain?: () => void
+}) {
   const osvUrl = `https://osv.dev/vulnerability/${encodeURIComponent(item.osv_id)}`
   return (
     <li className="px-3 py-2.5">
@@ -1909,6 +1990,15 @@ function SecurityVulnerabilityRow({ item }: { item: SecurityVulnerability }) {
           <span className="text-slate-500 dark:text-slate-400">
             исправлено в {item.fixed_version}
           </span>
+        )}
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            className="ml-auto rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Объяснить
+          </button>
         )}
       </div>
     </li>

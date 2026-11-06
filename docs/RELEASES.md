@@ -4,6 +4,27 @@
 
 ---
 
+## Спринт 33: AI Security Insights & Global Dashboard (v0.7.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S33-001: `GlobalAnalyticsService` — агрегация `DependencyService` по tracked-репозиториям, `distribution`, `latest_version`, `unification_needed`, кэш 1 час.
+- [x] S33-002: `LLMService.explain_cve(cve_id, summary)` и `POST /repositories/{id}/ai/cve-explain`; `ai_cache` на 7 дней.
+- [x] S33-003: `GET /api/v1/dashboard/global-dependencies` (`refresh`); ответ `{ecosystems: {python, node}}`.
+- [x] S33-004: блок «Global Dependencies» на дашборде (бейдж «Унифицировать») и CVE-модалка «Объяснить» в деталях.
+- [x] S33-005: `test_global_analytics.py` (6 тестов), `test_ai_explain.py` (7 тестов), SPEC §3.18.2/§3.19, ARCHITECTURE §15.4/§16.
+
+### Результаты
+
+- Backend-тесты: 198 passed
+- Frontend-тесты: 36 passed
+- Read-only: CVE explain/global analytics не меняют репозиторий.
+- `ai_cache` хранит только текст объяснения; LLM-ошибка → `503`, без fallback-текста.
+
+---
+
 ## Спринт 32: LLM Provider & AI Commit Messages (v0.7.0)
 
 **Дата:** 2026-11-06 · **Статус:** ✅ Завершён

@@ -15,6 +15,7 @@ import {
 } from '../api/client'
 import type { DashboardRepository, DashboardResponse } from '../api/types'
 import ContextMenu from '../components/ContextMenu'
+import GlobalDependencies from '../components/GlobalDependencies'
 import Heatmap from '../components/Heatmap'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
@@ -808,6 +809,8 @@ export default function Dashboard() {
       )}
 
       <Heatmap />
+
+      <GlobalDependencies />
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">

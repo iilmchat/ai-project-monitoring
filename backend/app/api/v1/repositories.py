@@ -6,6 +6,7 @@ import asyncio
 import csv
 import io
 import json
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -31,13 +32,17 @@ from app.git.pygit2_backend import (
     read_commits,
     read_local_status,
 )
-from app.models.entities import ActionLog, Repository, RepositoryStatus
+from app.models.entities import ActionLog, AICache, Repository, RepositoryStatus
 from app.schemas.action import (
     ActionLogResponse,
     ActionRequest,
     BulkActionRequest,
 )
-from app.schemas.ai import CommitMessageSuggestion
+from app.schemas.ai import (
+    CommitMessageSuggestion,
+    CveExplainRequest,
+    CveExplanation,
+)
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.dependency import DependencyReport
 from app.schemas.docker import DockerStatusResponse
@@ -337,6 +342,79 @@ async def generate_commit_message(
         diff_chars=len(original),
         files_changed=_count_diff_files(original),
         warnings=warnings,
+        generated_at=utcnow(),
+    )
+
+
+def _cache_is_fresh(checked_at: object, ttl_seconds: int) -> bool:
+    if not isinstance(checked_at, datetime) or ttl_seconds <= 0:
+        return False
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=UTC)
+    return 0 <= (utcnow() - checked_at).total_seconds() < ttl_seconds
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/cve-explain",
+    response_model=CveExplanation,
+)
+async def explain_repository_cve(
+    repository_id: int,
+    payload: CveExplainRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CveExplanation:
+    await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    if not service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="llm_disabled",
+        )
+    if not service.remote_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="llm_remote_not_allowed",
+        )
+
+    cache_key = f"cve-explain:{payload.cve_id.strip()}:{service.model}"
+    row = await session.get(AICache, cache_key)
+    ttl = int(request.app.state.settings.ai_cache_ttl_seconds)
+    if row is not None and _cache_is_fresh(row.checked_at, ttl):
+        explanation = (
+            row.payload.get("explanation")
+            if isinstance(row.payload, dict)
+            else None
+        )
+        if isinstance(explanation, str) and explanation:
+            return CveExplanation(
+                explanation=explanation,
+                cached=True,
+                model=row.model,
+                generated_at=utcnow(),
+            )
+
+    explanation = await service.explain_cve(payload.cve_id, payload.summary)
+    if explanation is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM недоступна. Проверьте настройки.",
+        )
+
+    if row is None:
+        row = AICache(
+            key=cache_key,
+            kind="cve_explain",
+            model=service.model,
+        )
+        session.add(row)
+    row.payload = {"explanation": explanation}
+    row.checked_at = utcnow()
+    await session.commit()
+    return CveExplanation(
+        explanation=explanation,
+        cached=False,
+        model=service.model,
         generated_at=utcnow(),
     )
 

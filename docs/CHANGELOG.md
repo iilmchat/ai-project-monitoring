@@ -10,8 +10,15 @@
 - feat(actions): действие `commit` с `confirm=true` и сообщением (≤ 2000 символов), запись в `action_log` (S32-004).
 - feat(ui): кнопка «Сгенерировать коммит» для dirty-репозиториев, модалка с лоадером, редактируемым текстом, копированием и подтверждённым коммитом (S32-005).
 - test(ai): успешная генерация, timeout/connection/5xx, disabled, remote-guard, API 400/409/503, truncation, commit action и маскировка ключа (S32-006).
+- feat(ai): `LLMService.explain_cve` и `POST /repositories/{id}/ai/cve-explain` с кэшем `ai_cache` на 7 дней (S33-001..S33-002).
+- feat(analytics): `GlobalAnalyticsService` — агрегация версий по tracked-репозиториям через `DependencyService`, `distribution`/`unification_needed`, кэш 1 час (S33-001).
+- feat(api): `GET /dashboard/global-dependencies` с `refresh` (S33-003).
+- feat(ui): блок «Global Dependencies» с таблицей версий и бейджем «Унифицировать»; кнопка «Объяснить» и модалка CVE в блоке безопасности (S33-004).
+- test(analytics): реальные tmp-проекты, агрегация/лимит/кэш/API; CVE prompt, кэш и ошибки LLM (S33-005).
 
 ### Документация
+
+- docs(ai/analytics): SPEC §3.18.2/§3.19, ARCHITECTURE §15.4/§16, CHANGELOG/RELEASES (S33-005).
 
 - docs(ai): SPEC §3.12/§3.18.1, ARCHITECTURE §15, ADR-0010, CHANGELOG/RELEASES (S32-006).
 - docs(planning): план v0.7.0 — LLM (commit message, CVE explain), global dependencies, dependency updates; SPEC §3.18–3.20, ARCHITECTURE §15–17, KI-013/014 (S31-001..S31-003).
