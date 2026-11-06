@@ -1,7 +1,7 @@
 # TODO v0.6.0 — Security, Insights & Collaboration
 
 **Версия:** v0.6.0 «Security, Insights & Collaboration»
-**Статус:** 🚧 Планирование (Sprint 27); спринты 28–30 запланированы
+**Статус:** 🚧 В разработке (Sprint 28 ✅); спринты 29–30 запланированы
 **Предыдущий этап:** v0.5.0 — [`TODO_V0.5.md`](TODO_V0.5.md)
 **Последнее обновление:** 2026-11-06
 
@@ -51,11 +51,11 @@
 
 ### Спринт 28 — Supply Chain Security
 
-**Статус:** ⏳ Запланирован
+**Статус:** ✅ Завершён (2026-11-06)
 
 **Задачи**
 
-- **S28-001. OSV.dev клиент.**
+- [x] **S28-001. OSV.dev клиент.**
   - `app/providers/osv_client.py`: `POST {OSV_API_URL}/v1/query` (один пакет) и
     `POST /v1/querybatch` (пакет), тело `{package: {name, ecosystem}, version}`.
   - Ecosystem: `PyPI` для `requirements.txt`, `npm` для `package.json`.
@@ -64,7 +64,7 @@
   - 429/5xx — backoff 0.5/1/2 с (max 3 попытки); 400/404 по пакету — не роняет
     отчёт. Ошибки клиента → `unavailable`, не 500.
 
-- **S28-002. SecurityService: CVE.**
+- [x] **S28-002. SecurityService: CVE.**
   - Переиспользовать парсеры v0.5.0 (`requirements.txt`, `package.json`), не
     дублировать чтение манифестов; `pip`/`npm` не запускаются.
   - Разрешение версии: `exact` → declared; `range` → нижняя граница с
@@ -79,7 +79,7 @@
     `SECURITY_CACHE_TTL_SECONDS=21600` = 6 ч); stale-while-revalidate.
   - Фильтр `min_severity` (default `high`); сортировка: severity desc, package asc.
 
-- **S28-003. Secret Scanner (базовый).**
+- [x] **S28-003. Secret Scanner (базовый).**
   - Источник файлов: `git ls-files -z -co --exclude-standard` (tracked +
     untracked, кроме ignored). История Git **не** сканируется.
   - Пропускать: бинарные файлы, размер > `SECRET_SCAN_MAX_FILE_BYTES` (1 MiB),
@@ -94,14 +94,14 @@
     (`ghp_****1234`), никогда полное значение.
   - In-memory кэш `SECRET_SCAN_TTL_SECONDS=300`; `refresh=true` обходит оба кэша.
 
-- **S28-004. API `GET /api/v1/repositories/{id}/security`.**
+- [x] **S28-004. API `GET /api/v1/repositories/{id}/security`.**
   - Параметры `refresh?: bool`, `include_secrets?: bool (default true)`,
     `min_severity?: critical|high|medium|low|all (default high)`.
   - Ответ `SecurityReport` по SPEC §3.16; отсутствие манифеста —
     `status=no_manifest`, а не 404/500.
   - Частичный отчёт: ошибка OSV по одному ecosystem не скрывает второй и секреты.
 
-- **S28-005. UI-блок «Безопасность».**
+- [x] **S28-005. UI-блок «Безопасность».**
   - Бейджи `critical/high/medium/low`, пакет, установленная версия → `fixed`,
     CVE/GHSA-ссылки, раскрываемый список.
   - Секреты: файл:строка, тип, severity, маскированный preview; пустое
@@ -109,7 +109,7 @@
   - Состояния `unavailable`/`partial`/`no_manifest` читаемы; блок lazy,
     кнопка «Проверить снова» → `?refresh=true`. Действий «исправить» нет.
 
-- **S28-006. Тесты и документация.**
+- [x] **S28-006. Тесты и документация.**
   - Тесты: fake OSV-клиент (severity, дедупликация, backoff, 404/429/5xx),
     `version_source`, фильтр `min_severity`, кэш/refresh, partial failure.
   - Secret scanner: фикстуры каждого правила, бинарники/большие файлы,
@@ -119,18 +119,18 @@
 
 **DoD:**
 
-- [ ] `GET /repositories/{id}/security` соответствует SPEC §3.16.
-- [ ] Python и Node проверяются; exact-версии дают CVE, range помечается
+- [x] `GET /repositories/{id}/security` соответствует SPEC §3.16.
+- [x] Python и Node проверяются; exact-версии дают CVE, range помечается
       `lower_bound`, неразрешимые — `unknown` (не «чисто»).
-- [ ] По умолчанию отдаются High/Critical; `min_severity=all` возвращает всё.
-- [ ] Секреты: в ответе/логах только маскированный preview; история Git не
+- [x] По умолчанию отдаются High/Critical; `min_severity=all` возвращает всё.
+- [x] Секреты: в ответе/логах только маскированный preview; история Git не
       сканируется; лимиты файлов/размера соблюдаются.
-- [ ] OSV 429/5xx/timeout → `unavailable`/partial, HTTP 200; stale-кэш
+- [x] OSV 429/5xx/timeout → `unavailable`/partial, HTTP 200; stale-кэш
       используется, если есть.
-- [ ] Read-only: рабочая директория и индекс не меняются; `pip`/`npm` не
+- [x] Read-only: рабочая директория и индекс не меняются; `pip`/`npm` не
       вызываются; destructive-команд нет (grep-аудит).
-- [ ] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
-- [ ] ADR-0009 и документация обновлены; секретов в диффе нет.
+- [x] Тесты, `ruff`, `mypy --strict`, frontend-проверки — зелёные.
+- [x] ADR-0009 и документация обновлены; секретов в диффе нет.
 
 ---
 
@@ -252,7 +252,7 @@
 | `GET /repositories/{id}/security`, `SecurityReport`, severity/статусы | `docs/SPEC.md` §3.16 |
 | `GET /repositories/{id}/insights`, `InsightsReport`, hotspots/DORA | `docs/SPEC.md` §3.17 |
 | Таблица `security_cache`, TTL 6 ч | `docs/SPEC.md` §4, §5; `docs/ARCHITECTURE.md` §12.5 |
-| OSV.dev, версии из диапазонов, severity mapping | `docs/ARCHITECTURE.md` §12; ADR-0009 (создаётся в Sprint 28) |
+| OSV.dev, версии из диапазонов, severity mapping | `docs/ARCHITECTURE.md` §12; `docs/adr/0009-supply-chain-security.md` |
 | Secret Scanning: источники файлов, лимиты, маскирование | `docs/ARCHITECTURE.md` §12.6; `docs/SPEC.md` §3.16.3 |
 | Hotspots/DORA через subprocess, таймауты, кэш | `docs/ARCHITECTURE.md` §13 |
 | Markdown export, Workspace export/import | `docs/SPEC.md` §9.11; `docs/ARCHITECTURE.md` §14 |

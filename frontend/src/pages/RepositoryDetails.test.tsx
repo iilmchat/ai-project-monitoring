@@ -13,6 +13,7 @@ import {
   getMirror,
   getRecommendations,
   getRepositories,
+  getSecurity,
   getStatus,
 } from '../api/client'
 import type {
@@ -21,6 +22,7 @@ import type {
   DockerStatus,
   MirrorStatus,
   RepositoryStatus,
+  SecurityReport,
 } from '../api/types'
 import RepositoryDetails from './RepositoryDetails'
 
@@ -34,6 +36,7 @@ vi.mock('../api/client', () => ({
   getMirror: vi.fn(),
   getRecommendations: vi.fn(),
   getRepositories: vi.fn(),
+  getSecurity: vi.fn(),
   getStatus: vi.fn(),
   refreshMirror: vi.fn(),
   refreshRepository: vi.fn(),
@@ -116,6 +119,53 @@ const dependenciesNoManifest: DependencyReport = {
   summary: { total: 0, outdated: 0, up_to_date: 0, unknown: 0, ignored: 0 },
 }
 
+const cleanSecurity: SecurityReport = {
+  repository_id: 1,
+  checked_at: '2026-11-06T10:00:00Z',
+  status: 'ok',
+  summary: {
+    total_packages: 1,
+    packages_checked: 1,
+    vulnerable: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    unknown: 0,
+    secrets_found: 0,
+  },
+  ecosystems: [
+    {
+      ecosystem: 'python',
+      manifest: 'requirements.txt',
+      status: 'ok',
+      total_packages: 1,
+      packages_checked: 1,
+      vulnerabilities: [],
+      unknown_packages: [],
+      error: null,
+    },
+    {
+      ecosystem: 'node',
+      manifest: 'package.json',
+      status: 'no_manifest',
+      total_packages: 0,
+      packages_checked: 0,
+      vulnerabilities: [],
+      unknown_packages: [],
+      error: null,
+    },
+  ],
+  secrets: {
+    status: 'ok',
+    files_scanned: 4,
+    truncated: false,
+    findings: [],
+    error: null,
+  },
+  error: null,
+}
+
 function renderDetails() {
   return render(
     <MemoryRouter initialEntries={['/repo/1']}>
@@ -150,6 +200,7 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
     vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)
     vi.mocked(getDependencies).mockResolvedValue(dependenciesNoManifest)
+    vi.mocked(getSecurity).mockResolvedValue(cleanSecurity)
     vi.mocked(getCiStatus).mockResolvedValue({
       repository_id: 1,
       branch: 'main',
@@ -335,5 +386,85 @@ describe('RepositoryDetails actions', () => {
     expect(screen.getByText('requests')).toBeInTheDocument()
     expect(screen.getByText(/2.32.0/)).toBeInTheDocument()
     expect(screen.getByText('minor')).toBeInTheDocument()
+  })
+
+  it('renders CVE details in the security block', async () => {
+    vi.mocked(getSecurity).mockResolvedValue({
+      ...cleanSecurity,
+      summary: {
+        ...cleanSecurity.summary,
+        vulnerable: 1,
+        high: 1,
+      },
+      ecosystems: [
+        {
+          ...cleanSecurity.ecosystems[0],
+          vulnerabilities: [
+            {
+              package: 'requests',
+              version: '2.19.0',
+              version_source: 'exact',
+              osv_id: 'GHSA-9wx4-h78v-vm56',
+              cve_ids: ['CVE-2018-18074'],
+              severity: 'high',
+              cvss_score: 7.5,
+              summary: 'Credentials could be sent to a different host',
+              fixed_version: '2.20.0',
+              references: [],
+            },
+          ],
+        },
+        cleanSecurity.ecosystems[1],
+      ],
+    })
+
+    renderDetails()
+
+    expect(await screen.findByTestId('security-block')).toBeInTheDocument()
+    expect(await screen.findByText('1 high/critical')).toBeInTheDocument()
+    expect(screen.getByText('requests')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'CVE-2018-18074' })).toHaveAttribute(
+      'href',
+      'https://osv.dev/vulnerability/CVE-2018-18074',
+    )
+    expect(screen.getByText(/исправлено в 2.20.0/)).toBeInTheDocument()
+  })
+
+  it('shows a red alert for masked secrets', async () => {
+    vi.mocked(getSecurity).mockResolvedValue({
+      ...cleanSecurity,
+      summary: { ...cleanSecurity.summary, secrets_found: 1 },
+      secrets: {
+        status: 'ok',
+        files_scanned: 4,
+        truncated: false,
+        findings: [
+          {
+            file: 'backend/.env',
+            line: 3,
+            type: 'github_token',
+            severity: 'high',
+            confidence: 'high',
+            preview: 'ghp_****6789',
+          },
+        ],
+        error: null,
+      },
+    })
+
+    renderDetails()
+
+    expect(
+      await screen.findByText('Найдены потенциальные секреты (1)'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('backend/.env:3')).toBeInTheDocument()
+    expect(screen.getByText('ghp_****6789')).toBeInTheDocument()
+  })
+
+  it('shows a clean security state', async () => {
+    renderDetails()
+
+    const clean = await screen.findAllByText('Уязвимостей не найдено')
+    expect(clean.length).toBeGreaterThan(0)
   })
 })

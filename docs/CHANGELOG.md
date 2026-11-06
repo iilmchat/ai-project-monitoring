@@ -2,8 +2,18 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(security): `OsvClient` — batch-запросы к OSV.dev, CVSS v3 base score, нормализация advisories (S28-001).
+- feat(security): `SecurityService` — CVE для `requirements.txt`/`package.json`, `version_source=exact|lower_bound`, severity/fixed/CVE-алиасы, кэш `security_cache` 6 ч и stale-while-revalidate (S28-002).
+- feat(security): regex Secret Scanner (AWS, GitHub token, JWT, private key) только по рабочей директории; маскирование, `# iiruchating:ignore-secret`, лимиты 5000 файлов / 1 MiB (S28-002).
+- feat(api): `GET /api/v1/repositories/{id}/security` с `refresh`, `include_secrets`, `min_severity` (S28-003).
+- feat(ui): блок «Безопасность» — severity-бейджи, CVE/OSV-ссылки, `fixed_version`, красный алерт о секретах с masked preview (S28-004).
+- test(security): OSV-парсинг, CVSS, кэш/partial failure, secret-правила и маскирование, API-контракт (S28-005).
+
 ### Документация
 
+- docs(security): SPEC §3.16 (фактические поля), ARCHITECTURE §12, ADR-0009, KI-011/012 в матрицу (S28-005).
 - docs(planning): план v0.6.0 — supply-chain security (OSV.dev CVE, secret scanning), insights (hotspots, DORA-lite), collaboration/export; SPEC §3.16–3.17, ARCHITECTURE §12–14, KI-011/012 (S27-001..S27-003).
 
 ## [0.5.0] - 2026-11-06

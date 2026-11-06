@@ -215,6 +215,86 @@ export interface DependencyReport {
   summary: DependencySummary
 }
 
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+export type SecurityVersionSource = 'exact' | 'lower_bound'
+export type SecurityEcosystemStatus =
+  | 'ok'
+  | 'no_manifest'
+  | 'parse_error'
+  | 'unavailable'
+
+export interface SecurityVulnerability {
+  package: string
+  version: string
+  version_source: SecurityVersionSource
+  osv_id: string
+  cve_ids: string[]
+  severity: SecuritySeverity
+  cvss_score: number | null
+  summary: string | null
+  fixed_version: string | null
+  references: string[]
+}
+
+export interface SecurityUnknownPackage {
+  name: string
+  reason:
+    | 'unresolved_range'
+    | 'unsupported_kind'
+    | 'registry_missing'
+    | 'osv_unavailable'
+}
+
+export interface SecurityEcosystemReport {
+  ecosystem: 'python' | 'node'
+  manifest: string
+  status: SecurityEcosystemStatus
+  total_packages: number
+  packages_checked: number
+  vulnerabilities: SecurityVulnerability[]
+  unknown_packages: SecurityUnknownPackage[]
+  error: string | null
+}
+
+export interface SecretFinding {
+  file: string
+  line: number
+  type: 'aws_access_key' | 'aws_secret_key' | 'github_token' | 'jwt' | 'private_key'
+  severity: 'high' | 'medium'
+  confidence: 'high' | 'medium'
+  preview: string
+}
+
+export interface SecretScanReport {
+  status: 'ok' | 'skipped' | 'partial' | 'unavailable'
+  files_scanned: number
+  truncated: boolean
+  findings: SecretFinding[]
+  error: string | null
+}
+
+export interface SecuritySummary {
+  total_packages: number
+  packages_checked: number
+  vulnerable: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unknown: number
+  secrets_found: number
+}
+
+export interface SecurityReport {
+  repository_id: number
+  checked_at: string
+  status: 'ok' | 'unavailable'
+  summary: SecuritySummary
+  ecosystems: SecurityEcosystemReport[]
+  secrets: SecretScanReport
+  error: string | null
+}
+
 export type HeatmapData = Record<string, number>
 
 export interface AppSettings {

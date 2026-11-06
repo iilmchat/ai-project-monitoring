@@ -55,6 +55,7 @@ from app.schemas.repository import (
     RepositoryRead,
     RepositoryStatusResponse,
 )
+from app.schemas.security import SecurityReport
 from app.services.action_service import (
     ActionNotAllowedError,
     ActionService,
@@ -68,6 +69,7 @@ from app.services.dependency_service import DependencyService
 from app.services.docker_service import DockerService
 from app.services.mirror_service import MirrorService
 from app.services.recommendation_service import generate_recommendations
+from app.services.security_service import SecurityService
 from app.services.status_service import StatusService
 
 router = APIRouter(tags=["repositories"])
@@ -95,6 +97,11 @@ def _docker_service(request: Request) -> DockerService:
 
 def _dependency_service(request: Request) -> DependencyService:
     service: DependencyService = request.app.state.dependency_service
+    return service
+
+
+def _security_service(request: Request) -> SecurityService:
+    service: SecurityService = request.app.state.security_service
     return service
 
 
@@ -204,6 +211,30 @@ async def repository_dependencies(
         repository.path,
         ecosystem=ecosystem,
         refresh=refresh,
+    )
+
+
+@router.get(
+    "/repositories/{repository_id}/security",
+    response_model=SecurityReport,
+)
+async def repository_security(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    refresh: Annotated[bool, Query()] = False,
+    include_secrets: Annotated[bool, Query()] = True,
+    min_severity: Annotated[
+        Literal["critical", "high", "medium", "low", "all"], Query()
+    ] = "high",
+) -> SecurityReport:
+    repository = await _get_repository(session, repository_id)
+    return await _security_service(request).get_report(
+        repository.id,
+        repository.path,
+        refresh=refresh,
+        include_secrets=include_secrets,
+        min_severity=min_severity,
     )
 
 

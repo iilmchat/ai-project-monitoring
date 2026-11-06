@@ -18,6 +18,7 @@ from app.middleware import RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
 from app.providers.npm_client import NpmClient
+from app.providers.osv_client import OsvClient
 from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.bulk_service import BulkService
@@ -29,6 +30,7 @@ from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
 from app.services.remote_service import RemoteService
+from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.services.status_service import StatusCache, StatusService
 
@@ -100,6 +102,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cache_ttl_seconds=resolved.dependency_cache_ttl_seconds,
         concurrency=resolved.dependency_check_concurrency,
     )
+    osv_client = OsvClient(
+        timeout_seconds=resolved.security_http_timeout,
+        base_url=resolved.osv_api_url,
+    )
+    security_service = SecurityService(
+        session_factory,
+        osv_client,
+        cache_ttl_seconds=resolved.security_cache_ttl_seconds,
+        concurrency=resolved.security_check_concurrency,
+        secret_scan_enabled=resolved.secret_scan_enabled,
+        secret_scan_max_files=resolved.secret_scan_max_files,
+        secret_scan_max_file_bytes=resolved.secret_scan_max_file_bytes,
+        secret_scan_ttl_seconds=resolved.secret_scan_ttl_seconds,
+    )
     mirror_scheduler = MirrorScheduler(
         mirror_service,
         session_factory,
@@ -159,6 +175,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.pypi_client = pypi_client
     application.state.npm_client = npm_client
     application.state.dependency_service = dependency_service
+    application.state.osv_client = osv_client
+    application.state.security_service = security_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service

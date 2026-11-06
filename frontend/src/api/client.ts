@@ -18,6 +18,7 @@ import type {
   RepositoryStatus,
   ScanStarted,
   ScanStatus,
+  SecurityReport,
   SettingsUpdate,
 } from './types'
 
@@ -195,6 +196,16 @@ export async function getDependencies(
 ): Promise<DependencyReport> {
   return request<DependencyReport>(`/repositories/${repositoryId}/dependencies`, {
     query: { ecosystem, refresh },
+  })
+}
+
+export async function getSecurity(
+  repositoryId: number,
+  refresh = false,
+  minSeverity: 'critical' | 'high' | 'medium' | 'low' | 'all' = 'high',
+): Promise<SecurityReport> {
+  return request<SecurityReport>(`/repositories/${repositoryId}/security`, {
+    query: { refresh, min_severity: minSeverity },
   })
 }
 

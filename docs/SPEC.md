@@ -1,11 +1,10 @@
 # SPEC — спецификация проекта (источник истины по контрактам)
 
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
-Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26.
-Security §3.16 и Insights §3.17 — **план v0.6.0** (Sprint 28–29); контракты
-зафиксированы до реализации.
+Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
+Security §3.16 — в Sprint 28; Insights §3.17 — **план** (Sprint 29).
 
-**Версия:** v0.6.0 «Security, Insights & Collaboration» (планирование) · **Обновлено:** 2026-11-06
+**Версия:** v0.6.0 «Security, Insights & Collaboration» (в разработке) · **Обновлено:** 2026-11-06
 
 ---
 
@@ -511,11 +510,14 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.16. Security — CVE и Secret Scanning (v0.6.0, Sprint 28, план)
+### 3.16. Security — CVE и Secret Scanning (v0.6.0, Sprint 28)
 
 Проверка **объявленных** зависимостей на известные уязвимости через OSV.dev и
 базовый поиск секретов в рабочей директории. Репозиторий только читается:
 пакеты не устанавливаются/не обновляются, секреты не редактируются.
+
+**Статус реализации:** Sprint 28 — реализовано (`SecurityService`,
+`OsvClient`, `SecretScanner`).
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -527,6 +529,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 {
   "repository_id": 1,
   "checked_at": "2026-11-06T10:00:00Z",
+  "status": "ok",
   "summary": {
     "total_packages": 18,
     "packages_checked": 15,
@@ -543,6 +546,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
       "ecosystem": "python",
       "manifest": "requirements.txt",
       "status": "ok",
+      "total_packages": 14,
       "packages_checked": 14,
       "vulnerabilities": [
         {
@@ -567,6 +571,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
       "ecosystem": "node",
       "manifest": "package.json",
       "status": "no_manifest",
+      "total_packages": 0,
       "packages_checked": 0,
       "vulnerabilities": [],
       "unknown_packages": [],
@@ -597,13 +602,19 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 - `ecosystem.status ∈ {ok, no_manifest, parse_error, unavailable}` — те же
   значения, что в §3.15; частичный отчёт всегда HTTP 200.
+- `status` верхнего уровня — `unavailable`, только если **все** ecosystem с
+  манифестом недоступны; иначе `ok` (включая `no_manifest` и частичные ошибки).
+- `total_packages` — объявленные пакеты с разрешимой или неразрешимой версией
+  (`ignored`-пакеты не входят); `packages_checked + unknown ≤ total`, разница —
+  пакеты, которые не удалось проверить (OSV недоступен и кэша нет).
 - `version_source ∈ {exact, lower_bound}`:
   - `exact` — версия из `==` / точного `package.json`;
   - `lower_bound` — нижняя граница диапазона (`>=`, `^`, `~` и т.п.);
     результат считается приблизительным и помечается в UI.
 - Пакеты, для которых версию извлечь нельзя, попадают в `unknown_packages`
-  (`reason ∈ {unresolved_range, unsupported_kind, registry_missing}`) и **не**
-  считаются проверенными. `summary.unknown` — их количество.
+  (`reason ∈ {unresolved_range, unsupported_kind, registry_missing,
+  osv_unavailable}`) и **не** считаются проверенными. `summary.unknown` — их
+  количество.
 - `severity ∈ {critical, high, medium, low, unknown}`:
   CVSS v3 ≥ 9.0 → `critical`, 7.0–8.9 → `high`, 4.0–6.9 → `medium`,
   < 4.0 → `low`; при отсутствии CVSS используется severity из OSV, иначе
@@ -625,14 +636,16 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 - `refresh=true` обходит TTL для запрошенного репозитория и обновляет кэш.
 - Concurrency ≤ `SECURITY_CHECK_CONCURRENCY` (default 4), timeout
   `SECURITY_HTTP_TIMEOUT` (default 10 с), backoff на 429/5xx (0.5/1/2 с).
-- При ошибке OSV и наличии stale-записи отдаётся кэш с `error=null`, а
-  актуальность видна по `checked_at`.
+- При ошибке OSV и наличии stale-записи отдаётся кэш; `error` содержит причину
+  (`rate_limited`, `timeout`, `osv_unavailable`), `checked_at` показывает момент
+  формирования отчёта.
 
 #### 3.16.3. Secret Scanning (базовый)
 
 - Сканируется **рабочая директория**, не история Git.
 - Источник файлов: `git ls-files -z -co --exclude-standard` — tracked-файлы и
-  untracked-файлы, не покрытые `.gitignore`.
+  untracked-файлы, не покрытые `.gitignore`. Вне Git-репозитория (или при ошибке
+  `git`) используется рекурсивный обход с теми же исключениями.
 - Пропускаются: бинарные файлы, файлы больше `SECRET_SCAN_MAX_FILE_BYTES`
   (default **1048576** = 1 MiB), каталоги `.git`, `node_modules`, `.venv`,
   `vendor`, `dist`, `build`, `target`. Лимит `SECRET_SCAN_MAX_FILES`
@@ -816,7 +829,7 @@ dependency_cache(           -- v0.5.0
   checked_at
 )
 
-security_cache(             -- v0.6.0 (план, Sprint 28)
+security_cache(             -- v0.6.0 (Sprint 28)
   key* TEXT PRIMARY KEY,    -- "osv:pypi:requests:2.19.0"
   ecosystem TEXT,           -- pypi | npm
   package TEXT,
@@ -899,15 +912,15 @@ security_cache(             -- v0.6.0 (план, Sprint 28)
 
 ### 6.3. v0.6.0 (план, спринты 28–30)
 
-- [ ] Security: `GET /repositories/{id}/security` возвращает `SecurityReport`
+- [x] Security: `GET /repositories/{id}/security` возвращает `SecurityReport`
       по §3.16; Python и Node проверяются через OSV.dev.
-- [ ] Security: exact-версии дают CVE, диапазоны помечаются `lower_bound`,
+- [x] Security: exact-версии дают CVE, диапазоны помечаются `lower_bound`,
       неразрешимые — `unknown_packages`; по умолчанию видны High/Critical.
-- [ ] Security: OSV 429/5xx/timeout → `unavailable`/partial, HTTP 200; кэш 6 ч
+- [x] Security: OSV 429/5xx/timeout → `unavailable`/partial, HTTP 200; кэш 6 ч
       переживает перезапуск.
-- [ ] Secrets: сканируется рабочая директория (tracked + untracked non-ignored),
+- [x] Secrets: сканируется рабочая директория (tracked + untracked non-ignored),
       история Git — нет; в ответе только masked preview.
-- [ ] Secrets: лимиты файлов/размера соблюдаются; `# iiruchating:ignore-secret`
+- [x] Secrets: лимиты файлов/размера соблюдаются; `# iiruchating:ignore-secret`
       и `include_secrets=false` работают.
 - [ ] Insights: `GET /repositories/{id}/insights` возвращает топ-5 hotspots и
       commit frequency по §3.17; Git-вызовы не блокируют event loop.
@@ -1050,7 +1063,7 @@ security_cache(             -- v0.6.0 (план, Sprint 28)
 - Кнопка «Проверить снова» → `?refresh=true`; автоматического обновления пакетов нет.
 - Блоки lazy; счётчик в карточке не требует раскрытия списка.
 
-### 9.10 Security и Insights (v0.6.0, план)
+### 9.10 Security и Insights (v0.6.0; security — Sprint 28, insights — план Sprint 29)
 
 **Security:**
 

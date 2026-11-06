@@ -12,6 +12,7 @@ import {
   getMirror,
   getRecommendations,
   getRepositories,
+  getSecurity,
   getStatus,
   refreshMirror,
   refreshRepository,
@@ -35,6 +36,9 @@ import type {
   Recommendation,
   Repository,
   RepositoryStatus,
+  SecretFinding,
+  SecurityReport,
+  SecurityVulnerability,
 } from '../api/types'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
@@ -83,6 +87,10 @@ export default function RepositoryDetails() {
   const [dependencyEcosystem, setDependencyEcosystem] = useState<'python' | 'node'>(
     'python',
   )
+  const [security, setSecurity] = useState<SecurityReport | null>(null)
+  const [securityLoading, setSecurityLoading] = useState(!invalidId)
+  const [securityRefreshing, setSecurityRefreshing] = useState(false)
+  const [securityError, setSecurityError] = useState<string | null>(null)
   const [mirrorRefreshing, setMirrorRefreshing] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [policyCanonical, setPolicyCanonical] = useState<'github' | 'gitflic' | 'both'>(
@@ -203,6 +211,34 @@ export default function RepositoryDetails() {
     }
   }, [invalidId, repositoryId])
 
+  useEffect(() => {
+    if (invalidId) {
+      return
+    }
+    let active = true
+    setSecurityLoading(true)
+    void getSecurity(repositoryId)
+      .then((report) => {
+        if (active) {
+          setSecurity(report)
+          setSecurityError(null)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSecurityError('Не удалось проверить безопасность.')
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setSecurityLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [invalidId, repositoryId])
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
@@ -264,6 +300,18 @@ export default function RepositoryDetails() {
       setDependenciesError('Не удалось проверить зависимости.')
     } finally {
       setDependenciesRefreshing(false)
+    }
+  }
+
+  async function handleSecurityRefresh() {
+    setSecurityRefreshing(true)
+    try {
+      setSecurity(await getSecurity(repositoryId, true))
+      setSecurityError(null)
+    } catch {
+      setSecurityError('Не удалось проверить безопасность.')
+    } finally {
+      setSecurityRefreshing(false)
     }
   }
 
@@ -361,6 +409,12 @@ export default function RepositoryDetails() {
 
   const selectedDependencies =
     dependencies?.ecosystems.find((item) => item.ecosystem === dependencyEcosystem) ?? null
+
+  const securityVulnerabilities =
+    security?.ecosystems.flatMap((item) => item.vulnerabilities) ?? []
+  const securitySecrets = security?.secrets.findings ?? []
+  const securityHasCritical =
+    (security?.summary.critical ?? 0) + (security?.summary.high ?? 0) > 0
 
   return (
     <section className="space-y-6">
@@ -759,6 +813,108 @@ export default function RepositoryDetails() {
                     Проверено: {formatDate(dependencies?.checked_at)} · источник:{' '}
                     {dependencySourceLabel(selectedDependencies.source)} · всего устаревших:{' '}
                     {dependencies?.summary.outdated ?? 0}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div
+            data-testid="security-block"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Безопасность
+              </h2>
+              <div className="flex items-center gap-2">
+                <SecurityBadge
+                  report={security}
+                  hasCritical={securityHasCritical}
+                  secrets={securitySecrets.length}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSecurityRefresh()}
+                  disabled={securityRefreshing || securityLoading}
+                  className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {securityRefreshing ? 'Проверка…' : 'Проверить снова'}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3 p-4">
+              {securityLoading ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Проверка уязвимостей и секретов…
+                </p>
+              ) : securityError ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  {securityError}
+                </p>
+              ) : security === null ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Нет данных о безопасности.
+                </p>
+              ) : (
+                <>
+                  {security.status === 'unavailable' && (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                      {security.error === 'rate_limited'
+                        ? 'OSV.dev ограничил частоту запросов. Показаны данные из кэша, если они есть.'
+                        : 'OSV.dev временно недоступен. Данные могут быть неполными.'}
+                    </p>
+                  )}
+
+                  {securitySecrets.length > 0 && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800 dark:bg-red-900/30">
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                        Найдены потенциальные секреты ({securitySecrets.length})
+                      </p>
+                      <ul className="mt-2 space-y-1">
+                        {securitySecrets.map((finding) => (
+                          <li
+                            key={`${finding.file}-${finding.line}-${finding.type}`}
+                            className="flex flex-wrap items-center gap-2 text-xs text-red-700 dark:text-red-200"
+                          >
+                            <span className="font-mono">
+                              {finding.file}:{finding.line}
+                            </span>
+                            <span>{secretTypeLabel(finding.type)}</span>
+                            <code className="rounded bg-red-100 px-1.5 py-0.5 font-mono dark:bg-red-900/50">
+                              {finding.preview}
+                            </code>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {securityVulnerabilities.length > 0 ? (
+                    <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
+                      {securityVulnerabilities.map((vulnerability) => (
+                        <SecurityVulnerabilityRow
+                          key={`${vulnerability.package}-${vulnerability.osv_id}`}
+                          item={vulnerability}
+                        />
+                      ))}
+                    </ul>
+                  ) : security.status === 'ok' ? (
+                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                      Уязвимостей не найдено.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      Данные об уязвимостях недоступны.
+                    </p>
+                  )}
+
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Проверено: {formatDate(security.checked_at)} · всего пакетов:{' '}
+                    {security.summary.total_packages} · проверено:{' '}
+                    {security.summary.packages_checked} · неизвестно:{' '}
+                    {security.summary.unknown} · секретов:{' '}
+                    {security.summary.secrets_found}
                   </p>
                 </>
               )}
@@ -1229,6 +1385,155 @@ function dependencySourceLabel(source: DependencyEcosystemReport['source']): str
       return 'устаревший кэш'
     default:
       return '—'
+  }
+}
+
+function SecurityBadge({
+  report,
+  hasCritical,
+  secrets,
+}: {
+  report: SecurityReport | null
+  hasCritical: boolean
+  secrets: number
+}) {
+  if (report === null) {
+    return (
+      <span
+        data-testid="security-status"
+        className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200"
+      >
+        Нет данных
+      </span>
+    )
+  }
+  if (report.status === 'unavailable') {
+    return (
+      <span
+        data-testid="security-status"
+        className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200"
+      >
+        Недоступно
+      </span>
+    )
+  }
+  if (hasCritical || secrets > 0) {
+    const parts: string[] = []
+    if (hasCritical) {
+      parts.push(`${report.summary.critical + report.summary.high} high/critical`)
+    }
+    if (secrets > 0) {
+      parts.push(`секреты: ${secrets}`)
+    }
+    return (
+      <span
+        data-testid="security-status"
+        className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 ring-1 ring-inset ring-red-200"
+      >
+        {parts.join(' · ')}
+      </span>
+    )
+  }
+  return (
+    <span
+      data-testid="security-status"
+      className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200"
+    >
+      Уязвимостей не найдено
+    </span>
+  )
+}
+
+function SecurityVulnerabilityRow({ item }: { item: SecurityVulnerability }) {
+  const osvUrl = `https://osv.dev/vulnerability/${encodeURIComponent(item.osv_id)}`
+  return (
+    <li className="px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <span className="font-mono text-sm font-medium text-slate-800 dark:text-slate-100">
+            {item.package}
+          </span>
+          <span className="ml-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+            {item.version}
+          </span>
+          {item.version_source === 'lower_bound' && (
+            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+              диапазон
+            </span>
+          )}
+        </div>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${securitySeverityClass(
+            item.severity,
+          )}`}
+        >
+          {item.severity}
+        </span>
+      </div>
+      {item.summary && (
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+          {item.summary}
+        </p>
+      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <a
+          href={osvUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono font-medium text-primary hover:underline"
+        >
+          {item.osv_id}
+        </a>
+        {item.cve_ids.map((cve) => (
+          <a
+            key={cve}
+            href={`https://osv.dev/vulnerability/${encodeURIComponent(cve)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-slate-500 hover:underline dark:text-slate-400"
+          >
+            {cve}
+          </a>
+        ))}
+        {item.fixed_version && (
+          <span className="text-slate-500 dark:text-slate-400">
+            исправлено в {item.fixed_version}
+          </span>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function securitySeverityClass(severity: SecurityVulnerability['severity']): string {
+  switch (severity) {
+    case 'critical':
+      return 'bg-red-100 text-red-800'
+    case 'high':
+      return 'bg-orange-100 text-orange-800'
+    case 'medium':
+      return 'bg-amber-100 text-amber-800'
+    case 'low':
+      return 'bg-yellow-100 text-yellow-800'
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
+  }
+}
+
+function secretTypeLabel(type: SecretFinding['type']): string {
+  switch (type) {
+    case 'aws_access_key':
+      return 'AWS access key'
+    case 'aws_secret_key':
+      return 'AWS secret key'
+    case 'github_token':
+      return 'GitHub token'
+    case 'jwt':
+      return 'JWT'
+    case 'private_key':
+      return 'Private key'
+    default:
+      return type
   }
 }
 

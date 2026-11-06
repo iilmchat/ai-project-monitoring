@@ -110,8 +110,8 @@ pnpm --dir frontend dev
 |------------|----------|
 | Версия | **v0.5.0** (2026-11-06) |
 | Спринты | 1–26 (v0.5.0); 27 — планирование v0.6.0 |
-| Тесты backend | **148** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **17** (Vitest + Testing Library) |
+| Тесты backend | **164** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **20** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 114.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -125,7 +125,7 @@ pnpm --dir frontend dev
 - **Docker:** read-only статус контейнеров проекта (running/stopped, порт, health) в карточке репозитория.
 - **Dependencies:** проверка устаревших Python (`requirements.txt`) и Node (`package.json`) пакетов с TTL-кэшем 24 ч.
 
-**v0.6.0 «Security, Insights & Collaboration»** — планируется
+**v0.6.0 «Security, Insights & Collaboration»** — в разработке (Sprint 28 завершён)
 ([`TODO_V0.6.md`](TODO_V0.6.md)):
 
 - **Supply Chain Security (Sprint 28):** CVE-проверка Python/Node-зависимостей через OSV.dev (High/Critical) и базовый regex-поиск секретов в рабочей директории.

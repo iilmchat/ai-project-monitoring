@@ -1,9 +1,9 @@
 # ARCHITECTURE — как устроен IIRuchating
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
-реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26.
-Разделы §12–14 — **план v0.6.0** (Sprint 28–30); они фиксируют проектное
-решение до реализации.
+реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
+§12 (security) — в Sprint 28. Разделы §13–14 — **план v0.6.0**
+(Sprint 29–30); они фиксируют проектное решение до реализации.
 
 ---
 
@@ -336,7 +336,7 @@ DashboardCharts.tsx
 - Оба блока загружаются лениво и не участвуют в первичном запросе `/dashboard`.
 - Управляющих действий нет: только просмотр и `?refresh=true`.
 
-### 9.7. Security и Insights (v0.6.0, план)
+### 9.7. Security и Insights (v0.6.0; security — Sprint 28, insights — план Sprint 29)
 
 ```
 <SecurityPanel repoId>
@@ -570,10 +570,13 @@ GET /repositories/{id}/dependencies
 
 ---
 
-## 12. Security (v0.6.0, Sprint 28 — план)
+## 12. Security (v0.6.0, Sprint 28)
 
 **Задача.** Показать уязвимости в объявленных зависимостях и потенциальные
 секреты в рабочей директории, не устанавливая пакеты и не изменяя репозиторий.
+
+**Статус:** реализовано (`app/services/security_service.py`,
+`app/services/secret_scanner.py`, `app/providers/osv_client.py`).
 
 ### 12.1. Поток
 
@@ -604,15 +607,14 @@ GET /repositories/{id}/security
 ### 12.3. OSV.dev
 
 - Клиент `app/providers/osv_client.py`: `POST /v1/querybatch` с массивом
-  `queries: [{package: {name, ecosystem}, version}]`; fallback — поштучный
-  `POST /v1/query`.
+  `queries: [{package: {name, ecosystem}, version}]`, батчи по 100 запросов.
 - Ecosystem: `PyPI` / `npm`.
 - Timeout 10 с, concurrency ≤ 4, backoff 0.5/1/2 с на 429/5xx (max 3 попытки).
 - Ответ нормализуется в `{osv_id, aliases, summary, severity, cvss, fixed}`
   сразу на границе провайдера; сервис не работает с сырым JSON OSV.
 - 404/пустой результат по пакету — «уязвимостей нет», а не ошибка.
-- Ошибка batch-запроса деградирует до поштучных запросов; полная недоступность
-  OSV → `ecosystem.status=unavailable`.
+- Ошибка batch-запроса помечает весь батч `unavailable`; второй ecosystem и
+  секреты при этом считаются независимо.
 
 ### 12.4. Severity
 
@@ -645,7 +647,9 @@ CVSS берётся из `severity[].score` (vector → base score). Если у
 
 **Источник файлов.** `git ls-files -z -co --exclude-standard` — tracked +
 untracked non-ignored. Это даёт «рабочую директорию» и уважает `.gitignore`,
-не обходя `node_modules`/`.venv`. История Git не читается.
+не обходя `node_modules`/`.venv`. Вне Git-репозитория (например, временный
+каталог) используется `os.walk` с тем же набором исключений. История Git не
+читается.
 
 **Пайплайн:**
 

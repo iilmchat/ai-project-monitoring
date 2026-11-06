@@ -4,6 +4,27 @@
 
 ---
 
+## Спринт 28: Supply Chain Security (v0.6.0)
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S28-001: `OsvClient` — `POST /v1/querybatch` (PyPI/npm), батчи по 100, retry/backoff, CVSS v3 base score из вектора.
+- [x] S28-002: `SecurityService` — CVE для Python/Node-манифестов, `exact`/`lower_bound`/`unknown`, severity mapping, `security_cache` (TTL 6 ч) и stale-while-revalidate.
+- [x] S28-002: базовый Secret Scanner — AWS Access Key/Secret, GitHub token, JWT, private key; только рабочая директория, маскирование, ignore-маркер, лимиты файлов/размера.
+- [x] S28-003: `GET /api/v1/repositories/{id}/security` (`refresh`, `include_secrets`, `min_severity`).
+- [x] S28-004: UI-блок «Безопасность» в деталях репозитория — severity-бейджи, CVE/OSV-ссылки, красный алерт о секретах.
+- [x] S28-005: тесты (`test_security.py`), ADR-0009, SPEC §3.16, ARCHITECTURE §12, CHANGELOG.
+
+### Результаты
+
+- Backend-тесты: 164 passed
+- Frontend-тесты: 20 passed
+- Read-only: `pip`/`npm` не запускаются, история Git не сканируется; секреты только в masked preview.
+
+---
+
 ## Релиз v0.5.0 — «Observability & Dependency Management»
 
 **Дата:** 2026-11-06 · **Тег:** `v0.5.0`

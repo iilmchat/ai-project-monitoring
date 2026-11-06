@@ -114,7 +114,7 @@
 
 **Workaround:** использовать `refresh=true` только для конкретного репозитория; дождаться восстановления лимита; при недоступности OSV положиться на stale-кэш (6 ч) и повторить позже.
 
-**План (Sprint 28):** `security_cache` с TTL 6 ч (включая negative cache), batch-запрос `/v1/querybatch`, concurrency ≤ 4, backoff 0.5/1/2 с, stale-while-revalidate, partial results. `min_severity=high` по умолчанию сокращает объём ответа в UI; `summary` при этом считается по полному набору. При полной недоступности — `unavailable`, без 500.
+**Решение (Sprint 28):** `security_cache` с TTL 6 ч (включая negative cache), batch-запрос `/v1/querybatch`, concurrency ≤ 4, backoff 0.5/1/2 с, stale-while-revalidate, partial results. `min_severity=high` по умолчанию сокращает объём ответа в UI; `summary` при этом считается по полному набору. При полной недоступности — `unavailable`, без 500.
 
 ---
 
@@ -126,4 +126,4 @@
 
 **Workaround:** добавить `# iiruchating:ignore-secret` в строку-исключение (например, в фикстуре) или запросить `?include_secrets=false`; для CI/примеров держать фейковые значения с явным префиксом (`ghp_example...`).
 
-**План (Sprint 28):** фиксированный набор правил с `severity`/`confidence`, маскирование, ignore-маркер, отдельный список findings (не смешивать с CVE), лимиты файлов/размера. Энтропийные эвристики и пользовательские правила — кандидаты в v0.7+; при высоком FP-rate правило можно отключить через `SECRET_SCAN_ENABLED`.
+**Решение (Sprint 28):** фиксированный набор правил с `severity`/`confidence`, маскирование, ignore-маркер, отдельный список findings (не смешивать с CVE), лимиты файлов/размера. Энтропийные эвристики и пользовательские правила — кандидаты в v0.7+; при высоком FP-rate правило можно отключить через `SECRET_SCAN_ENABLED`.

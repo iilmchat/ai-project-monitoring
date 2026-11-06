@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     dependency_cache_ttl_seconds: int = 86400
     dependency_check_concurrency: int = 4
     dependency_http_timeout: float = 5.0
+    osv_api_url: str = "https://api.osv.dev"
+    security_cache_ttl_seconds: int = 21600
+    security_check_concurrency: int = 4
+    security_http_timeout: float = 10.0
+    secret_scan_enabled: bool = True
+    secret_scan_max_files: int = 5000
+    secret_scan_max_file_bytes: int = 1048576
+    secret_scan_ttl_seconds: int = 300
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"

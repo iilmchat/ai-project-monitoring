@@ -188,6 +188,27 @@ class DependencyCache(Base):
         )
 
 
+class SecurityCache(Base):
+    """TTL cache for OSV.dev advisories keyed by package version (SPEC §4, S28)."""
+
+    __tablename__ = "security_cache"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    ecosystem: Mapped[str] = mapped_column(String(16), nullable=False)
+    package: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"SecurityCache(key={self.key!r}, package={self.package!r}, "
+            f"version={self.version!r})"
+        )
+
+
 class ActionLog(Base):
     """Audit trail for explicitly confirmed mutations (SPEC §3.7, S10-005)."""
 
@@ -243,5 +264,6 @@ __all__ = [
     "RepositoryMirrorStatus",
     "RepositoryStatus",
     "ScanRun",
+    "SecurityCache",
     "WebhookEvent",
 ]
