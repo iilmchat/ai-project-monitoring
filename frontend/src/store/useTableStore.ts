@@ -21,11 +21,19 @@ interface TableState {
   toggleColumn: (column: ColumnKey) => void
   setVisibleColumns: (columns: Record<ColumnKey, boolean>) => void
   setColumnWidth: (column: ColumnKey, width: number) => void
+  getExportState: () => TableExportState
+  importState: (state: TableExportState) => void
+}
+
+export interface TableExportState {
+  version: 1
+  visibleColumns: Record<ColumnKey, boolean>
+  columnWidths: Record<ColumnKey, number>
 }
 
 export const useTableStore = create<TableState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       selectedRepoIds: [],
       visibleColumns: {
         branch: true,
@@ -58,6 +66,19 @@ export const useTableStore = create<TableState>()(
             [column]: Math.max(70, Math.round(width)),
           },
         })),
+      getExportState: () => {
+        const { visibleColumns, columnWidths } = get()
+        return {
+          version: 1,
+          visibleColumns: { ...visibleColumns },
+          columnWidths: { ...columnWidths },
+        }
+      },
+      importState: (state) =>
+        set({
+          visibleColumns: { ...state.visibleColumns },
+          columnWidths: { ...state.columnWidths },
+        }),
     }),
     {
       name: 'table.state',

@@ -22,6 +22,7 @@ import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
 import type { SavedViewFilters } from '../store/useViewsStore'
+import { buildDashboardMarkdown } from '../utils/markdown'
 import { isStatusStale } from '../utils/stale'
 
 const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
@@ -113,9 +114,11 @@ export default function Dashboard() {
   const [saveViewOpen, setSaveViewOpen] = useState(false)
   const [viewName, setViewName] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
   const [focusedRepoId, setFocusedRepoId] = useState<number | null>(null)
   const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({})
   const searchRef = useRef<HTMLInputElement>(null)
+  const toastTimer = useRef<number | null>(null)
 
   const selectedRepoIds = useTableStore((state) => state.selectedRepoIds)
   const visibleColumns = useTableStore((state) => state.visibleColumns)
@@ -187,6 +190,14 @@ export default function Dashboard() {
       window.clearTimeout(timeout)
     }
   }, [bulkPolling])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current !== null) {
+        window.clearTimeout(toastTimer.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const next = new URLSearchParams()
@@ -329,6 +340,19 @@ export default function Dashboard() {
 
   const summary = dashboard?.summary
 
+  async function handleCopySummary() {
+    const markdown = buildDashboardMarkdown({
+      summary,
+      repositories,
+    })
+    try {
+      await navigator.clipboard.writeText(markdown)
+      showToast('Сводка скопирована')
+    } catch {
+      showToast('Не удалось скопировать сводку')
+    }
+  }
+
   function handleSelectAll() {
     if (allSelected) {
       setSelected(selectedRepoIds.filter((id) => !repositories.some((repo) => repo.id === id)))
@@ -392,6 +416,17 @@ export default function Dashboard() {
     } catch {
       setBulkMessage('Не удалось скопировать путь.')
     }
+  }
+
+  function showToast(message: string) {
+    setToast(message)
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current)
+    }
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimer.current = null
+    }, 2500)
   }
 
   async function handleExport(format: 'csv' | 'json') {
@@ -519,6 +554,13 @@ export default function Dashboard() {
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
           >
             {scanning ? 'Сканирование…' : 'Сканировать'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopySummary()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Скопировать сводку
           </button>
           <div className="relative">
             <button
@@ -1057,6 +1099,15 @@ export default function Dashboard() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xl dark:bg-slate-100 dark:text-slate-900"
+        >
+          {toast}
         </div>
       )}
     </section>

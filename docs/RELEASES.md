@@ -1,6 +1,44 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.5.0 (2026-11-06)
+**Текущая версия:** v0.6.0 (2026-11-06)
+
+---
+
+## Релиз v0.6.0 — «Security & Insights»
+
+**Дата:** 2026-11-06 · **Тег:** `v0.6.0`
+
+Итоги этапа (спринты 27–30):
+
+- **Planning (S27):** контракты и план v0.6.0, KI-011/012.
+- **Supply Chain Security (S28):** CVE через OSV.dev, regex Secret Scanner, блок
+  «Безопасность», `security_cache` 6 ч.
+- **Tech Debt & Insights (S29):** hotspots по churn, DORA-lite commit frequency
+  со sparkline, кэш 300 с и безопасный subprocess-runner.
+- **Collaboration & Release (S30):** Markdown-сводка, Workspace export/import,
+  версии 0.6.0, итоговый аудит и тег.
+- **Итоговые тесты:** 175 backend + 32 frontend; entry bundle 85.62 kB gzip;
+  `InsightsSparkline` — 6.55 kB gzip (lazy).
+
+---
+
+## Спринт 30: Collaboration & Release v0.6.0
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S30-001: кнопка «Скопировать сводку» на дашборде — Markdown текущего среза (summary, проблемные проекты, mirror-статусы) + toast.
+- [x] S30-002: `getExportState`/`importState` в `useViewsStore` и `useTableStore`; экспорт/импорт `iiruchating_workspace.json` на странице настроек с валидацией версии и лимитом 1 MiB.
+- [x] S30-003: версии `0.6.0` (backend/frontend), CHANGELOG `[0.6.0]`, RELEASES, README, SPEC §3.16–3.17 и §9.11.
+- [x] S30-004: финальные проверки, тег `v0.6.0` в GitHub/GitFlic, GitHub Release.
+
+### Результаты
+
+- Backend-тесты: 175 passed
+- Frontend-тесты: 32 passed
+- Entry bundle: 85.62 kB gzip; `RepositoryDetails` — 9.37 kB, `InsightsSparkline` — 6.55 kB (lazy).
+- Workspace export не содержит токенов и `SCAN_ROOTS`; импорт отклоняет чужую версию схемы.
 
 ---
 

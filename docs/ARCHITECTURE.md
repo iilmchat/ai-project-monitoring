@@ -2,8 +2,8 @@
 
 Документ описывает **текущее** устройство системы. Раздел §10 (Docker)
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
-§12 (security) — в Sprint 28; §13 (insights) — в Sprint 29. Раздел §14 —
-**план v0.6.0** (Sprint 30); он фиксирует проектное решение до реализации.
+§12 (security) — в Sprint 28; §13 (insights) — в Sprint 29;
+§14 (collaboration export) — в Sprint 30.
 
 ---
 
@@ -258,11 +258,12 @@ stores/
 ```
 
 - Zustand + middleware `persist` (`localStorage`) с версионированием (`version: 1`)
-  и миграциями. Ключи: `table.state.v1`, `views.v1`, `theme` (уже существует).
+  и миграциями. Ключи: `table.state`, `views.state`, `theme` (уже существует).
 - Источник истины на клиенте — store, компоненты только читают селекторы.
   Это исключает рассинхрон между чипами, таблицей и URL.
-- v0.5.0: опциональная синхронизация `views` в БД (`saved_views`) через API;
-  локальный store остаётся кэшем и работает offline.
+- v0.6.0: файловый export/import workspace (`iiruchating_workspace.json`) в
+  `Settings`; локальный store остаётся источником истины и работает offline.
+- v0.7.0: опциональная синхронизация `views` в БД (`saved_views`) через API.
 - Query string — проекция store (`?state=dirty&mirror=behind_gitflic&view=...`),
   при загрузке — гидратация store.
 
@@ -364,16 +365,17 @@ DashboardCharts.tsx
 - Severity передаётся не только цветом: текстовая подпись + иконка; контраст AA
   в light/dark.
 
-### 9.8. Collaboration export (v0.6.0, план)
+### 9.8. Collaboration export (v0.6.0)
 
-- **Markdown:** `buildDashboardMarkdown(summary, repositories, filters)` —
-  чистая функция, тестируется без DOM; экранирует `|`, не генерирует HTML;
-  копирование через `navigator.clipboard` с fallback и toast.
-- **Workspace JSON:** `exportWorkspace()` собирает `views` + `table` из Zustand
-  store; `importWorkspace(file)` валидирует `version`/схему/размер (≤ 1 MiB) и
-  применяет `replace`/`merge`; при ошибке store не меняется.
-- Экспорт не читает API и не содержит токенов/секретов; серверные эндпоинты не
-  добавляются.
+- **Markdown:** `buildDashboardMarkdown({summary, repositories, generatedAt})` —
+  чистая функция, тестируется без DOM; экранирует Markdown-спецсимволы и
+  backtick, не генерирует HTML; копирование через `navigator.clipboard` + toast.
+- **Workspace JSON:** `buildWorkspace()` собирает `views` + `table` из Zustand
+  store; `parseWorkspace()` валидирует `version`/схему, лимит файла 1 MiB;
+  `importState` применяет настройки (replace) в оба store; при ошибке store не
+  меняется.
+- Экспорт не читает API и не содержит токенов/`SCAN_ROOTS`; серверные эндпоинты
+  не добавляются.
 - После импорта — реактивное обновление store, без перезагрузки страницы.
 
 ---
@@ -785,33 +787,34 @@ GET /repositories/{id}/insights?days=30
 
 ---
 
-## 14. Collaboration export (v0.6.0, Sprint 30 — план)
+## 14. Collaboration export (v0.6.0, Sprint 30)
 
 ### 14.1. Markdown Export
 
-- Чистая функция `buildDashboardMarkdown(snapshot)` на клиенте: вход — текущий
-  срез (summary, отфильтрованные репозитории, видимые колонки).
-- Выход — GFM: заголовок, дата, счётчики, таблица, список «требуют внимания».
-- Экранирование `|` и перевода строк в ячейках; HTML не генерируется.
-- Копирование — `navigator.clipboard.writeText`, fallback через скрытый
-  `textarea`; серверный эндпоинт не добавляется.
+- Чистая функция `buildDashboardMarkdown({summary, repositories, generatedAt})`
+  на клиенте: вход — текущий срез (summary, отфильтрованные репозитории).
+- Выход — заголовок с датой, счётчики, список «Проблемные проекты» (state,
+  ahead/behind, mirror-статус). Экранируются Markdown-спецсимволы в именах и
+  backtick в путях; HTML не генерируется.
+- Копирование — `navigator.clipboard.writeText` + toast; серверный эндпоинт не
+  добавляется.
 
 ### 14.2. Workspace Export/Import
 
 ```
 {version: 1, exported_at, app_version,
  views: [...],
- table: {visible_columns, column_order, widths}}
+ table: {visible_columns, column_widths}}
 ```
 
-- Экспорт собирается из Zustand store (`useViewsStore`, `useTableStore`);
-  токены/секреты/данные репозиториев не входят.
+- Экспорт собирается из Zustand store (`getExportState` в `useViewsStore` и
+  `useTableStore`); имя файла — `iiruchating_workspace.json`.
+  Токены, `SCAN_ROOTS` и данные репозиториев не входят.
 - Импорт: лимит 1 MiB → `JSON.parse` → проверка `version` и структуры →
-  нормализация полей → `replace` или `merge` по имени view.
+  нормализация полей → `importState` (replace) в оба store.
 - Ошибка валидации не меняет store; пользователь видит сообщение.
-- Ключи `views.v1` и `table.state.v1` остаются прежними; миграции store
-  переиспользуются, отдельного формата хранения нет.
-- После импорта store обновляется реактивно, без перезагрузки страницы.
+- Ключи `views.state` и `table.state` остаются прежними; после импорта store
+  обновляется реактивно, без перезагрузки страницы.
 
 ---
 

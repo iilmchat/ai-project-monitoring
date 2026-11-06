@@ -118,8 +118,15 @@ function renderDashboard() {
 }
 
 describe('Dashboard', () => {
+  let writeText: ReturnType<typeof vi.fn>
+
   beforeEach(() => {
     vi.clearAllMocks()
+    writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
     window.localStorage.clear()
     useTableStore.setState({
       selectedRepoIds: [],
@@ -240,5 +247,20 @@ describe('Dashboard', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it('copies the visible dashboard summary as Markdown', async () => {
+    renderDashboard()
+
+    await screen.findByText('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Скопировать сводку' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const markdown = String(writeText.mock.calls[0][0])
+    expect(markdown).toContain('## IIRuchating Summary (')
+    expect(markdown).toContain('- Всего репозиториев: 2')
+    expect(markdown).toContain('- Требуют внимания: 1')
+    expect(markdown).toContain('- **beta** (`C:/work/beta`): dirty')
+    expect(screen.getByText('Сводка скопирована')).toBeInTheDocument()
   })
 })

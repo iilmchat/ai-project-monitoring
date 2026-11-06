@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+—
+
+## [0.6.0] - 2026-11-06
+
+Безопасность цепочки поставок (CVE, секреты), технический долг и активность
+(Hotspots, DORA-lite), совместная работа (Markdown, Workspace export).
+
 ### Добавлено
 
 - feat(security): `OsvClient` — batch-запросы к OSV.dev, CVSS v3 base score, нормализация advisories (S28-001).
@@ -16,13 +23,16 @@
 - feat(api): `GET /api/v1/repositories/{id}/insights` с `days` и `refresh` (S29-002).
 - feat(ui): блоки «Технический долг (Hotspots)» и «Активность (30 дней)» — lazy `recharts` sparkline, счётчики churn и пустые состояния (S29-003).
 - test(insights): парсинг git-log, фильтры, кэш, timeout/no_branch/shallow и реальный tmp-репозиторий (S29-004).
+- feat(export): «Скопировать сводку» на дашборде — Markdown текущего среза (счётчики, проблемные проекты, mirror-статусы) + toast (S30-001).
+- feat(workspace): экспорт/импорт UI-настроек в `iiruchating_workspace.json` — Saved Views, видимые колонки и ширины; валидация версии и лимит 1 MiB; токены/SCAN_ROOTS не экспортируются (S30-002).
+- test(export): Markdown-форматирование/экранирование, workspace round-trip, отказ версии и импорт в Zustand-сторы (S30-001..S30-002).
 
 ### Документация
 
 - docs(insights): SPEC §3.17 (фактические поля), ARCHITECTURE §13, CHANGELOG/RELEASES (S29-004).
-
 - docs(security): SPEC §3.16 (фактические поля), ARCHITECTURE §12, ADR-0009, KI-011/012 в матрицу (S28-005).
 - docs(planning): план v0.6.0 — supply-chain security (OSV.dev CVE, secret scanning), insights (hotspots, DORA-lite), collaboration/export; SPEC §3.16–3.17, ARCHITECTURE §12–14, KI-011/012 (S27-001..S27-003).
+- docs(release): v0.6.0 — версии, README, RELEASES, итоговый docs-consistency audit (S30-003..S30-004).
 
 ## [0.5.0] - 2026-11-06
 

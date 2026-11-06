@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import { getSettings, updateSettings } from '../api/client'
 import type { AppSettings } from '../api/types'
+import { useTableStore } from '../store/useTableStore'
+import { useViewsStore } from '../store/useViewsStore'
+import {
+  WORKSPACE_FILENAME,
+  buildWorkspace,
+  downloadWorkspace,
+  parseWorkspace,
+} from '../utils/workspace'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -15,6 +23,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const viewsExport = useViewsStore((state) => state.getExportState)
+  const importViews = useViewsStore((state) => state.importState)
+  const tableExport = useTableStore((state) => state.getExportState)
+  const importTable = useTableStore((state) => state.importState)
 
   useEffect(() => {
     let active = true
@@ -60,6 +74,43 @@ export default function SettingsPage() {
       setError('Не удалось сохранить настройки.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function handleExportWorkspace() {
+    const workspace = buildWorkspace({
+      views: viewsExport().views,
+      table: tableExport(),
+    })
+    downloadWorkspace(workspace)
+    setMessage(`Workspace экспортирован: ${WORKSPACE_FILENAME}`)
+    setError(null)
+  }
+
+  async function handleImportWorkspace(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    try {
+      if (file.size > 1024 * 1024) {
+        throw new Error('workspace file is too large')
+      }
+      const parsed = parseWorkspace(JSON.parse(await file.text()))
+      importViews({ version: 1, views: parsed.views })
+      importTable({
+        version: 1,
+        visibleColumns: parsed.table.visible_columns,
+        columnWidths: parsed.table.column_widths,
+      })
+      setMessage('Настройки workspace импортированы.')
+      setError(null)
+    } catch {
+      setError(
+        'Не удалось импортировать настройки: неверный формат или версия файла.',
+      )
+    } finally {
+      event.target.value = ''
     }
   }
 
@@ -161,6 +212,42 @@ export default function SettingsPage() {
           </div>
         </form>
       )}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Workspace
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Экспорт и импорт UI-настроек: Saved Views, видимые колонки и их ширина.
+          Токены и пути сканирования не экспортируются.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleExportWorkspace}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Экспорт настроек (JSON)
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Импорт настроек
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void handleImportWorkspace(event)}
+          />
+        </div>
+        <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+          Формат: {WORKSPACE_FILENAME} · версия схемы 1 · до 1 MiB.
+        </p>
+      </div>
     </section>
   )
 }

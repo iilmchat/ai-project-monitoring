@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v0.5.0 · **© 2026 RuChating (iilmchat)**
+**Версия:** v0.6.0 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -28,6 +28,9 @@
 - **UX и продвинутый мониторинг** — Command Palette (`Ctrl+K`), продвинутая таблица с чекбоксами и контекстным меню, сохранённые представления (Saved Views), Telegram-уведомления, менеджер конфликтов и график активности (Heatmap).
 - **Docker-интеграция** — read-only статус контейнеров проекта (running/stopped, порты, health) через Docker SDK/DooD.
 - **Управление зависимостями** — аудит устаревших Python (`requirements.txt` / PyPI) и Node (`package.json` / npm) пакетов с TTL-кэшем 24 ч, табами Python/Node и объединённым отчётом.
+- **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
+- **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
+- **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
 - **Наблюдаемость** — Prometheus-метрики, расширенный `/health`, JSON-логи.
 - **CI и уведомления** — статус GitHub Actions и desktop-уведомления о проблемах.
 - **Веб-дашборд** — обзор всех репозиториев, фильтры «требуют внимания», детали по каждому.
@@ -108,11 +111,11 @@ pnpm --dir frontend dev
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.5.0** (2026-11-06) |
-| Спринты | 1–26 (v0.5.0); 27–29 (v0.6.0, в работе) |
+| Версия | **v0.6.0** (2026-11-06) |
+| Спринты | 1–30 (v0.6.0 «Security & Insights») |
 | Тесты backend | **175** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **23** (Vitest + Testing Library) |
-| Entry bundle | 85.6 kB gzip (+ lazy charts 114.6 kB) |
+| Тесты frontend | **32** (Vitest + Testing Library) |
+| Entry bundle | 85.6 kB gzip (+ lazy charts 100.9 kB, sparkline 6.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
@@ -125,7 +128,7 @@ pnpm --dir frontend dev
 - **Docker:** read-only статус контейнеров проекта (running/stopped, порт, health) в карточке репозитория.
 - **Dependencies:** проверка устаревших Python (`requirements.txt`) и Node (`package.json`) пакетов с TTL-кэшем 24 ч.
 
-**v0.6.0 «Security, Insights & Collaboration»** — в разработке (Sprints 28–29 завершены)
+**v0.6.0 «Security, Insights & Collaboration»** — выпущен 2026-11-06
 ([`TODO_V0.6.md`](TODO_V0.6.md)):
 
 - **Supply Chain Security (Sprint 28):** CVE-проверка Python/Node-зависимостей через OSV.dev (High/Critical) и базовый regex-поиск секретов в рабочей директории.

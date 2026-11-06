@@ -4,7 +4,7 @@
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 
-**Версия:** v0.6.0 «Security, Insights & Collaboration» (в разработке) · **Обновлено:** 2026-11-06
+**Версия:** v0.6.0 «Security, Insights & Collaboration» · **Обновлено:** 2026-11-06
 
 ---
 
@@ -907,7 +907,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - [x] Релиз: docs-consistency audit, тег `v0.5.0` в GitHub и GitFlic, `SHA(main)`
       совпадает.
 
-### 6.3. v0.6.0 (план, спринты 28–30)
+### 6.3. v0.6.0 (выполнено, спринты 27–30)
 
 - [x] Security: `GET /repositories/{id}/security` возвращает `SecurityReport`
       по §3.16; Python и Node проверяются через OSV.dev.
@@ -925,9 +925,9 @@ security_cache(             -- v0.6.0 (Sprint 28)
       shallow clone дают статус, а не 500.
 - [x] Read-only: нет установки/обновления пакетов, fetch/checkout/reset и
       записи в репозиторий (grep-аудит); секреты не попадают в логи и диффы.
-- [ ] Collaboration: Markdown-сводка копируется и отражает фильтры;
+- [x] Collaboration: Markdown-сводка копируется и отражает фильтры;
       export/import workspace сохраняет views и колонки, не экспортирует токены.
-- [ ] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
+- [x] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
 ---
@@ -963,7 +963,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 ## 9. UX/UI Guidelines
 
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
-(реализовано), разделы 9.10–9.11 — план v0.6.0.
+(реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано).
 
 ### 9.1 Таблица репозиториев
 
@@ -978,16 +978,18 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - Строка кликабельна (мышь + `Enter`), действия внутри строки не триггерят переход.
 - Контекстное меню по `right-click`/`Shift+F10`: Fetch, Push, Copy path, Copy SHA,
   «Открыть детали»; мутации — через подтверждение (`confirm=true`).
-- **v0.5.0 (план):** опциональные колонки «Docker» (running/exited/off) и
-  «Зависимости» (число устаревших); управляются существующим column manager.
+- **Не реализовано (вне scope v0.5.0):** опциональные колонки «Docker»
+  (running/exited/off) и «Зависимости» (число устаревших); column manager
+  поддерживает их добавление в v0.7+.
 
 ### 9.2 Фильтры и сохранённые представления
 
 - Фильтры представлены чипами: статус, canonical provider, `mirror_status`,
   tracked, stale; активные чипы видны всегда, есть «Очистить всё».
-- **Saved view** = `{name, filters, sort, visible_columns, column_order, widths}`.
+- **Saved view** = `{name, filters, sorting, visible_columns}`.
 - Версионированная схема (`version: 1`); несовместимые версии мигрируются или
-  сбрасываются с уведомлением. v0.4.0 — localStorage; v0.5.0 — опциональная БД.
+  сбрасываются с уведомлением. v0.4.0–v0.6.0 — localStorage (+ файловый
+  export/import workspace); v0.7.0 — синхронизация в БД.
 - Активное представление и фильтры отражаются в query string (shareable URL).
 
 ### 9.3 Command Palette и клавиатура
@@ -1032,7 +1034,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - Экспорт текущего среза таблицы в CSV/JSON формируется на клиенте из загруженных
   данных (без дополнительных серверных отчётов); экспорт уважает фильтры и видимые колонки.
 
-### 9.8 Тёмные графики (v0.5.0, план)
+### 9.8 Тёмные графики (v0.5.0, реализовано)
 
 - Все элементы recharts (оси, сетка, легенда, тултип, серии) используют
   семантические токены `--chart-*`; хардкод hex в компонентах не допускается.
@@ -1043,7 +1045,7 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - Пустые данные показывают текстовое состояние, а не пустой SVG.
 - Тяжёлые чарты остаются lazy; переключение темы не вызывает reflow всей таблицы.
 
-### 9.9 Docker и зависимости (v0.5.0, план)
+### 9.9 Docker и зависимости (v0.5.0, реализовано)
 
 **Docker:**
 
@@ -1086,18 +1088,19 @@ security_cache(             -- v0.6.0 (Sprint 28)
 - Оба блока lazy, не участвуют в первичном `/dashboard`, кнопка «Обновить» →
   `?refresh=true`.
 
-### 9.11 Collaboration: Markdown и Workspace export (v0.6.0, план)
+### 9.11 Collaboration: Markdown и Workspace export (v0.6.0, Sprint 30)
 
-- **Markdown Export:** кнопка «Скопировать сводку в Markdown» на дашборде.
-  Сводка формируется на клиенте из текущего среза (фильтры + видимые колонки):
-  заголовок с датой, счётчики `summary`, GFM-таблица репозиториев и список
-  «требуют внимания». Символ `|` в путях/именах экранируется; HTML не
+- **Markdown Export:** кнопка «Скопировать сводку» на дашборде. Сводка
+  формируется на клиенте из текущего среза: заголовок с датой, счётчики
+  `summary`, список «Проблемные проекты» (state, ahead/behind, mirror-статус).
+  Markdown-спецсимволы в именах и backtick в путях экранируются; HTML не
   генерируется. Копирование в clipboard + toast, серверный эндпоинт не нужен.
 - **Workspace Export/Import:** JSON-файл `{version: 1, exported_at, app_version,
-  views, table: {visible_columns, column_order, widths}}`; импорт — с проверкой
-  размера (≤ 1 MiB), схемы и версии. Несовместимая версия/битый JSON → ошибка
-  без изменения состояния. Режим `replace` (default) или `merge` по имени view.
-- В экспорт **не** попадают токены, секреты, содержимое репозиториев и данные
-  security/insights.
+  views, table: {visible_columns, column_widths}}`; имя файла
+  `iiruchating_workspace.json`. Импорт — с проверкой размера (≤ 1 MiB), схемы и
+  версии. Несовместимая версия/битый JSON → ошибка без изменения состояния.
+  Применение — `replace` (текущее поведение; merge не поддерживается).
+- В экспорт **не** попадают токены, секреты, `SCAN_ROOTS`, содержимое
+  репозиториев и данные security/insights.
 - Импорт не затрагивает `localStorage`-ключи других версий; после импорта
   store обновляется реактивно, без перезагрузки.
