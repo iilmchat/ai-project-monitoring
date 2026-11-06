@@ -1,6 +1,44 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.6.0 (2026-11-06)
+**Текущая версия:** v0.7.0 (2026-11-06)
+
+---
+
+## Релиз v0.7.0 — «AI-Powered Assistant»
+
+**Дата:** 2026-11-06 · **Тег:** `v0.7.0`
+
+Итоги этапа (спринты 31–34):
+
+- **Planning (S31):** контракты v0.7.0, KI-013/014.
+- **LLM & AI Commit Messages (S32):** локальный OpenAI-совместимый клиент,
+  настройки LLM, генерация Conventional Commits по diff, действие `commit`.
+- **AI Security & Global Dashboard (S33):** объяснение CVE с кэшем `ai_cache`,
+  глобальная агрегация версий и бейдж «Унифицировать».
+- **Automated Dependencies & Release (S34):** явное обновление пакетов с
+  preflight по чистому worktree, аудитом и UI-подтверждением.
+- **Итоговые тесты:** 206 backend + 38 frontend; entry bundle 85.61 kB gzip.
+
+---
+
+## Спринт 34: Automated Dependencies & Release v0.7.0
+
+**Дата:** 2026-11-06 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S34-001: `DependencyUpdateService` — pip/pnpm/npm, preflight `git status --porcelain`, timeout 180 с, output cap 10000 символов, redaction credentials.
+- [x] S34-002: `POST /repositories/{id}/actions/update-dependencies` и bulk `202`; `400 confirmation_required`, `409 "Worktree must be clean"`/`no_manifest`, `action_log` для успеха/ошибки/отказа.
+- [x] S34-003: кнопка «Обновить пакеты» (disabled на dirty), модалка подтверждения, toast и refresh статуса/зависимостей.
+- [x] S34-004: `test_dependency_updates.py` (8 тестов), UI-тесты, ADR-0011.
+- [x] S34-005: версии `0.7.0`, CHANGELOG/RELEASES/README/SPEC, тег и GitHub Release.
+
+### Результаты
+
+- Backend-тесты: 206 passed
+- Frontend-тесты: 38 passed
+- Entry bundle: 85.61 kB gzip; `RepositoryDetails` — 11.12 kB, `Dashboard` (с Global Dependencies) — 8.92 kB.
+- Read-only: обновление только по `confirm=true` и на чистом worktree; автоматического коммита нет.
 
 ---
 

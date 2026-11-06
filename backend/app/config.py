@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     global_analytics_cache_ttl_seconds: int = 3600
     global_analytics_limit: int = 50
     global_analytics_concurrency: int = 4
+    dependency_update_timeout_seconds: int = 180
+    dependency_update_max_output_chars: int = 10000
     action_timeout_seconds: int = 60
     notifications_enabled: bool = True
     default_canonical_provider: str = "github"
@@ -78,7 +80,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     debug: bool = False
-    app_version: str = "0.6.0"
+    app_version: str = "0.7.0"
 
     @property
     def scan_root_paths(self) -> list[str]:

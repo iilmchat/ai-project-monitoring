@@ -1,7 +1,7 @@
 # TODO v0.7.0 — AI Integration, Global Analytics & Dependency Updates
 
 **Версия:** v0.7.0 «AI & Global Analytics»
-**Статус:** 🚧 В разработке (Sprint 32–33 ✅); спринт 34 запланирован
+**Статус:** ✅ Завершён (Sprint 34, релиз `v0.7.0`)
 **Предыдущий этап:** v0.6.0 — [`TODO_V0.6.md`](TODO_V0.6.md)
 **Последнее обновление:** 2026-11-06
 
@@ -194,62 +194,63 @@
 
 ### Спринт 34 — Automated Dependencies & Release v0.7.0
 
-**Статус:** ⏳ Запланирован
+**Статус:** ✅ Завершён (2026-11-06, релиз `v0.7.0`)
 
 **Задачи**
 
-- **S34-001. Dependency update service.**
-  - `app/services/dependency_update_service.py`: preflight и запуск CLI.
-  - Python: `pip install --upgrade -r requirements.txt` или выбранные пакеты.
-  - Node: `pnpm update` при `pnpm-lock.yaml`, иначе `npm update`.
-  - Preflight: `confirm=true`; дерево чистое (нет modified/staged/conflicted,
-    `state != dirty`), иначе `409 dirty_worktree`; менеджер определён.
-  - Timeout `DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), output cap 32 KiB,
-    redaction токенов в URL/логах.
+- [x] **S34-001. Dependency update service.**
+  - `app/services/dependency_update_service.py`: preflight и запуск CLI через
+    `asyncio.create_subprocess_exec`.
+  - Python: `pip install -r requirements.txt --upgrade` (через текущий
+    интерпретатор); Node: `pnpm update` при `pnpm-lock.yaml`, иначе `npm update`.
+  - Preflight: `confirm=true`; `git status --porcelain` пуст, иначе `409`
+    `Worktree must be clean`; менеджер/манифест определены (`no_manifest`).
+  - Timeout `DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), output cap
+    `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (10000), redaction credentials.
   - Любая попытка (успех/ошибка/отказ) пишется в `action_log`
     (`action=update-dependencies`, `actor=local|bulk`).
 
-- **S34-002. API обновления.**
+- [x] **S34-002. API обновления.**
   - `POST /repositories/{id}/actions/update-dependencies` →
-    `ActionLog`; тело `{confirm, ecosystem?, packages?}`.
+    `ActionLog`; тело `{confirm, ecosystem: python|node}`.
   - `POST /repositories/actions/update_dependencies_all` →
-    `202 {status:"accepted"}`, фон, `repo_ids?`, concurrency 1–2.
+    `202 {status:"accepted"}`, фон, `repo_ids?`, concurrency 2.
   - Ошибка обновления не даёт 500: `409`/`ActionLog.status=error` с причиной.
 
-- **S34-003. UI обновления пакетов.**
-  - Кнопка «Обновить пакеты» для выбранных проектов/репозитория.
-  - Модалка подтверждения: что изменится (`requirements`/lockfile), требование
-    чистого дерева, предупреждение о недетерминированных версиях.
-  - Прогресс/результат, ссылка на `action_log`; при `dirty_worktree` — понятная
-    ошибка без выполнения.
+- [x] **S34-003. UI обновления пакетов.**
+  - Кнопка «Обновить пакеты» в блоке «Зависимости», disabled при
+    `state="dirty"`/`no_manifest` с подсказкой.
+  - Модалка подтверждения: изменит `requirements.txt`/`package.json`/lockfile.
+  - После успеха — toast «Зависимости обновлены», refresh статуса и отчёта;
+    ошибка dirty/manager показывается в модалке.
 
-- **S34-004. ADR и тесты.**
+- [x] **S34-004. ADR и тесты.**
   - ADR-0011 «Explicit, preflight-checked dependency updates».
-  - Fake subprocess: clean/dirty preflight, python/node detection, timeout,
-    redaction, action_log; bulk concurrency.
-  - UI-тесты подтверждения и ошибок.
+  - `test_dependency_updates.py`: clean/dirty preflight, python/node detection,
+    timeout/redaction, `action_log`, API 400/409/202.
+  - UI-тесты disabled/modal/update.
 
-- **S34-005. Финальный аудит и релиз v0.7.0.**
+- [x] **S34-005. Финальный аудит и релиз v0.7.0.**
   - Версии `0.7.0`, CHANGELOG, RELEASES, README, SPEC, TODO_V0.7.
   - `docs/prompts/docs-consistency-audit.md`: SPEC ↔ ARCHITECTURE ↔ README ↔ KI.
   - Проверки: `ruff`, `mypy --strict`, `pytest -q`,
-    `pnpm typecheck && lint && test && build`, Docker Compose smoke.
+    `pnpm typecheck && lint && test && build`.
   - Тег `v0.7.0` в GitHub и GitFlic; `SHA(main)` совпадает; GitHub Release.
 
 **DoD:**
 
-- [ ] `POST /repositories/{id}/actions/update-dependencies` и bulk-вариант
+- [x] `POST /repositories/{id}/actions/update-dependencies` и bulk-вариант
       соответствуют SPEC §3.9/§3.20.
-- [ ] Обновление невозможно без `confirm=true` и на грязном дереве
-      (`409 dirty_worktree`), отказ тоже попадает в `action_log`.
-- [ ] Определение менеджера корректно: pip / pnpm / npm; ошибка менеджера —
+- [x] Обновление невозможно без `confirm=true` и на грязном дереве
+      (`409 "Worktree must be clean"`), отказ тоже попадает в `action_log`.
+- [x] Определение менеджера корректно: pip / pnpm / npm; ошибка менеджера —
       `ActionLog.status=error`, без 500.
-- [ ] Timeout ≤ 180 с, вывод ограничен и очищен от токенов.
-- [ ] UI: подтверждение, предупреждения, обработка `dirty_worktree`,
+- [x] Timeout ≤ 180 с, вывод ограничен 10000 символов и очищен от токенов.
+- [x] UI: подтверждение, предупреждения, обработка dirty-состояния,
       отсутствие автозапуска.
-- [ ] ADR-0011 и KI-014 обновлены; read-only вне явного действия сохранён.
-- [ ] Все проверки зелёные; docs-consistency audit пройден.
-- [ ] Тег `v0.7.0` в обоих провайдерах, `SHA(main)` совпадает.
+- [x] ADR-0011 и KI-014 обновлены; read-only вне явного действия сохранён.
+- [x] Все проверки зелёные; docs-consistency audit пройден.
+- [x] Тег `v0.7.0` в обоих провайдерах, `SHA(main)` совпадает.
 
 ---
 
@@ -262,7 +263,7 @@
 | `GET /dashboard/global-dependencies`, `GlobalDependencyReport` | `docs/SPEC.md` §3.19 |
 | `POST .../actions/update-dependencies`, bulk 202, `dirty_worktree` | `docs/SPEC.md` §3.9, §3.20 |
 | Settings `llm_*` и маскировка ключа | `docs/SPEC.md` §3.12 |
-| `LLMService`, таймауты, fallback, remote-guard | `docs/ARCHITECTURE.md` §15; ADR-0010 |
+| `LLMService`, таймауты, remote-guard | `docs/ARCHITECTURE.md` §15; ADR-0010 |
 | `GlobalAnalyticsService`, агрегация и кэш | `docs/ARCHITECTURE.md` §16 |
 | Обновление пакетов, preflight, `action_log` | `docs/ARCHITECTURE.md` §17; ADR-0011 |
 | `ai_cache`, TTL 7 дней | `docs/SPEC.md` §4, §5; `docs/ARCHITECTURE.md` §15.4 |

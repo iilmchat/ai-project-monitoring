@@ -22,6 +22,7 @@ import {
   explainCve,
   refreshRepository,
   runAction,
+  updateDependencies,
 } from '../api/client'
 import type {
   AppSettings,
@@ -56,6 +57,7 @@ vi.mock('../api/client', () => ({
   refreshRepository: vi.fn(),
   runAction: vi.fn(),
   runMirrorAction: vi.fn(),
+  updateDependencies: vi.fn(),
   updateMirrorPolicy: vi.fn(),
 }))
 
@@ -266,6 +268,19 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getInsights).mockResolvedValue(cleanInsights)
     vi.mocked(getSettings).mockResolvedValue(appSettings)
     vi.mocked(refreshRepository).mockResolvedValue(status)
+    vi.mocked(updateDependencies).mockResolvedValue({
+      id: 99,
+      repository_id: 1,
+      action: 'update-dependencies',
+      command: 'pip install -r requirements.txt --upgrade',
+      status: 'success',
+      exit_code: 0,
+      output: 'Successfully installed',
+      error: null,
+      duration_ms: 100,
+      actor: 'local',
+      created_at: '2026-11-06T10:00:00Z',
+    })
     vi.mocked(generateCommitMessage).mockResolvedValue({
       repository_id: 1,
       message: 'feat: generated message',
@@ -689,5 +704,52 @@ describe('RepositoryDetails actions', () => {
       'CVE-2018-18074',
       'Credentials could be sent to a different host',
     )
+  })
+
+  it('disables dependency updates on a dirty worktree', async () => {
+    renderDetails()
+
+    const update = await screen.findByRole('button', {
+      name: 'Обновить пакеты',
+    })
+    expect(update).toBeDisabled()
+    expect(update).toHaveAttribute(
+      'title',
+      'Закоммитьте изменения перед обновлением',
+    )
+  })
+
+  it('updates dependencies after confirmation', async () => {
+    vi.mocked(getStatus).mockResolvedValue({
+      ...status,
+      state: 'current',
+      dirty: { modified: 0, staged: 0, untracked: 0, conflicted: 0 },
+    })
+    vi.mocked(getDependencies).mockResolvedValue({
+      repository_id: 1,
+      checked_at: '2026-11-06T10:00:00Z',
+      ecosystems: [
+        {
+          ...dependenciesNoManifest.ecosystems[0],
+          status: 'ok',
+          total: 0,
+        },
+      ],
+      summary: { total: 0, outdated: 0, up_to_date: 0, unknown: 0, ignored: 0 },
+    })
+    const user = userEvent.setup()
+    renderDetails()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Обновить пакеты' }),
+    )
+    expect(
+      screen.getByText(/Вы собираетесь обновить зависимости/),
+    ).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Обновить' }))
+
+    expect(updateDependencies).toHaveBeenCalledWith(1, 'python')
+    expect(await screen.findByText('Зависимости обновлены')).toBeInTheDocument()
   })
 })

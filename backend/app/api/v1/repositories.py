@@ -37,6 +37,8 @@ from app.schemas.action import (
     ActionLogResponse,
     ActionRequest,
     BulkActionRequest,
+    BulkDependencyUpdateRequest,
+    DependencyUpdateRequest,
 )
 from app.schemas.ai import (
     CommitMessageSuggestion,
@@ -73,6 +75,10 @@ from app.services.bulk_service import BulkService
 from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
 from app.services.dependency_service import DependencyService
+from app.services.dependency_update_service import (
+    DependencyUpdateError,
+    DependencyUpdateService,
+)
 from app.services.docker_service import DockerService
 from app.services.insights_service import InsightsService
 from app.services.llm_service import LLMService
@@ -126,6 +132,11 @@ def _llm_service(request: Request) -> LLMService:
 
 def _action_service(request: Request) -> ActionService:
     service: ActionService = request.app.state.action_service
+    return service
+
+
+def _dependency_update_service(request: Request) -> DependencyUpdateService:
+    service: DependencyUpdateService = request.app.state.dependency_update_service
     return service
 
 
@@ -620,6 +631,36 @@ async def mirror_candidates(request: Request) -> MirrorCandidatesResponse:
 
 
 @router.post(
+    "/repositories/{repository_id}/actions/update-dependencies",
+    response_model=ActionLogResponse,
+)
+async def update_repository_dependencies(
+    repository_id: int,
+    payload: DependencyUpdateRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ActionLogResponse:
+    repository = await _get_repository(session, repository_id)
+    try:
+        entry = await _dependency_update_service(request).update(
+            session,
+            repository,
+            payload.ecosystem,
+            confirm=payload.confirm,
+        )
+    except DependencyUpdateError as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail=exc.message
+        ) from exc
+    if entry.status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=entry.error or "dependency update failed",
+        )
+    return ActionLogResponse.model_validate(entry)
+
+
+@router.post(
     "/repositories/{repository_id}/actions/{action}",
     response_model=ActionLogResponse,
 )
@@ -765,6 +806,34 @@ async def bulk_migrate_to_gitflic(
 ) -> dict[str, object]:
     background_tasks.add_task(_bulk_service(request).migrate_to_gitflic)
     return {"status": "accepted", "action": "migrate_to_gitflic"}
+
+
+@router.post(
+    "/repositories/actions/update_dependencies_all",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def bulk_update_dependencies(
+    payload: BulkDependencyUpdateRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirmation_required",
+        )
+    background_tasks.add_task(
+        _dependency_update_service(request).update_many,
+        payload.repo_ids,
+        payload.ecosystem,
+        actor="bulk",
+    )
+    return {
+        "status": "accepted",
+        "action": "update_dependencies_all",
+        "ecosystem": payload.ecosystem,
+        "repo_ids": payload.repo_ids,
+    }
 
 
 @router.get("/repositories/export")

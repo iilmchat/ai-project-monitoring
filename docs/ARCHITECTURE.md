@@ -4,8 +4,7 @@
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
 §12 (security) — в Sprint 28; §13 (insights) — в Sprint 29;
 §14 (collaboration export) — в Sprint 30; §15 (LLM) — в Sprint 32–33;
-§16 (global analytics) — в Sprint 33; §17 (dependency updates) — **план**
-(Sprint 34).
+§16 (global analytics) — в Sprint 33; §17 (dependency updates) — в Sprint 34.
 
 ---
 
@@ -396,7 +395,7 @@ DashboardCharts.tsx
   не добавляются.
 - После импорта — реактивное обновление store, без перезагрузки страницы.
 
-### 9.9. AI, global dependencies и updates (v0.7.0; Sprints 32–33, updates — план)
+### 9.9. AI, global dependencies и updates (v0.7.0, Sprints 32–34)
 
 ```
 <SettingsPage/>
@@ -405,7 +404,7 @@ DashboardCharts.tsx
 <RepositoryDetails/>
   ├─ CommitMessageModal — dirty + llm_enabled → generate/edit/copy/commit
   ├─ CveExplainModal    — spinner → explanation (LLM/cache), error state
-  └─ DependencyUpdateDialog — confirm + clean-worktree warning (план)
+  └─ DependencyUpdateDialog — confirm + clean-worktree warning
 
 <Dashboard/>
   └─ GlobalDependencies — package table, versions distribution, "Унифицировать"
@@ -990,7 +989,7 @@ GET /dashboard/global-dependencies?refresh=false
 
 ---
 
-## 17. Automated dependency updates (v0.7.0, Sprint 34 — план)
+## 17. Automated dependency updates (v0.7.0, Sprint 34)
 
 **Задача.** Дать явное, аудируемое обновление пакетов, не превращая систему в
 автоматического мутатора.
@@ -998,37 +997,39 @@ GET /dashboard/global-dependencies?refresh=false
 ### 17.1. Поток
 
 ```
-POST /repositories/{id}/actions/update-dependencies {confirm:true,...}
+POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
   → DependencyUpdateService
-      ├─ preflight: confirm, worktree clean, manager detection
-      ├─ action_log (started / rejected / error)
+      ├─ preflight: confirm, manager detection, git status --porcelain
+      ├─ action_log (rejected / error)
       ├─ asyncio.create_subprocess_exec(...)
-      │    pip install --upgrade ... | pnpm update | npm update
-      ├─ timeout 180 с, output cap 32 KiB, redaction
+      │    pip install -r requirements.txt --upgrade | pnpm update | npm update
+      ├─ timeout 180 с, output cap 10000 символов, redaction
       └─ action_log (success/error) + ActionLog response
 ```
 
 ### 17.2. Preflight и команды
 
-- `confirm != true` → `400`; грязный worktree → `409 dirty_worktree`
-  (`modified`/`staged`/`conflicted`), попытка логируется.
-- Python: `requirements.txt` → `pip install --upgrade -r requirements.txt`
-  (или выбранные пакеты). `pip` меняет окружение backend, не репозиторий.
-- Node: `pnpm-lock.yaml` → `pnpm update`; иначе `package-lock.json`/
-  `package.json` → `npm update`. Команда может изменить lockfile/`package.json`.
+- `confirm != true` → `400 confirmation_required`.
+- Грязный worktree (`git status --porcelain` непустой) → `409` с
+  `detail="Worktree must be clean"`; попытка логируется (`error=dirty_worktree`).
+- Python: `requirements.txt` → `pip install -r requirements.txt --upgrade`
+  (запускается как `python -m pip ...`). `pip` меняет окружение backend.
+- Node: `pnpm-lock.yaml` → `pnpm update`; иначе `package.json` → `npm update`.
+  Команда может изменить lockfile/`package.json`.
 - Запрещены `--force`, `--legacy-peer-deps`, удаление lock-файлов и любые
   Git-мутации.
-- Bulk: `update_dependencies_all` — concurrency 1–2, `actor=bulk`, один упавший
+- Bulk: `update_dependencies_all` — concurrency 2, `actor=bulk`, один упавший
   репозиторий не отменяет остальные.
 
 ### 17.3. Безопасность и аудит
 
 - Timeout `DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180); kill процесса,
   `ActionLog.status=error`, `error=timeout`.
-- Output ≤ `DEPENDENCY_UPDATE_MAX_OUTPUT_BYTES` (32 KiB); токены/credentials в
-  URL редактируются перед записью.
+- Output ≤ `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (10000 символов); credentials
+  в URL редактируются перед записью.
 - `ActionLog`: `action="update-dependencies"`, `command`, `status`, `exit_code`,
   `output`, `error`, `duration_ms`, `actor`.
+- Ошибка команды не даёт 500: HTTP `409`, `ActionLog.status=error`.
 - Автоматического коммита и отката нет; пользователь проверяет diff сам.
 - ADR-0011 фиксирует политику «explicit + preflight + audit».
 - Вне этого действия `pip`/`pnpm`/`npm` по-прежнему не запускаются.

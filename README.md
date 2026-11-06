@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v0.6.0 · **© 2026 RuChating (iilmchat)**
+**Версия:** v0.7.0 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -31,6 +31,9 @@
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
+- **AI-ассистент** — локальный LLM (Ollama/LM Studio) для черновика commit message по `git diff` и объяснения CVE; remote endpoint только по opt-in.
+- **Глобальный анализ зависимостей** — версии популярных пакетов по всем проектам, распределение и бейдж «Унифицировать».
+- **Безопасное обновление пакетов** — `pip`/`pnpm`/`npm` только по явному подтверждению и на чистом worktree, с аудитом `ActionLog`.
 - **Наблюдаемость** — Prometheus-метрики, расширенный `/health`, JSON-логи.
 - **CI и уведомления** — статус GitHub Actions и desktop-уведомления о проблемах.
 - **Веб-дашборд** — обзор всех репозиториев, фильтры «требуют внимания», детали по каждому.
@@ -111,10 +114,10 @@ pnpm --dir frontend dev
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.6.0** (2026-11-06) |
-| Спринты | 1–30 (v0.6.0); 31–33 (v0.7.0, в работе) |
-| Тесты backend | **198** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **36** (Vitest + Testing Library) |
+| Версия | **v0.7.0** (2026-11-06) |
+| Спринты | 1–34 (v0.7.0 «AI & Global Analytics») |
+| Тесты backend | **206** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **38** (Vitest + Testing Library) |
 | Entry bundle | 85.6 kB gzip (+ lazy charts 100.9 kB, sparkline 6.6 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -135,7 +138,7 @@ pnpm --dir frontend dev
 - **Tech Debt & Insights (Sprint 29):** топ-5 «горячих» файлов по churn и commit frequency в `main` за 30 дней (DORA-lite, sparkline).
 - **Collaboration & Release (Sprint 30):** «Скопировать сводку в Markdown», экспорт/импорт workspace (Saved Views, колонки) в JSON и релиз `v0.6.0`.
 
-**v0.7.0 «AI & Global Analytics»** — в разработке (Sprints 32–33 завершены)
+**v0.7.0 «AI & Global Analytics»** — выпущен 2026-11-06
 ([`TODO_V0.7.md`](TODO_V0.7.md)):
 
 - **LLM Provider & AI Commit Messages (Sprint 32):** Ollama/LM Studio через OpenAI-совместимый API, настройки в UI, генерация Conventional Commits по `git diff` с подтверждением в модалке.

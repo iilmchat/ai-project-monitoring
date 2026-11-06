@@ -22,6 +22,7 @@ import {
   refreshRepository,
   runAction,
   runMirrorAction,
+  updateDependencies,
   updateMirrorPolicy,
 } from '../api/client'
 import type {
@@ -93,6 +94,11 @@ export default function RepositoryDetails() {
   const [dependenciesError, setDependenciesError] = useState<string | null>(null)
   const [dependencyEcosystem, setDependencyEcosystem] = useState<'python' | 'node'>(
     'python',
+  )
+  const [dependencyUpdateOpen, setDependencyUpdateOpen] = useState(false)
+  const [dependencyUpdateRunning, setDependencyUpdateRunning] = useState(false)
+  const [dependencyUpdateError, setDependencyUpdateError] = useState<string | null>(
+    null,
   )
   const [security, setSecurity] = useState<SecurityReport | null>(null)
   const [securityLoading, setSecurityLoading] = useState(!invalidId)
@@ -378,6 +384,28 @@ export default function RepositoryDetails() {
       setDependenciesError('Не удалось проверить зависимости.')
     } finally {
       setDependenciesRefreshing(false)
+    }
+  }
+
+  async function handleDependencyUpdate() {
+    setDependencyUpdateRunning(true)
+    setDependencyUpdateError(null)
+    try {
+      await updateDependencies(repositoryId, dependencyEcosystem)
+      setDependencyUpdateOpen(false)
+      showToast('Зависимости обновлены')
+      const [report, updatedStatus] = await Promise.all([
+        getDependencies(repositoryId, 'all', true),
+        refreshRepository(repositoryId, false),
+      ])
+      setDependencies(report)
+      setStatus(updatedStatus)
+    } catch {
+      setDependencyUpdateError(
+        'Не удалось обновить зависимости. Проверьте, что рабочее дерево чистое.',
+      )
+    } finally {
+      setDependencyUpdateRunning(false)
     }
   }
 
@@ -892,6 +920,28 @@ export default function RepositoryDetails() {
               </h2>
               <div className="flex items-center gap-2">
                 <DependencyBadge report={selectedDependencies} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDependencyUpdateError(null)
+                    setDependencyUpdateOpen(true)
+                  }}
+                  disabled={
+                    status?.state === 'dirty' ||
+                    selectedDependencies?.status === 'no_manifest' ||
+                    selectedDependencies?.status === 'parse_error' ||
+                    dependenciesLoading ||
+                    dependencyUpdateRunning
+                  }
+                  title={
+                    status?.state === 'dirty'
+                      ? 'Закоммитьте изменения перед обновлением'
+                      : undefined
+                  }
+                  className="rounded-md border border-amber-300 px-3 py-1 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/20"
+                >
+                  Обновить пакеты
+                </button>
                 <button
                   type="button"
                   onClick={() => void handleDependenciesRefresh()}
@@ -1653,6 +1703,52 @@ export default function RepositoryDetails() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {dependencyUpdateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dependency-update-title"
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+          >
+            <h2
+              id="dependency-update-title"
+              className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+            >
+              Обновить зависимости
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Вы собираетесь обновить зависимости ({dependencyEcosystem}). Это
+              может изменить `requirements.txt` / `package.json` и lock-файлы.
+              Продолжить?
+            </p>
+            {dependencyUpdateError && (
+              <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                {dependencyUpdateError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDependencyUpdateOpen(false)}
+                disabled={dependencyUpdateRunning}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDependencyUpdate()}
+                disabled={dependencyUpdateRunning}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {dependencyUpdateRunning ? 'Обновление…' : 'Обновить'}
+              </button>
+            </div>
           </div>
         </div>
       )}

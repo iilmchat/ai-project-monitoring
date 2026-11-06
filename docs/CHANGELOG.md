@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+—
+
+## [0.7.0] - 2026-11-06
+
+AI-ассистент для локального разработчика: генерация commit message, объяснение
+CVE, глобальный анализ зависимостей и безопасное обновление пакетов.
+
 ### Добавлено
 
 - feat(ai): `LLMService` — OpenAI-совместимый клиент (LM Studio/Ollama), timeout 30 с, remote-guard, очистка Markdown/кавычек; ошибки → `None` (S32-001).
@@ -15,8 +22,14 @@
 - feat(api): `GET /dashboard/global-dependencies` с `refresh` (S33-003).
 - feat(ui): блок «Global Dependencies» с таблицей версий и бейджем «Унифицировать»; кнопка «Объяснить» и модалка CVE в блоке безопасности (S33-004).
 - test(analytics): реальные tmp-проекты, агрегация/лимит/кэш/API; CVE prompt, кэш и ошибки LLM (S33-005).
+- feat(deps): `DependencyUpdateService` — `pip install -r requirements.txt --upgrade` / `pnpm update` / `npm update`, preflight по `git status --porcelain`, timeout 180 с, output cap 10000 символов (S34-001).
+- feat(api): `POST /repositories/{id}/actions/update-dependencies` и bulk `202`; preflight `confirmation_required`/`no_manifest`/`"Worktree must be clean"`, аудит `action_log` (S34-002).
+- feat(ui): кнопка «Обновить пакеты» (disabled на dirty worktree), модалка подтверждения, toast «Зависимости обновлены» и refresh статуса/отчёта (S34-003).
+- test(deps): clean/dirty preflight, pip/pnpm detection, redaction/cap, timeout/error, API 400/409/202 и UI-подтверждение (S34-004).
 
 ### Документация
+
+- docs(release): SPEC §3.9/§3.20/§5, ARCHITECTURE §17, ADR-0011, RELEASES/README, версия `0.7.0` (S34-005).
 
 - docs(ai/analytics): SPEC §3.18.2/§3.19, ARCHITECTURE §15.4/§16, CHANGELOG/RELEASES (S33-005).
 

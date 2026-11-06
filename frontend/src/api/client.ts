@@ -216,6 +216,19 @@ export async function getDependencies(
   })
 }
 
+export async function updateDependencies(
+  repositoryId: number,
+  ecosystem: 'python' | 'node',
+): Promise<ActionLog> {
+  return request<ActionLog>(
+    `/repositories/${repositoryId}/actions/update-dependencies`,
+    {
+      method: 'POST',
+      body: { confirm: true, ecosystem },
+    },
+  )
+}
+
 export async function getSecurity(
   repositoryId: number,
   refresh = false,

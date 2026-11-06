@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,6 +19,21 @@ class ActionRequest(BaseModel):
 class BulkActionRequest(BaseModel):
     """Optional scope for bulk fetch/sync operations."""
 
+    repo_ids: list[int] | None = None
+
+
+class DependencyUpdateRequest(BaseModel):
+    """Explicit confirmed dependency update for one repository."""
+
+    confirm: bool = False
+    ecosystem: Literal["python", "node"]
+
+
+class BulkDependencyUpdateRequest(BaseModel):
+    """Explicit confirmed dependency update for many repositories."""
+
+    confirm: bool = False
+    ecosystem: Literal["python", "node"]
     repo_ids: list[int] | None = None
 
 

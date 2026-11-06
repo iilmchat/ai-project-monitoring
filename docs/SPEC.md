@@ -3,11 +3,10 @@
 Документ фиксирует **контракты** системы: API, схему БД, статусы, критерии приёмки.
 Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node) — в Sprint 25–26;
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
-AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33) и global
-analytics §3.19 — реализованы; dependency updates §3.20 — **план v0.7.0**
-(Sprint 34); контракт зафиксирован до реализации.
+AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33), global
+analytics §3.19 и dependency updates §3.20 — реализованы в Sprint 32–34.
 
-**Версия:** v0.7.0 «AI & Global Analytics» (в разработке; Sprints 32–33 выполнены) · **Обновлено:** 2026-11-06
+**Версия:** v0.7.0 «AI & Global Analytics» · **Обновлено:** 2026-11-06
 
 ---
 
@@ -253,7 +252,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 |-------|------|------|-------|
 | POST | `/repositories/{id}/actions/{action}` | `{confirm: true}` | `ActionLog` |
 | POST | `/repositories/{id}/actions/commit` | `{confirm: true, message}` | `ActionLog` (v0.7.0) |
-| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm: true, ecosystem?, packages?}` | `ActionLog` (v0.7.0, план) |
+| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm: true, ecosystem: python\|node}` | `ActionLog` (v0.7.0) |
 | POST | `/mirror/actions/{action}` | `{confirm: true, repository_id}` | `ActionLog` |
 | GET | `/admin/actions` | `repository_id?`, `limit?` | `ActionLog[]` |
 
@@ -263,8 +262,8 @@ CI-статусы кэшируются (60 с) и не блокируют заг
   (`action="commit"`), автоматического коммита из AI-модалки нет.
 - Без `confirm=true` → 400; неизвестное действие → 400.
 - `update-dependencies` (v0.7.0) — отдельное действие Sprint 34; требует чистого
-  worktree (`409 dirty_worktree`), пишет `action_log` даже при отказе/ошибке.
-  Детали — §3.20.
+  worktree (`409 "Worktree must be clean"`), пишет `action_log` даже при
+  отказе/ошибке. Детали — §3.20.
 - Destructive-команды (`reset --hard`, `clean -f`, `push --force`, `checkout .`) отсутствуют.
 - `ActionLog`: `repository_id, action, command, status, exit_code, output, actor, created_at`.
 
@@ -290,7 +289,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 | POST | `/repositories/actions/fetch_all` | `tracked_only?` (default true), body `{repo_ids?}` | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/sync_mirrors_all` | `tracked_only?`, body `{repo_ids?}` | `202 {status:"accepted"}` |
 | POST | `/repositories/actions/migrate_to_gitflic` | — | `202 {status:"accepted"}` |
-| POST | `/repositories/actions/update_dependencies_all` | `{repo_ids?}`, `ecosystem?`, body `{confirm:true}` | `202 {status:"accepted"}` (v0.7.0, план) |
+| POST | `/repositories/actions/update_dependencies_all` | `{confirm:true, ecosystem: python\|node, repo_ids?: int[]}` | `202 {status:"accepted"}` (v0.7.0) |
 
 Задачи выполняются в `BackgroundTasks` с ограничением concurrency (5).
 `repo_ids` (опционально) ограничивает операцию выбранными репозиториями; без него
@@ -968,7 +967,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.20. Automated dependency updates (v0.7.0, Sprint 34, план)
+### 3.20. Automated dependency updates (v0.7.0, Sprint 34)
 
 Явная мутация: обновление пакетов выбранного репозитория. Только при
 `confirm=true`, на чистом worktree и с аудитом. Вне этого действия система
@@ -976,39 +975,42 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem?: python\|node\|all, packages?: string[]}` | `ActionLog` |
-| POST | `/repositories/actions/update_dependencies_all` | `{repo_ids?, ecosystem?}`, query/body `confirm=true` | `202 {status:"accepted"}` |
+| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem: python\|node}` | `ActionLog` |
+| POST | `/repositories/actions/update_dependencies_all` | `{confirm:true, ecosystem: python\|node, repo_ids?: int[]}` | `202 {status:"accepted"}` |
 
 **Preflight:**
 
 - `confirm != true` → `400 confirmation_required`.
-- Worktree грязный (`state=dirty`, `dirty.modified/staged/conflicted > 0`) →
-  `409 dirty_worktree`; действие не выполняется, но попытка пишется в
-  `action_log` (`status=error`).
+- Чистота worktree проверяется через `git status --porcelain`; любой вывод →
+  `409` с `detail="Worktree must be clean"`. Действие не выполняется, попытка
+  пишется в `action_log` (`status=error`, `error=dirty_worktree`).
+- Ошибка `git status` → `409 git_unavailable`, тоже с записью в `action_log`.
 - Менеджер: Python — `requirements.txt` → `pip`; Node — `pnpm-lock.yaml` →
-  `pnpm`, иначе `package-lock.json`/`package.json` → `npm`. Если манифеста нет
-  для выбранного ecosystem → `409 no_manifest`.
+  `pnpm`, иначе `package.json` → `npm`. Нет манифеста → `409 no_manifest`
+  (попытка логируется).
 
 **Команды:**
 
-- Python (все): `pip install --upgrade -r requirements.txt`;
-  выбранные: `pip install --upgrade <package>...`.
-- Node (все): `pnpm update` / `npm update`;
-  выбранные: `pnpm update <package>...` / `npm update <package>...`.
-- Никаких `git`-мутаций, `--force`, `--legacy-peer-deps` и удаления lock-файлов.
+- Python: `pip install -r requirements.txt --upgrade`
+  (запускается как `python -m pip install ...`).
+- Node: `pnpm update` или `npm update`.
+- Выборочное обновление пакетов и флаги `--force`/`--legacy-peer-deps` не
+  поддерживаются; `git`-мутации и удаление lock-файлов запрещены.
 
 **Ограничения и аудит:**
 
 - Timeout `DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default **180**); по таймауту
   процесс убивается, `ActionLog.status=error`, `error=timeout`.
-- Вывод ограничен 32 KiB; токены/credentials в URL редактируются
-  (`https://****@host/...`) перед записью в `action_log`.
+- Вывод ограничен `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default **10000**
+  символов); credentials в URL редактируются (`https://****@host/...`).
+- Ошибка команды (`pip`/`pnpm`/`npm`) не даёт 500: `ActionLog.status=error`,
+  HTTP `409`, `detail=error`.
 - `ActionLog`: `action="update-dependencies"`, `command`, `status`,
   `exit_code`, `output`, `error`, `duration_ms`, `actor=local|bulk`.
-- Bulk: concurrency 1–2, `actor=bulk`; один упавший репозиторий не отменяет
+- Bulk: concurrency 2, `actor=bulk`; один упавший репозиторий не отменяет
   остальные.
 - Обновление может изменить `package.json`/lockfile и окружение backend;
-  UI обязан предупредить пользователя (KI-014). Автоматического коммита нет.
+  UI предупреждает пользователя (KI-014). Автоматического коммита нет.
 - ADR-0011 фиксирует preflight-политику и границы доверия.
 
 ---
@@ -1124,7 +1126,7 @@ ai_cache(                   -- v0.7.0 (Sprint 33)
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
 | **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
 | **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 3600), `GLOBAL_ANALYTICS_LIMIT` (default 50), `GLOBAL_ANALYTICS_CONCURRENCY` (default 4); агрегация через `DependencyService` + `dependency_cache`, `refresh=true` обходит кэш** |
-| **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_BYTES` (default 32768); только `confirm=true` + чистый worktree + `action_log`** |
+| **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default 10000); только `confirm=true` + чистый worktree (`git status --porcelain`) + `action_log`** |
 
 ---
 
@@ -1193,7 +1195,7 @@ ai_cache(                   -- v0.7.0 (Sprint 33)
 - [x] Релиз: docs-consistency audit, тег `v0.6.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
-### 6.4. v0.7.0 (в работе: Sprint 32–33 выполнены)
+### 6.4. v0.7.0 (выполнено, спринты 32–34)
 
 - [x] AI: `POST /repositories/{id}/ai/commit-message` возвращает
       `CommitMessageSuggestion` по §3.18.1; `400` без изменений, `409` при
@@ -1208,14 +1210,16 @@ ai_cache(                   -- v0.7.0 (Sprint 33)
       `503` при недоступной LLM.
 - [x] Global: `GET /dashboard/global-dependencies` агрегирует tracked-репозитории,
       считает `distribution`/`unification_needed` и кэшируется на 1 час.
-- [ ] Updates: обновление пакетов невозможно без `confirm=true` и на грязном
-      worktree (`409 dirty_worktree`); каждая попытка пишется в `action_log`.
-- [ ] Updates: timeout ≤ 180 с, вывод ограничен и очищен от токенов; bulk
-      обновляет выбранные репозитории с concurrency 1–2.
-- [ ] Read-only: AI и global analytics не меняют репозиторий; обновления — только
+- [x] Updates: обновление пакетов невозможно без `confirm=true` и на грязном
+      worktree (`409 "Worktree must be clean"`); каждая попытка пишется в
+      `action_log`.
+- [x] Updates: timeout ≤ 180 с, вывод ограничен 10000 символов и очищен от
+      токенов; bulk обновляет выбранные репозитории с concurrency 2.
+- [x] Read-only: AI и global analytics не меняют репозиторий; обновления — только
       через §3.20 (grep-аудит destructive-команд).
-- [ ] UI: подтверждение обновления пакетов; остальные AI/global-блоки готовы.
-- [ ] Релиз: docs-consistency audit, тег `v0.7.0` в GitHub и GitFlic,
+- [x] UI: модалки commit/CVE, глобальная таблица, подтверждение обновления
+      пакетов; пустые/частичные состояния.
+- [x] Релиз: docs-consistency audit, тег `v0.7.0` в GitHub и GitFlic,
       `SHA(main)` совпадает.
 
 ---
@@ -1254,7 +1258,7 @@ ai_cache(                   -- v0.7.0 (Sprint 33)
 
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
 (реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
-v0.7.0 (Sprints 32–33; updates — план).
+v0.7.0 (Sprints 32–34).
 
 ### 9.1 Таблица репозиториев
 
@@ -1396,7 +1400,7 @@ v0.7.0 (Sprints 32–33; updates — план).
 - Импорт не затрагивает `localStorage`-ключи других версий; после импорта
   store обновляется реактивно, без перезагрузки.
 
-### 9.12 AI, глобальные зависимости и обновления (v0.7.0; Sprints 32–33, updates — план)
+### 9.12 AI, глобальные зависимости и обновления (v0.7.0, Sprints 32–34)
 
 **AI / LLM (commit и CVE — реализовано):**
 
@@ -1425,10 +1429,13 @@ v0.7.0 (Sprints 32–33; updates — план).
 
 **Dependency updates:**
 
-- Кнопка «Обновить пакеты» для выбранных проектов; модалка с перечнем
-  ecosystem/пакетов и предупреждением, что изменятся lockfile/окружение.
-- При `dirty_worktree` — понятная ошибка, действие не выполняется.
-- Прогресс/результат, ссылка на `ActionLog`; никаких автозапусков и
-  автоматических коммитов.
+- Кнопка «Обновить пакеты» в блоке «Зависимости» для выбранного ecosystem
+  (Python/Node); disabled при `state="dirty"` и при отсутствии манифеста
+  (tooltip «Закоммитьте изменения перед обновлением»).
+- Модалка подтверждения: предупреждение об изменении `requirements.txt` /
+  `package.json` и lock-файлов.
+- После успеха — toast «Зависимости обновлены» + обновление статуса и отчёта
+  зависимостей. Ошибка (dirty/manager/timeout) показывается в модалке.
+- Никаких автозапусков и автоматических коммитов; все попытки — в `ActionLog`.
 - Цвет — не единственный носитель смысла; модалки с `role="dialog"` и
   возвратом фокуса; блоки lazy, entry bundle в бюджете.
