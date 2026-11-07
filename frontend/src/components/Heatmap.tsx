@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { getHeatmap } from '../api/client'
+import { useI18n } from '../i18n'
 
 const CELL_STYLES = [
   'bg-slate-100 dark:bg-slate-800',
@@ -15,6 +16,7 @@ function isoDate(date: Date): string {
 }
 
 export default function Heatmap({ days = 365 }: { days?: number }) {
+  const { t } = useI18n()
   const [data, setData] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
@@ -61,10 +63,12 @@ export default function Heatmap({ days = 365 }: { days?: number }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Активность коммитов
+          {t('heatmap.title')}
         </h2>
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {loading ? 'загрузка…' : `${total} коммитов за ${days} дней`}
+          {loading
+            ? t('heatmap.loading')
+            : t('heatmap.summary', { count: total, days })}
         </span>
       </div>
       <div className="mt-3 overflow-x-auto">
@@ -79,11 +83,11 @@ export default function Heatmap({ days = 365 }: { days?: number }) {
         </div>
       </div>
       <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-slate-400 dark:text-slate-500">
-        <span>меньше</span>
+        <span>{t('heatmap.less')}</span>
         {CELL_STYLES.map((style, index) => (
           <span key={index} className={`h-2.5 w-2.5 rounded-sm ${style}`} />
         ))}
-        <span>больше</span>
+        <span>{t('heatmap.more')}</span>
       </div>
     </div>
   )

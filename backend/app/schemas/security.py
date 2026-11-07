@@ -56,6 +56,7 @@ class SecurityEcosystemReport(BaseModel):
 
     ecosystem: Literal["python", "node"]
     manifest: str
+    manifests: list[str] = Field(default_factory=list)
     status: SecurityEcosystemStatus
     total_packages: int = Field(default=0, ge=0)
     packages_checked: int = Field(default=0, ge=0)

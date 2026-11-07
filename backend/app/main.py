@@ -105,6 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         npm_client,
         cache_ttl_seconds=resolved.dependency_cache_ttl_seconds,
         concurrency=resolved.dependency_check_concurrency,
+        manifest_max_depth=resolved.dependency_manifest_max_depth,
     )
     osv_client = OsvClient(
         timeout_seconds=resolved.security_http_timeout,
@@ -115,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         osv_client,
         cache_ttl_seconds=resolved.security_cache_ttl_seconds,
         concurrency=resolved.security_check_concurrency,
+        manifest_max_depth=resolved.dependency_manifest_max_depth,
         secret_scan_enabled=resolved.secret_scan_enabled,
         secret_scan_max_files=resolved.secret_scan_max_files,
         secret_scan_max_file_bytes=resolved.secret_scan_max_file_bytes,

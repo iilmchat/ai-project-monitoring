@@ -434,7 +434,8 @@ Docker API наружу не отдаётся, только нормализов
 
 ### 3.15. Dependency management (v0.5.0, Sprint 25–26)
 
-Проверка объявленных зависимостей по манифестам в корне репозитория.
+Проверка объявленных зависимостей по манифестам в корне и вложенных
+каталогах репозитория (`backend/requirements.txt`, `frontend/package.json`).
 Файлы только читаются; в рамках проверки зависимостей `pip`/`npm`/`pnpm`
 не запускаются (обновление пакетов — отдельное действие §3.20).
 
@@ -462,7 +463,8 @@ Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутст
   "ecosystems": [
     {
       "ecosystem": "python",
-      "manifest": "requirements.txt",
+      "manifest": "backend/requirements.txt",
+      "manifests": ["backend/requirements.txt"],
       "status": "ok",
       "source": "mixed",
       "total": 14,
@@ -480,7 +482,8 @@ Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутст
           "kind": "range",
           "severity": "minor",
           "manifest_line": 3,
-          "manifest_section": null
+          "manifest_section": null,
+          "manifest_path": "backend/requirements.txt"
         }
       ],
       "error": null
@@ -502,6 +505,13 @@ Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутст
 
 - `ecosystems` содержит запрошенные ecosystem (по умолчанию оба); отсутствующий
   манифест — запись `status=no_manifest`, а не 404/500.
+- Манифесты ищутся до `DEPENDENCY_MANIFEST_MAX_DEPTH` (default 3) ниже корня;
+  `node_modules`, `.venv`, `venv`, `dist`, `build`, `target`, `vendor`, `.git`
+  и кэши игнорируются. `manifests` — относительные POSIX-пути; `manifest` —
+  первый путь для обратной совместимости.
+- Пакеты из нескольких манифестов дедуплицируются по имени: `exact` важнее
+  диапазона, диапазон с версией — важнее диапазона без версии. Провенанс
+  сохраняется в `manifest_path`.
 - `summary` — сумма счётчиков по всем запрошенным ecosystem; для одного
   ecosystem совпадает с его счётчиками.
 - `total = outdated + up_to_date + unknown + ignored` для каждого ecosystem.
@@ -551,7 +561,9 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 пакеты не устанавливаются/не обновляются, секреты не редактируются.
 
 **Статус реализации:** Sprint 28 — реализовано (`SecurityService`,
-`OsvClient`, `SecretScanner`).
+`OsvClient`, `SecretScanner`). С v0.8.0 CVE-сканер использует общий
+`ManifestDiscovery` и проверяет вложенные `requirements.txt`/`package.json`;
+`manifests[]` перечисляет источники.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -578,7 +590,8 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
   "ecosystems": [
     {
       "ecosystem": "python",
-      "manifest": "requirements.txt",
+      "manifest": "backend/requirements.txt",
+      "manifests": ["backend/requirements.txt"],
       "status": "ok",
       "total_packages": 14,
       "packages_checked": 14,
@@ -1012,6 +1025,50 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 - Обновление может изменить `package.json`/lockfile и окружение backend;
   UI предупреждает пользователя (KI-014). Автоматического коммита нет.
 - ADR-0011 фиксирует preflight-политику и границы доверия.
+
+---
+
+### 3.21. README и документы репозитория (v0.8.0, Sprint 35)
+
+Read-only просмотр README и связанных Markdown-документов прямо из карточки
+проекта. Raw HTML не исполняется; backend отдаёт исходный Markdown, frontend
+рендерит его безопасным встроенным парсером.
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/repositories/{id}/readme` | — | `ReadmeResponse` |
+| GET | `/repositories/{id}/docs` | `path` (relative, 1…2048) | `RepositoryDocResponse` |
+
+`ReadmeResponse`:
+
+```json
+{
+  "repository_id": 20,
+  "path": "README.md",
+  "name": "IIRuchating — мониторинг и анализ локальных проектов",
+  "version": "v0.7.0",
+  "content": "# IIRuchating ..."
+}
+```
+
+`RepositoryDocResponse`: `{repository_id, path, content}`.
+
+**Метаданные README:**
+
+- `name` — первый H1 (`# ...`) без Markdown-разметки; fallback — имя каталога.
+- `version` — первое совпадение `Версия/Version: vX.Y.Z` или badge-версии в
+  первых 80 строках; иначе `null`.
+
+**Безопасность и лимиты:**
+
+- Читаются только `.md`, `.markdown`, `.txt`; размер ≤ **512 KiB** (413 при
+  превышении).
+- Путь обязан оставаться внутри корня репозитория; `..`, абсолютные пути,
+  `~` и `.git/**` отклоняются (400).
+- Отсутствующий README/документ — 404; неверный путь — 400; слишком большой
+  файл — 413.
+- Backend не выполняет HTML и не ходит по внешним ссылкам; frontend открывает
+  внешние ссылки в новой вкладке, внутренние `.md`-ссылки — через `/docs`.
 
 ---
 

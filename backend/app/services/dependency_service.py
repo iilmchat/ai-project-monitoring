@@ -6,7 +6,6 @@ import asyncio
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Literal, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -23,11 +22,12 @@ from app.schemas.dependency import (
     DependencySource,
     DependencySummary,
 )
-from app.services.dependency_parser import (
-    ParsedRequirement,
-    parse_requirements,
+from app.services.dependency_parser import ParsedRequirement
+from app.services.manifest_discovery import (
+    discover_manifests,
+    parse_node_manifests,
+    parse_python_manifests,
 )
-from app.services.node_parser import parse_package_json
 
 IGNORED_KINDS = frozenset({"vcs", "path", "workspace"})
 LookupSource = Literal["registry", "cache", "stale_cache", "none"]
@@ -67,6 +67,7 @@ class DependencyService:
         cache_ttl_seconds: int = 86400,
         concurrency: int = 4,
         max_include_depth: int = 3,
+        manifest_max_depth: int = 3,
     ) -> None:
         self._session_factory = session_factory
         self._pypi_registry = pypi_registry
@@ -74,6 +75,7 @@ class DependencyService:
         self._ttl = max(cache_ttl_seconds, 0)
         self._concurrency = max(concurrency, 1)
         self._max_include_depth = max(max_include_depth, 0)
+        self._manifest_max_depth = max(manifest_max_depth, 0)
         self._locks: dict[str, asyncio.Lock] = {}
         self._cache_write_lock = asyncio.Lock()
 
@@ -129,8 +131,12 @@ class DependencyService:
         *,
         refresh: bool,
     ) -> DependencyEcosystemReport:
-        parsed = parse_requirements(
-            Path(repo_path),
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_python_manifests(
+            discovered,
             max_include_depth=self._max_include_depth,
         )
         if not parsed.manifest_found:
@@ -139,22 +145,27 @@ class DependencyService:
                 manifest="requirements.txt",
                 status="no_manifest",
             )
-        if parsed.error is not None:
+        if not parsed.packages and parsed.errors:
             return DependencyEcosystemReport(
                 ecosystem="python",
-                manifest="requirements.txt",
+                manifest=parsed.manifest_label,
+                manifests=parsed.manifests,
                 status="parse_error",
                 source="none",
-                error=parsed.error,
+                error="; ".join(parsed.errors),
             )
-        return await self._check_requirements(
+        report = await self._check_requirements(
             parsed.packages,
             ecosystem="python",
-            manifest="requirements.txt",
+            manifest=parsed.manifest_label or "requirements.txt",
+            manifests=parsed.manifests,
             registry_prefix="pypi",
             registry=self._pypi_registry,
             refresh=refresh,
         )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
 
     async def _node_report(
         self,
@@ -162,37 +173,47 @@ class DependencyService:
         *,
         refresh: bool,
     ) -> DependencyEcosystemReport:
-        parsed = parse_package_json(Path(repo_path))
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_node_manifests(discovered)
         if not parsed.manifest_found:
             return _empty_report(
                 ecosystem="node",
                 manifest="package.json",
                 status="no_manifest",
             )
-        if parsed.error is not None:
-            return DependencyEcosystemReport(
-                ecosystem="node",
-                manifest="package.json",
-                status="parse_error",
-                source="none",
-                error=parsed.error,
-            )
         if self._npm_registry is None:
             return DependencyEcosystemReport(
                 ecosystem="node",
-                manifest="package.json",
+                manifest=parsed.manifest_label,
+                manifests=parsed.manifests,
                 status="unavailable",
                 source="none",
                 error="npm_client_not_configured",
             )
-        return await self._check_requirements(
+        if not parsed.packages and parsed.errors:
+            return DependencyEcosystemReport(
+                ecosystem="node",
+                manifest=parsed.manifest_label,
+                manifests=parsed.manifests,
+                status="parse_error",
+                source="none",
+                error="; ".join(parsed.errors),
+            )
+        report = await self._check_requirements(
             parsed.packages,
             ecosystem="node",
-            manifest="package.json",
+            manifest=parsed.manifest_label or "package.json",
+            manifests=parsed.manifests,
             registry_prefix="npm",
             registry=self._npm_registry,
             refresh=refresh,
         )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
 
     async def _check_requirements(
         self,
@@ -200,6 +221,7 @@ class DependencyService:
         *,
         ecosystem: Ecosystem,
         manifest: str,
+        manifests: list[str],
         registry_prefix: RegistryPrefix,
         registry: LatestVersionRegistry,
         refresh: bool,
@@ -243,6 +265,7 @@ class DependencyService:
         return DependencyEcosystemReport(
             ecosystem=ecosystem,
             manifest=manifest,
+            manifests=manifests,
             status=status,
             source=source,
             total=len(packages),
@@ -347,6 +370,7 @@ def _empty_report(
     return DependencyEcosystemReport(
         ecosystem=ecosystem,
         manifest=manifest,
+        manifests=[],
         status=status,
         source="none",
     )
@@ -366,6 +390,7 @@ def _package_report(
             kind=requirement.kind,
             manifest_line=requirement.manifest_line,
             manifest_section=requirement.manifest_section,
+            manifest_path=requirement.manifest_path,
         )
 
     status, severity = _classify(requirement.current, lookup.latest)
@@ -379,6 +404,7 @@ def _package_report(
         severity=severity,
         manifest_line=requirement.manifest_line,
         manifest_section=requirement.manifest_section,
+        manifest_path=requirement.manifest_path,
     )
 
 

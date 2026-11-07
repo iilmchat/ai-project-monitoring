@@ -1,0 +1,29 @@
+export const settings = {
+  'settings.title': 'Настройки',
+  'settings.subtitle': 'Значения сохраняются в БД и применяются без перезапуска.',
+  'settings.loadError': 'Не удалось загрузить настройки.',
+  'settings.saveError': 'Не удалось сохранить настройки.',
+  'settings.saved': 'Настройки сохранены.',
+  'settings.scanRoots': 'SCAN_ROOTS (пути через запятую)',
+  'settings.canonicalProvider': 'Канонический провайдер по умолчанию',
+  'settings.aiSection': 'AI / LLM',
+  'settings.enableAi': 'Включить AI-функции',
+  'settings.endpoint': 'LLM endpoint (OpenAI-compatible)',
+  'settings.model': 'Модель',
+  'settings.apiKey': 'API key (опционально)',
+  'settings.timeout': 'Timeout, с',
+  'settings.maxDiff': 'Max diff, символов',
+  'settings.allowRemote': 'Разрешить внешний endpoint (код будет отправлен за пределы машины)',
+  'settings.tokenHint':
+    'Пустое поле токена означает «не менять». Маска показывает уже сохранённое значение.',
+  'settings.workspace': 'Workspace',
+  'settings.workspaceHint':
+    'Экспорт и импорт UI-настроек: Saved Views, видимые колонки и их ширина. Токены и пути сканирования не экспортируются.',
+  'settings.exportWorkspace': 'Экспорт настроек (JSON)',
+  'settings.importWorkspace': 'Импорт настроек',
+  'settings.workspaceFormat': 'Формат: {filename} · версия схемы 1 · до 1 MiB.',
+  'settings.workspaceExported': 'Workspace экспортирован: {filename}',
+  'settings.workspaceImported': 'Настройки workspace импортированы.',
+  'settings.workspaceImportError':
+    'Не удалось импортировать настройки: неверный формат или версия файла.',
+} as const

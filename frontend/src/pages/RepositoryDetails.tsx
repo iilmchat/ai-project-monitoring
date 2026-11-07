@@ -11,6 +11,7 @@ import {
   getInsights,
   getLog,
   getMirror,
+  getReadme,
   getRecommendations,
   getRepositories,
   getSecurity,
@@ -39,6 +40,7 @@ import type {
   InsightsReport,
   MirrorProviderStatus,
   MirrorStatus,
+  ReadmeMetadata,
   Recommendation,
   Repository,
   RepositoryStatus,
@@ -47,14 +49,30 @@ import type {
   SecurityVulnerability,
 } from '../api/types'
 import MirrorBadge from '../components/MirrorBadge'
+import ReadmeModal from '../components/ReadmeModal'
 import StatusBadge from '../components/StatusBadge'
+import { type TranslationKey, useI18n } from '../i18n'
 import { isStatusStale } from '../utils/stale'
+
+type Translate = ReturnType<typeof useI18n>['t']
 
 const EXECUTABLE_ACTIONS: Record<string, string> = {
   stash: 'stash',
   push: 'push',
   pull: 'pull',
   'pull-rebase': 'pull',
+}
+
+const RECOMMENDATION_KEYS: Record<string, TranslationKey> = {
+  commit: 'repo.recommendation.commit',
+  stash: 'repo.recommendation.stash',
+  'pull-rebase': 'repo.recommendation.pull-rebase',
+  merge: 'repo.recommendation.merge',
+  push: 'repo.recommendation.push',
+  pull: 'repo.recommendation.pull',
+  'set-upstream': 'repo.recommendation.set-upstream',
+  'push-mirror': 'repo.recommendation.push-mirror',
+  'create-mirror': 'repo.recommendation.create-mirror',
 }
 
 const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
@@ -66,20 +84,30 @@ interface ActionPrompt {
   command: string
 }
 
-function formatDate(value: string | null | undefined): string {
-  if (!value) {
-    return '—'
+function recommendationReason(
+  item: Recommendation,
+  t: Translate,
+): string {
+  const key = RECOMMENDATION_KEYS[item.action]
+  return key ? t(key) : item.reason
+}
+
+function repositoryLabel(repository: Repository): string {
+  if (repository.alias) {
+    return repository.alias
   }
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('ru-RU')
+  const normalized = repository.path.replaceAll('\\', '/')
+  return normalized.split('/').filter(Boolean).pop() ?? repository.path
 }
 
 export default function RepositoryDetails() {
+  const { t, formatDate } = useI18n()
   const { id } = useParams<{ id: string }>()
   const repositoryId = Number(id)
   const invalidId = Number.isNaN(repositoryId)
 
   const [repository, setRepository] = useState<Repository | null>(null)
+  const [relatedRepositories, setRelatedRepositories] = useState<Repository[]>([])
   const [status, setStatus] = useState<RepositoryStatus | null>(null)
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
@@ -109,6 +137,8 @@ export default function RepositoryDetails() {
   const [insightsRefreshing, setInsightsRefreshing] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
   const [llmEnabled, setLlmEnabled] = useState(false)
+  const [readme, setReadme] = useState<ReadmeMetadata | null>(null)
+  const [readmeOpen, setReadmeOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitMessage, setCommitMessage] = useState('')
@@ -182,6 +212,14 @@ export default function RepositoryDetails() {
         setConflicts(conflictData)
         setDockerStatus(docker)
         if (found) {
+          const label = repositoryLabel(found).toLowerCase()
+          setRelatedRepositories(
+            list.items.filter(
+              (item) =>
+                item.id !== found.id &&
+                repositoryLabel(item).toLowerCase() === label,
+            ),
+          )
           setPolicyCanonical(
             found.canonical_provider === 'gitflic' ? 'gitflic' : 'github',
           )
@@ -192,7 +230,7 @@ export default function RepositoryDetails() {
         setError(null)
       } catch {
         if (active) {
-          setError('Не удалось загрузить детали репозитория.')
+          setError(t('repo.errors.loadDetails'))
         }
       } finally {
         if (active) {
@@ -229,7 +267,7 @@ export default function RepositoryDetails() {
       })
       .catch(() => {
         if (active) {
-          setDependenciesError('Не удалось проверить зависимости.')
+          setDependenciesError(t('repo.errors.dependencies'))
         }
       })
       .finally(() => {
@@ -257,7 +295,7 @@ export default function RepositoryDetails() {
       })
       .catch(() => {
         if (active) {
-          setSecurityError('Не удалось проверить безопасность.')
+          setSecurityError(t('repo.errors.security'))
         }
       })
       .finally(() => {
@@ -285,7 +323,7 @@ export default function RepositoryDetails() {
       })
       .catch(() => {
         if (active) {
-          setInsightsError('Не удалось загрузить инсайты.')
+          setInsightsError(t('repo.errors.insights'))
         }
       })
       .finally(() => {
@@ -316,6 +354,27 @@ export default function RepositoryDetails() {
   }, [invalidId])
 
   useEffect(() => {
+    if (invalidId) {
+      return
+    }
+    let active = true
+    void getReadme(repositoryId)
+      .then((metadata) => {
+        if (active) {
+          setReadme(metadata)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setReadme(null)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [invalidId, repositoryId])
+
+  useEffect(() => {
     return () => {
       if (toastTimer.current !== null) {
         window.clearTimeout(toastTimer.current)
@@ -332,7 +391,7 @@ export default function RepositoryDetails() {
       setRecommendations(await getRecommendations(repositoryId))
       setError(null)
     } catch {
-      setError('Не удалось обновить статус репозитория.')
+      setError(t('repo.errors.refreshStatus'))
     } finally {
       setRefreshing(false)
     }
@@ -347,7 +406,7 @@ export default function RepositoryDetails() {
         2000,
       )
     } catch {
-      setError('Не удалось скопировать команду в буфер обмена.')
+      setError(t('repo.errors.copyCommand'))
     }
   }
 
@@ -357,7 +416,7 @@ export default function RepositoryDetails() {
       setMirror(await refreshMirror(repositoryId))
       setError(null)
     } catch {
-      setError('Не удалось обновить статус зеркала.')
+      setError(t('repo.errors.refreshMirror'))
     } finally {
       setMirrorRefreshing(false)
     }
@@ -369,7 +428,7 @@ export default function RepositoryDetails() {
       setDockerStatus(await getDockerStatus(repositoryId, true))
       setError(null)
     } catch {
-      setError('Не удалось обновить статус Docker.')
+      setError(t('repo.errors.refreshDocker'))
     } finally {
       setDockerRefreshing(false)
     }
@@ -381,7 +440,7 @@ export default function RepositoryDetails() {
       setDependencies(await getDependencies(repositoryId, 'all', true))
       setDependenciesError(null)
     } catch {
-      setDependenciesError('Не удалось проверить зависимости.')
+      setDependenciesError(t('repo.errors.dependencies'))
     } finally {
       setDependenciesRefreshing(false)
     }
@@ -393,7 +452,7 @@ export default function RepositoryDetails() {
     try {
       await updateDependencies(repositoryId, dependencyEcosystem)
       setDependencyUpdateOpen(false)
-      showToast('Зависимости обновлены')
+      showToast(t('repo.toast.dependenciesUpdated'))
       const [report, updatedStatus] = await Promise.all([
         getDependencies(repositoryId, 'all', true),
         refreshRepository(repositoryId, false),
@@ -401,9 +460,7 @@ export default function RepositoryDetails() {
       setDependencies(report)
       setStatus(updatedStatus)
     } catch {
-      setDependencyUpdateError(
-        'Не удалось обновить зависимости. Проверьте, что рабочее дерево чистое.',
-      )
+      setDependencyUpdateError(t('repo.errors.updateDependencies'))
     } finally {
       setDependencyUpdateRunning(false)
     }
@@ -415,7 +472,7 @@ export default function RepositoryDetails() {
       setSecurity(await getSecurity(repositoryId, true))
       setSecurityError(null)
     } catch {
-      setSecurityError('Не удалось проверить безопасность.')
+      setSecurityError(t('repo.errors.security'))
     } finally {
       setSecurityRefreshing(false)
     }
@@ -427,7 +484,7 @@ export default function RepositoryDetails() {
       setInsights(await getInsights(repositoryId, 30, true))
       setInsightsError(null)
     } catch {
-      setInsightsError('Не удалось загрузить инсайты.')
+      setInsightsError(t('repo.errors.insights'))
     } finally {
       setInsightsRefreshing(false)
     }
@@ -454,11 +511,11 @@ export default function RepositoryDetails() {
       const suggestion = await generateCommitMessage(repositoryId)
       setCommitMessage(suggestion.message)
       if (suggestion.truncated) {
-        setCommitNotice('Diff был обрезан — проверьте сообщение внимательно.')
+        setCommitNotice(t('repo.commit.truncated'))
       }
     } catch {
       setCommitOpen(false)
-      showToast('LLM недоступна. Проверьте настройки.')
+      showToast(t('repo.errors.llmUnavailable'))
     } finally {
       setCommitLoading(false)
     }
@@ -467,9 +524,9 @@ export default function RepositoryDetails() {
   async function handleCopyCommitMessage() {
     try {
       await navigator.clipboard.writeText(commitMessage)
-      showToast('Сообщение скопировано')
+      showToast(t('repo.toast.commitCopied'))
     } catch {
-      showToast('Не удалось скопировать сообщение')
+      showToast(t('repo.errors.copyCommitMessage'))
     }
   }
 
@@ -483,17 +540,17 @@ export default function RepositoryDetails() {
       await runAction(repositoryId, 'commit', message)
       setCommitOpen(false)
       setCommitConfirmed(false)
-      showToast('Коммит создан')
-      const [updated, log, tips] = await Promise.all([
-        refreshRepository(repositoryId, false),
+      showToast(t('repo.toast.commitCreated'))
+      const updated = await refreshRepository(repositoryId, false)
+      setStatus(updated)
+      const [log, tips] = await Promise.all([
         getLog(repositoryId, 10),
         getRecommendations(repositoryId),
       ])
-      setStatus(updated)
       setCommits(log)
       setRecommendations(tips)
     } catch {
-      showToast('Не удалось выполнить коммит')
+      showToast(t('repo.errors.commitFailed'))
     } finally {
       setCommitRunning(false)
     }
@@ -514,7 +571,7 @@ export default function RepositoryDetails() {
       )
       setCveText(result.explanation)
     } catch {
-      setCveError('LLM недоступна. Проверьте настройки.')
+      setCveError(t('repo.errors.llmUnavailable'))
     } finally {
       setCveLoading(false)
     }
@@ -546,7 +603,7 @@ export default function RepositoryDetails() {
       setPolicyOpen(false)
       setError(null)
     } catch {
-      setError('Не удалось сохранить политику зеркала.')
+      setError(t('repo.errors.savePolicy'))
     }
   }
 
@@ -572,32 +629,29 @@ export default function RepositoryDetails() {
       }
       setActionResult(
         entry.status === 'success'
-          ? `Выполнено: ${entry.command}`
-          : `Ошибка ${entry.exit_code ?? ''}: ${entry.output ?? entry.command}`,
+          ? t('repo.action.success', { command: entry.command })
+          : t('repo.action.failure', {
+              code: entry.exit_code ?? '',
+              detail: entry.output ?? entry.command,
+            }),
       )
       setActionPrompt(null)
       setActionConfirmed(false)
 
-      const [
-        updatedStatus,
-        log,
-        tips,
-        mirrorStatus,
-        actionHistory,
-        ci,
-        conflictData,
-        docker,
-      ] = await Promise.all([
-        refreshRepository(repositoryId, false),
-        getLog(repositoryId, 10),
-        getRecommendations(repositoryId),
-        getMirror(repositoryId),
-        getActions(repositoryId),
-        getCiStatus(repositoryId),
-        getConflicts(repositoryId),
-        getDockerStatus(repositoryId).catch(() => null),
-      ])
+      // Refresh status first: recommendations are derived from the stored
+      // status, so fetching them in parallel would race the refresh.
+      const updatedStatus = await refreshRepository(repositoryId, false)
       setStatus(updatedStatus)
+      const [log, tips, mirrorStatus, actionHistory, ci, conflictData, docker] =
+        await Promise.all([
+          getLog(repositoryId, 10),
+          getRecommendations(repositoryId),
+          getMirror(repositoryId),
+          getActions(repositoryId),
+          getCiStatus(repositoryId),
+          getConflicts(repositoryId),
+          getDockerStatus(repositoryId).catch(() => null),
+        ])
       setCommits(log)
       setRecommendations(tips)
       setMirror(mirrorStatus)
@@ -606,7 +660,7 @@ export default function RepositoryDetails() {
       setConflicts(conflictData)
       setDockerStatus(docker)
     } catch {
-      setActionResult('Не удалось выполнить действие.')
+      setActionResult(t('repo.errors.executeAction'))
     } finally {
       setActionRunning(false)
     }
@@ -631,13 +685,41 @@ export default function RepositoryDetails() {
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <Link to="/" className="text-sm font-medium text-primary hover:underline">
-            ← Назад на дашборд
+            {t('repo.backToDashboard')}
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-            {repository?.alias ?? repository?.path ?? `Репозиторий #${id}`}
-          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
+              {readme?.name ??
+                repository?.alias ??
+                repository?.path ??
+                t('repo.fallbackTitle', { id: id ?? '' })}
+            </h1>
+            {readme?.version && (
+              <span
+                className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary dark:bg-primary/20"
+                title={t('repo.readmeVersionTitle')}
+              >
+                {readme.version}
+              </span>
+            )}
+            {readme && (
+              <button
+                type="button"
+                onClick={() => setReadmeOpen(true)}
+                className="rounded-md border border-slate-300 px-2.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                title={t('repo.openReadme', { path: readme.path })}
+              >
+                README
+              </button>
+            )}
+          </div>
+          {repository?.path && (
+            <p className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-slate-400" title={repository.path}>
+              {repository.path}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {status !== null &&
@@ -648,7 +730,7 @@ export default function RepositoryDetails() {
                 onClick={() => void openCommitModal()}
                 className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
               >
-                Сгенерировать коммит
+                {t('repo.commit.generate')}
               </button>
             )}
           <button
@@ -657,14 +739,14 @@ export default function RepositoryDetails() {
             disabled={refreshing}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {refreshing ? 'Обновление…' : 'Обновить'}
+            {refreshing ? t('common.refreshing') : t('common.refresh')}
           </button>
         </div>
       </div>
 
-      {(error ?? (invalidId ? 'Некорректный идентификатор репозитория.' : null)) && (
+      {(error ?? (invalidId ? t('repo.errors.invalidId') : null)) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error ?? 'Некорректный идентификатор репозитория.'}
+          {error ?? t('repo.errors.invalidId')}
         </div>
       )}
 
@@ -675,27 +757,37 @@ export default function RepositoryDetails() {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('common.loading')}
+        </p>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Репозиторий
+                {t('repo.sections.repository')}
               </h2>
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Путь</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('common.path')}
+                  </dt>
                   <dd className="truncate text-right font-medium" title={repository?.path}>
                     {repository?.path ?? '—'}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Отслеживается</dt>
-                  <dd className="font-medium">{repository?.tracked ? 'да' : 'нет'}</dd>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('repo.fields.tracked')}
+                  </dt>
+                  <dd className="font-medium">
+                    {repository?.tracked ? t('common.yes') : t('common.no')}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Ветка</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('common.branch')}
+                  </dt>
                   <dd className="font-medium">{status?.branch ?? '—'}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -703,13 +795,17 @@ export default function RepositoryDetails() {
                   <dd className="font-medium">{status?.upstream ?? '—'}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Последний коммит</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('repo.fields.lastCommit')}
+                  </dt>
                   <dd className="max-w-[60%] truncate text-right font-medium" title={status?.head_subject ?? ''}>
                     {status?.head_subject ?? '—'}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Проверено</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('repo.fields.checked')}
+                  </dt>
                   <dd className="font-medium">{formatDate(status?.checked_at)}</dd>
                 </div>
               </dl>
@@ -717,7 +813,7 @@ export default function RepositoryDetails() {
 
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Статус
+                {t('common.status')}
               </h2>
               <div className="mt-3 flex items-center gap-3">
                 <StatusBadge
@@ -731,11 +827,15 @@ export default function RepositoryDetails() {
               </div>
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Изменено</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('repo.fields.modified')}
+                  </dt>
                   <dd className="font-medium">{status?.dirty.modified ?? 0}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">В индексе</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('repo.fields.staged')}
+                  </dt>
                   <dd className="font-medium">{status?.dirty.staged ?? 0}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -743,7 +843,9 @@ export default function RepositoryDetails() {
                   <dd className="font-medium">{status?.dirty.untracked ?? 0}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 dark:text-slate-400">Remote</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    {t('common.remote')}
+                  </dt>
                   <dd className="font-medium">{status?.remote_status ?? '—'}</dd>
                 </div>
                 {status?.error && (
@@ -755,10 +857,108 @@ export default function RepositoryDetails() {
             </div>
           </div>
 
+          {relatedRepositories.length > 0 && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 shadow-sm dark:border-sky-800 dark:bg-sky-900/20">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">
+                  {t('repo.sections.related')}
+                </h2>
+                <span
+                  className="text-xs text-sky-700 dark:text-sky-300"
+                  title={t('repo.related.title')}
+                >
+                  {t('repo.related.note')}
+                </span>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {relatedRepositories.map((item) => (
+                  <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <Link
+                      to={`/repo/${item.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {repositoryLabel(item)}
+                    </Link>
+                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                      {item.path}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div
+            data-testid="recommendations-block"
+            className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('repo.sections.recommendations')}
+              </h2>
+              <span
+                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                title={t('repo.recommendations.title')}
+              >
+                {recommendations.length}
+              </span>
+            </div>
+            {recommendations.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                {t('repo.recommendations.empty')}
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {recommendations.map((item) => (
+                  <li
+                    key={`${item.action}-${item.command}`}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {recommendationReason(item, t)}
+                      </p>
+                      <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {item.command}
+                      </code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy(item.command)}
+                      className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {copiedCommand === item.command
+                        ? t('common.copied')
+                        : t('common.copy')}
+                    </button>
+                    {EXECUTABLE_ACTIONS[item.action] && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openAction({
+                            kind: 'local',
+                            action: item.action,
+                            reason: item.reason,
+                            command: item.command,
+                          })
+                        }
+                        className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
+                      >
+                        {t('repo.actions.execute')}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {status?.state === 'diverged' && (
             <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm dark:border-red-800 dark:bg-slate-900">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Конфликты ({conflicts?.files.length ?? 0})
+                {t('repo.sections.conflicts', {
+                  count: conflicts?.files.length ?? 0,
+                })}
               </h2>
               {conflicts && conflicts.files.length > 0 ? (
                 <ul className="mt-3 space-y-1">
@@ -773,7 +973,7 @@ export default function RepositoryDetails() {
                 </ul>
               ) : (
                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                  Конфликтов в рабочей директории нет.
+                  {t('repo.conflicts.empty')}
                 </p>
               )}
             </div>
@@ -812,7 +1012,7 @@ export default function RepositoryDetails() {
                       rel="noreferrer"
                       className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
                     >
-                      Открыть CI →
+                      {t('repo.ci.open')}
                     </a>
                   )}
                 </div>
@@ -829,21 +1029,21 @@ export default function RepositoryDetails() {
                 Docker Containers
               </h2>
               <div className="flex items-center gap-2">
-                <DockerBadge status={dockerStatus?.status} />
+                <DockerBadge status={dockerStatus?.status} t={t} />
                 <button
                   type="button"
                   onClick={() => void handleDockerRefresh()}
                   disabled={dockerRefreshing}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {dockerRefreshing ? 'Обновление…' : 'Обновить'}
+                  {dockerRefreshing ? t('common.refreshing') : t('common.refresh')}
                 </button>
               </div>
             </div>
             <div className="p-4">
               {dockerStatus === null ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Не удалось получить статус Docker.
+                  {t('repo.docker.error')}
                 </p>
               ) : (
                 <>
@@ -854,7 +1054,7 @@ export default function RepositoryDetails() {
                   )}
                   {dockerStatus.status === 'not_found' && (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Контейнеры для этого репозитория не найдены.
+                      {t('repo.docker.notFound')}
                     </p>
                   )}
                   {dockerStatus.containers.length > 0 && (
@@ -896,14 +1096,16 @@ export default function RepositoryDetails() {
                               : ''}
                           </p>
                           <p className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
-                            {formatContainerPorts(container)}
+                            {formatContainerPorts(container, t)}
                           </p>
                         </li>
                       ))}
                     </ul>
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-                    Проверено: {formatDate(dockerStatus.checked_at)}
+                    {t('repo.fields.checkedWithDate', {
+                      date: formatDate(dockerStatus.checked_at),
+                    })}
                   </p>
                 </>
               )}
@@ -916,10 +1118,10 @@ export default function RepositoryDetails() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Зависимости
+                {t('repo.sections.dependencies')}
               </h2>
               <div className="flex items-center gap-2">
-                <DependencyBadge report={selectedDependencies} />
+                <DependencyBadge report={selectedDependencies} t={t} />
                 <button
                   type="button"
                   onClick={() => {
@@ -935,12 +1137,12 @@ export default function RepositoryDetails() {
                   }
                   title={
                     status?.state === 'dirty'
-                      ? 'Закоммитьте изменения перед обновлением'
+                      ? t('repo.dependencies.commitFirst')
                       : undefined
                   }
                   className="rounded-md border border-amber-300 px-3 py-1 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/20"
                 >
-                  Обновить пакеты
+                  {t('repo.dependencies.updatePackages')}
                 </button>
                 <button
                   type="button"
@@ -948,7 +1150,9 @@ export default function RepositoryDetails() {
                   disabled={dependenciesRefreshing || dependenciesLoading}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {dependenciesRefreshing ? 'Проверка…' : 'Проверить всё'}
+                  {dependenciesRefreshing
+                    ? t('repo.dependencies.checking')
+                    : t('repo.dependencies.checkAll')}
                 </button>
               </div>
             </div>
@@ -978,13 +1182,15 @@ export default function RepositoryDetails() {
                 Node
               </button>
               <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                Всего устаревших: {dependencies?.summary.outdated ?? 0}
+                {t('repo.dependencies.totalOutdated', {
+                  count: dependencies?.summary.outdated ?? 0,
+                })}
               </span>
             </div>
             <div className="p-4">
               {dependenciesLoading ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Проверка зависимостей…
+                  {t('repo.dependencies.loading')}
                 </p>
               ) : dependenciesError ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -992,53 +1198,68 @@ export default function RepositoryDetails() {
                 </p>
               ) : selectedDependencies === null ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Нет данных о зависимостях.
+                  {t('repo.dependencies.noData')}
                 </p>
               ) : (
                 <>
                   {selectedDependencies.status === 'no_manifest' && (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       {selectedDependencies.manifest === 'package.json'
-                        ? 'package.json не найден.'
-                        : 'requirements.txt не найден.'}
+                        ? t('repo.dependencies.packageJsonMissing')
+                        : t('repo.dependencies.requirementsMissing')}
                     </p>
                   )}
                   {selectedDependencies.status === 'parse_error' && (
                     <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
                       {selectedDependencies.error ??
-                        `Ошибка разбора ${selectedDependencies.manifest ?? 'манифеста'}.`}
+                        t('repo.dependencies.parseError', {
+                          manifest:
+                            selectedDependencies.manifest ??
+                            t('repo.dependencies.manifestFallback'),
+                        })}
                     </p>
                   )}
                   {selectedDependencies.status === 'unavailable' && (
                     <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                      {dependencyErrorMessage(selectedDependencies.error)}
+                      {dependencyErrorMessage(selectedDependencies.error, t)}
                     </p>
                   )}
                   {selectedDependencies.status !== 'no_manifest' &&
                     selectedDependencies.status !== 'parse_error' && (
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <DependencyCounter
-                          label="Устарели"
+                          label={t('repo.dependencies.outdated')}
                           value={selectedDependencies.outdated}
                           tone="amber"
                         />
                         <DependencyCounter
-                          label="Актуальны"
+                          label={t('repo.dependencies.upToDate')}
                           value={selectedDependencies.up_to_date}
                           tone="emerald"
                         />
                         <DependencyCounter
-                          label="Неизвестны"
+                          label={t('repo.dependencies.unknown')}
                           value={selectedDependencies.unknown}
                           tone="slate"
                         />
                         <DependencyCounter
-                          label="Игнорируются"
+                          label={t('repo.dependencies.ignored')}
                           value={selectedDependencies.ignored}
                           tone="slate"
                         />
                       </div>
                     )}
+                  {(selectedDependencies.manifests?.length ?? 0) > 0 && (
+                    <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                      {t('repo.dependencies.manifests')}{' '}
+                      <span
+                        className="font-mono text-slate-600 dark:text-slate-300"
+                        title={selectedDependencies.manifests?.join('\n')}
+                      >
+                        {selectedDependencies.manifests?.join(', ')}
+                      </span>
+                    </p>
+                  )}
                   {selectedDependencies.packages.length > 0 ? (
                     <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
                       {selectedDependencies.packages.map((item) => (
@@ -1046,20 +1267,26 @@ export default function RepositoryDetails() {
                           key={`${item.name}-${item.manifest_line ?? item.declared}`}
                           item={item}
                           ecosystem={selectedDependencies.ecosystem}
+                          t={t}
                         />
                       ))}
                     </ul>
                   ) : (
                     selectedDependencies.status === 'ok' && (
                       <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                        Зависимости не объявлены.
+                        {t('repo.dependencies.noneDeclared')}
                       </p>
                     )
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-                    Проверено: {formatDate(dependencies?.checked_at)} · источник:{' '}
-                    {dependencySourceLabel(selectedDependencies.source)} · всего устаревших:{' '}
-                    {dependencies?.summary.outdated ?? 0}
+                    {t('repo.dependencies.footer', {
+                      checked: formatDate(dependencies?.checked_at),
+                      source: dependencySourceLabel(
+                        selectedDependencies.source,
+                        t,
+                      ),
+                      outdated: dependencies?.summary.outdated ?? 0,
+                    })}
                   </p>
                 </>
               )}
@@ -1072,13 +1299,14 @@ export default function RepositoryDetails() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Безопасность
+                {t('repo.sections.security')}
               </h2>
               <div className="flex items-center gap-2">
                 <SecurityBadge
                   report={security}
                   hasCritical={securityHasCritical}
                   secrets={securitySecrets.length}
+                  t={t}
                 />
                 <button
                   type="button"
@@ -1086,14 +1314,16 @@ export default function RepositoryDetails() {
                   disabled={securityRefreshing || securityLoading}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {securityRefreshing ? 'Проверка…' : 'Проверить снова'}
+                  {securityRefreshing
+                    ? t('repo.dependencies.checking')
+                    : t('repo.security.checkAgain')}
                 </button>
               </div>
             </div>
             <div className="space-y-3 p-4">
               {securityLoading ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Проверка уязвимостей и секретов…
+                  {t('repo.security.loading')}
                 </p>
               ) : securityError ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -1101,22 +1331,24 @@ export default function RepositoryDetails() {
                 </p>
               ) : security === null ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Нет данных о безопасности.
+                  {t('repo.security.noData')}
                 </p>
               ) : (
                 <>
                   {security.status === 'unavailable' && (
                     <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                       {security.error === 'rate_limited'
-                        ? 'OSV.dev ограничил частоту запросов. Показаны данные из кэша, если они есть.'
-                        : 'OSV.dev временно недоступен. Данные могут быть неполными.'}
+                        ? t('repo.security.rateLimited')
+                        : t('repo.security.osvUnavailable')}
                     </p>
                   )}
 
                   {securitySecrets.length > 0 && (
                     <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800 dark:bg-red-900/30">
                       <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-                        Найдены потенциальные секреты ({securitySecrets.length})
+                        {t('repo.security.secretsFound', {
+                          count: securitySecrets.length,
+                        })}
                       </p>
                       <ul className="mt-2 space-y-1">
                         {securitySecrets.map((finding) => (
@@ -1127,7 +1359,7 @@ export default function RepositoryDetails() {
                             <span className="font-mono">
                               {finding.file}:{finding.line}
                             </span>
-                            <span>{secretTypeLabel(finding.type)}</span>
+                            <span>{secretTypeLabel(finding.type, t)}</span>
                             <code className="rounded bg-red-100 px-1.5 py-0.5 font-mono dark:bg-red-900/50">
                               {finding.preview}
                             </code>
@@ -1143,6 +1375,7 @@ export default function RepositoryDetails() {
                         <SecurityVulnerabilityRow
                           key={`${vulnerability.package}-${vulnerability.osv_id}`}
                           item={vulnerability}
+                          t={t}
                           onExplain={
                             llmEnabled
                               ? () => void openCveExplain(vulnerability)
@@ -1153,20 +1386,22 @@ export default function RepositoryDetails() {
                     </ul>
                   ) : security.status === 'ok' ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                      Уязвимостей не найдено.
+                      {t('repo.security.noVulnerabilities')}
                     </p>
                   ) : (
                     <p className="text-sm text-amber-700 dark:text-amber-300">
-                      Данные об уязвимостях недоступны.
+                      {t('repo.security.vulnerabilitiesUnavailable')}
                     </p>
                   )}
 
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    Проверено: {formatDate(security.checked_at)} · всего пакетов:{' '}
-                    {security.summary.total_packages} · проверено:{' '}
-                    {security.summary.packages_checked} · неизвестно:{' '}
-                    {security.summary.unknown} · секретов:{' '}
-                    {security.summary.secrets_found}
+                    {t('repo.security.footer', {
+                      checked: formatDate(security.checked_at),
+                      total: security.summary.total_packages,
+                      checkedCount: security.summary.packages_checked,
+                      unknown: security.summary.unknown,
+                      secrets: security.summary.secrets_found,
+                    })}
                   </p>
                 </>
               )}
@@ -1179,11 +1414,13 @@ export default function RepositoryDetails() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Технический долг (Hotspots)
+                {t('repo.sections.hotspots')}
               </h2>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  за {insights?.window.hotspots_days ?? 90} дней
+                  {t('repo.hotspots.window', {
+                    days: insights?.window.hotspots_days ?? 90,
+                  })}
                 </span>
                 <button
                   type="button"
@@ -1191,14 +1428,16 @@ export default function RepositoryDetails() {
                   disabled={insightsRefreshing || insightsLoading}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {insightsRefreshing ? 'Обновление…' : 'Обновить'}
+                  {insightsRefreshing
+                    ? t('common.refreshing')
+                    : t('common.refresh')}
                 </button>
               </div>
             </div>
             <div className="p-4">
               {insightsLoading ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Анализ истории…
+                  {t('repo.hotspots.loading')}
                 </p>
               ) : insightsError ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -1206,13 +1445,13 @@ export default function RepositoryDetails() {
                 </p>
               ) : insights === null ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Нет данных о hotspots.
+                  {t('repo.hotspots.noData')}
                 </p>
               ) : (
                 <>
-                  {insightsNotice(insights) && (
+                  {insightsNotice(insights, t) && (
                     <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                      {insightsNotice(insights)}
+                      {insightsNotice(insights, t)}
                     </p>
                   )}
                   {insightsHotspots.length > 0 ? (
@@ -1250,11 +1489,11 @@ export default function RepositoryDetails() {
                     </ul>
                   ) : (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Нет данных о hotspots.
+                      {t('repo.hotspots.noData')}
                     </p>
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-                    Кандидаты на рефакторинг · merge-коммиты исключены
+                    {t('repo.hotspots.footer')}
                   </p>
                 </>
               )}
@@ -1267,16 +1506,16 @@ export default function RepositoryDetails() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Активность (30 дней)
+                {t('repo.sections.activity')}
               </h2>
               <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                коммитов: {insightsCommits}
+                {t('repo.activity.commits', { count: insightsCommits })}
               </span>
             </div>
             <div className="p-4">
               {insightsLoading ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Загрузка активности…
+                  {t('repo.activity.loading')}
                 </p>
               ) : insightsError ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -1284,22 +1523,23 @@ export default function RepositoryDetails() {
                 </p>
               ) : insights === null || insightsCommits === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Нет активности.
+                  {t('repo.activity.empty')}
                 </p>
               ) : (
                 <>
                   <Suspense
                     fallback={
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Загрузка графика…
+                        {t('repo.activity.chartLoading')}
                       </p>
                     }
                   >
                     <InsightsSparkline data={insights.commit_frequency} />
                   </Suspense>
                   <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                    Прокси DORA (commit frequency):{' '}
-                    {insights.summary.per_week.toFixed(2)} коммитов в неделю
+                    {t('repo.activity.dora', {
+                      value: insights.summary.per_week.toFixed(2),
+                    })}
                   </p>
                 </>
               )}
@@ -1309,7 +1549,7 @@ export default function RepositoryDetails() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Зеркало GitHub ↔ GitFlic
+                {t('repo.sections.mirror')}
               </h2>
               <div className="flex gap-2">
                 <button
@@ -1318,14 +1558,16 @@ export default function RepositoryDetails() {
                   disabled={mirrorRefreshing}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {mirrorRefreshing ? 'Обновление…' : 'Обновить зеркало'}
+                  {mirrorRefreshing
+                    ? t('common.refreshing')
+                    : t('repo.mirror.refresh')}
                 </button>
                 <button
                   type="button"
                   onClick={openPolicy}
                   className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                  Настроить
+                  {t('repo.mirror.configure')}
                 </button>
               </div>
             </div>
@@ -1334,19 +1576,25 @@ export default function RepositoryDetails() {
                 name="GitHub"
                 info={mirror?.github ?? null}
                 fullName={repository?.github_full_name ?? null}
+                t={t}
               />
               <ProviderSummary
                 name="GitFlic"
                 info={mirror?.gitflic ?? null}
                 fullName={repository?.gitflic_full_name ?? null}
+                t={t}
               />
             </div>
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 dark:border-slate-700 px-4 py-3">
               <MirrorBadge status={mirror?.mirror_status} />
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 canonical: {mirror?.canonical_provider ?? repository?.canonical_provider ?? '—'}
-                {' · '}mirror expected:{' '}
-                {(mirror?.mirror_expected ?? repository?.mirror_expected) ? 'да' : 'нет'}
+                {' · '}
+                {t('repo.mirror.expected', {
+                  value: (mirror?.mirror_expected ?? repository?.mirror_expected)
+                    ? t('common.yes')
+                    : t('common.no'),
+                })}
               </span>
             </div>
             {mirror && mirror.recommendations.length > 0 && (
@@ -1357,7 +1605,9 @@ export default function RepositoryDetails() {
                     className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.reason}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {recommendationReason(item, t)}
+                      </p>
                       <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:text-slate-300">
                         {item.command}
                       </code>
@@ -1367,7 +1617,9 @@ export default function RepositoryDetails() {
                       onClick={() => void handleCopy(item.command)}
                       className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
-                      {copiedCommand === item.command ? 'Скопировано' : 'Копировать'}
+                      {copiedCommand === item.command
+                        ? t('common.copied')
+                        : t('common.copy')}
                     </button>
                     {item.action === 'push-mirror' && (
                       <button
@@ -1382,7 +1634,7 @@ export default function RepositoryDetails() {
                         }
                         className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
                       >
-                        Выполнить
+                        {t('repo.actions.execute')}
                       </button>
                     )}
                   </li>
@@ -1393,66 +1645,26 @@ export default function RepositoryDetails() {
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
             <h2 className="border-b border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Рекомендации
-            </h2>
-            {recommendations.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Рекомендаций нет.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {recommendations.map((item) => (
-                  <li
-                    key={`${item.action}-${item.command}`}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.reason}</p>
-                      <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:text-slate-300">
-                        {item.command}
-                      </code>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopy(item.command)}
-                      className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      {copiedCommand === item.command ? 'Скопировано' : 'Копировать'}
-                    </button>
-                    {EXECUTABLE_ACTIONS[item.action] && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openAction({
-                            kind: 'local',
-                            action: item.action,
-                            reason: item.reason,
-                            command: item.command,
-                          })
-                        }
-                        className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
-                      >
-                        Выполнить
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-            <h2 className="border-b border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Последние коммиты
+              {t('repo.sections.commits')}
             </h2>
             {commits.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Коммитов нет.</p>
+              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                {t('repo.commits.empty')}
+              </p>
             ) : (
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
                     <th className="px-4 py-3 font-medium">SHA</th>
-                    <th className="px-4 py-3 font-medium">Сообщение</th>
-                    <th className="px-4 py-3 font-medium">Автор</th>
-                    <th className="px-4 py-3 font-medium">Дата</th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.message')}
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.author')}
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.date')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1473,18 +1685,28 @@ export default function RepositoryDetails() {
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
             <h2 className="border-b border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              История действий
+              {t('repo.sections.history')}
             </h2>
             {history.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Действий пока не было.</p>
+              <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                {t('repo.history.empty')}
+              </p>
             ) : (
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Дата</th>
-                    <th className="px-4 py-3 font-medium">Действие</th>
-                    <th className="px-4 py-3 font-medium">Статус</th>
-                    <th className="px-4 py-3 font-medium">Команда</th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.date')}
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.action')}
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('common.status')}
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      {t('repo.table.command')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1521,9 +1743,11 @@ export default function RepositoryDetails() {
                 onSubmit={(event) => void handleSavePolicy(event)}
                 className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl"
               >
-                <h2 className="text-lg font-semibold">Политика зеркала</h2>
+                <h2 className="text-lg font-semibold">
+                  {t('repo.policy.title')}
+                </h2>
                 <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Канонический провайдер
+                  {t('repo.policy.canonicalProvider')}
                   <select
                     value={policyCanonical}
                     onChange={(event) =>
@@ -1539,7 +1763,7 @@ export default function RepositoryDetails() {
                   </select>
                 </label>
                 <label className="mt-3 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  GitHub full name (owner/repo)
+                  {t('repo.policy.githubFullName')}
                   <input
                     value={policyGithubName}
                     onChange={(event) => setPolicyGithubName(event.target.value)}
@@ -1548,7 +1772,7 @@ export default function RepositoryDetails() {
                   />
                 </label>
                 <label className="mt-3 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  GitFlic full name (owner/repo)
+                  {t('repo.policy.gitflicFullName')}
                   <input
                     value={policyGitflicName}
                     onChange={(event) => setPolicyGitflicName(event.target.value)}
@@ -1562,7 +1786,7 @@ export default function RepositoryDetails() {
                     checked={policyExpected}
                     onChange={(event) => setPolicyExpected(event.target.checked)}
                   />
-                  Ожидать зеркало (mirror_expected)
+                  {t('repo.policy.expectMirror')}
                 </label>
                 <div className="mt-6 flex justify-end gap-2">
                   <button
@@ -1570,13 +1794,13 @@ export default function RepositoryDetails() {
                     onClick={() => setPolicyOpen(false)}
                     className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    Отмена
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
                     className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-container"
                   >
-                    Сохранить
+                    {t('common.save')}
                   </button>
                 </div>
               </form>
@@ -1586,7 +1810,9 @@ export default function RepositoryDetails() {
           {actionPrompt && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
               <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl">
-                <h2 className="text-lg font-semibold">Подтверждение действия</h2>
+                <h2 className="text-lg font-semibold">
+                  {t('repo.action.title')}
+                </h2>
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{actionPrompt.reason}</p>
                 <code className="mt-3 block break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:text-slate-300">
                   {actionPrompt.command}
@@ -1598,7 +1824,7 @@ export default function RepositoryDetails() {
                     onChange={(event) => setActionConfirmed(event.target.checked)}
                     className="mt-1"
                   />
-                  Я понимаю, что действие изменит репозиторий (pull/push/stash).
+                  {t('repo.action.confirm')}
                 </label>
                 <div className="mt-6 flex justify-end gap-2">
                   <button
@@ -1609,7 +1835,7 @@ export default function RepositoryDetails() {
                     }}
                     className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    Отмена
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="button"
@@ -1617,7 +1843,9 @@ export default function RepositoryDetails() {
                     disabled={!actionConfirmed || actionRunning}
                     className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {actionRunning ? 'Выполнение…' : 'Выполнить'}
+                    {actionRunning
+                      ? t('repo.action.running')
+                      : t('repo.actions.execute')}
                   </button>
                 </div>
               </div>
@@ -1638,16 +1866,15 @@ export default function RepositoryDetails() {
               id="commit-message-title"
               className="text-lg font-semibold text-slate-900 dark:text-slate-100"
             >
-              Сгенерировать коммит
+              {t('repo.commit.generate')}
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Проверьте и отредактируйте сообщение перед коммитом. Автоматически
-              ничего не коммитится.
+              {t('repo.commit.hint')}
             </p>
             {commitLoading ? (
               <p className="mt-6 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                Генерация сообщения…
+                {t('repo.commit.generating')}
               </p>
             ) : (
               <>
@@ -1669,10 +1896,10 @@ export default function RepositoryDetails() {
                     onChange={(event) => setCommitConfirmed(event.target.checked)}
                     className="mt-1"
                   />
-                  Я понимаю, что действие создаст коммит в репозитории.
+                  {t('repo.commit.confirm')}
                 </label>
                 <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                  Будут закоммичены только изменения в индексе (`git add`).
+                  {t('repo.commit.stagedHint')}
                 </p>
                 <div className="mt-5 flex flex-wrap justify-end gap-2">
                   <button
@@ -1680,7 +1907,7 @@ export default function RepositoryDetails() {
                     onClick={() => setCommitOpen(false)}
                     className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
-                    Отмена
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="button"
@@ -1688,7 +1915,7 @@ export default function RepositoryDetails() {
                     disabled={!commitMessage.trim()}
                     className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
-                    Скопировать
+                    {t('repo.commit.copy')}
                   </button>
                   <button
                     type="button"
@@ -1698,7 +1925,7 @@ export default function RepositoryDetails() {
                     }
                     className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {commitRunning ? 'Коммит…' : 'Выполнить коммит'}
+                    {commitRunning ? t('repo.commit.running') : t('repo.commit.submit')}
                   </button>
                 </div>
               </>
@@ -1719,12 +1946,10 @@ export default function RepositoryDetails() {
               id="dependency-update-title"
               className="text-lg font-semibold text-slate-900 dark:text-slate-100"
             >
-              Обновить зависимости
+              {t('repo.dependencyUpdate.title')}
             </h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Вы собираетесь обновить зависимости ({dependencyEcosystem}). Это
-              может изменить `requirements.txt` / `package.json` и lock-файлы.
-              Продолжить?
+              {t('repo.dependencyUpdate.body', { ecosystem: dependencyEcosystem })}
             </p>
             {dependencyUpdateError && (
               <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -1738,7 +1963,7 @@ export default function RepositoryDetails() {
                 disabled={dependencyUpdateRunning}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1746,7 +1971,9 @@ export default function RepositoryDetails() {
                 disabled={dependencyUpdateRunning}
                 className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {dependencyUpdateRunning ? 'Обновление…' : 'Обновить'}
+                {dependencyUpdateRunning
+                  ? t('common.refreshing')
+                  : t('common.refresh')}
               </button>
             </div>
           </div>
@@ -1765,13 +1992,13 @@ export default function RepositoryDetails() {
               id="cve-explain-title"
               className="text-lg font-semibold text-slate-900 dark:text-slate-100"
             >
-              Объяснение {cveTitle}
+              {t('repo.cve.title', { id: cveTitle })}
             </h2>
             <div className="mt-4">
               {cveLoading ? (
                 <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  LLM объясняет уязвимость…
+                  {t('repo.cve.loading')}
                 </p>
               ) : cveError ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
@@ -1789,11 +2016,15 @@ export default function RepositoryDetails() {
                 onClick={() => setCveOpen(false)}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Закрыть
+                {t('common.close')}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {readmeOpen && (
+        <ReadmeModal repositoryId={repositoryId} onClose={() => setReadmeOpen(false)} />
       )}
 
       {toast && (
@@ -1808,22 +2039,28 @@ export default function RepositoryDetails() {
   )
 }
 
-function DependencyBadge({ report }: { report: DependencyEcosystemReport | null }) {
-  let label = 'Нет данных'
+function DependencyBadge({
+  report,
+  t,
+}: {
+  report: DependencyEcosystemReport | null
+  t: Translate
+}) {
+  let label = t('common.none')
   let className = 'bg-slate-100 text-slate-500 ring-slate-200'
   if (report?.status === 'no_manifest') {
-    label = 'Нет манифеста'
+    label = t('repo.dependencyStatus.noManifest')
   } else if (report?.status === 'parse_error') {
-    label = 'Ошибка парсинга'
+    label = t('repo.dependencyStatus.parseError')
     className = 'bg-red-100 text-red-800 ring-red-200'
   } else if (report?.status === 'unavailable') {
-    label = 'Недоступно'
+    label = t('common.notAvailable')
     className = 'bg-amber-100 text-amber-800 ring-amber-200'
   } else if (report?.status === 'ok' && report.outdated > 0) {
-    label = `${report.outdated} устарели`
+    label = t('repo.dependencyStatus.outdated', { count: report.outdated })
     className = 'bg-amber-100 text-amber-800 ring-amber-200'
   } else if (report?.status === 'ok') {
-    label = 'Актуально'
+    label = t('repo.dependencyStatus.current')
     className = 'bg-emerald-100 text-emerald-800 ring-emerald-200'
   }
 
@@ -1867,9 +2104,11 @@ function DependencyCounter({
 function DependencyPackageRow({
   item,
   ecosystem,
+  t,
 }: {
   item: DependencyPackage
   ecosystem: 'python' | 'node'
+  t: Translate
 }) {
   const statusClass =
     item.status === 'outdated'
@@ -1900,10 +2139,15 @@ function DependencyPackageRow({
         </a>
         <p
           className="truncate font-mono text-[11px] text-slate-500 dark:text-slate-400"
-          title={item.declared}
+          title={item.manifest_path ? `${item.declared} · ${item.manifest_path}` : item.declared}
         >
           {item.declared}
         </p>
+        {item.manifest_path && (
+          <p className="truncate font-mono text-[10px] text-slate-400 dark:text-slate-500">
+            {item.manifest_path}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <span className="font-mono text-slate-600 dark:text-slate-300">
@@ -1911,59 +2155,62 @@ function DependencyPackageRow({
         </span>
         {item.severity && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${severityClass}`}>
-            {item.severity}
+            {t(`repo.severity.${item.severity}` as 'repo.severity.major')}
           </span>
         )}
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass}`}>
-          {item.status}
+          {t(`repo.packageStatus.${item.status}` as 'repo.packageStatus.outdated')}
         </span>
       </div>
     </li>
   )
 }
 
-function dependencyErrorMessage(code: string | null): string {
+function dependencyErrorMessage(code: string | null, t: Translate): string {
   switch (code) {
     case 'rate_limited':
-      return 'PyPI ограничил частоту запросов. Показаны данные из кэша, если они есть.'
+      return t('repo.dependencyError.rateLimited')
     case 'timeout':
-      return 'PyPI не ответил вовремя.'
+      return t('repo.dependencyError.timeout')
     case 'registry_unavailable':
-      return 'PyPI временно недоступен.'
+      return t('repo.dependencyError.registryUnavailable')
     case 'node_not_implemented':
-      return 'Проверка Node-зависимостей появится в Sprint 26.'
+      return t('repo.dependencyError.nodeNotImplemented')
     default:
-      return code ?? 'Реестр зависимостей недоступен.'
+      return code ?? t('repo.dependencyError.unavailable')
   }
 }
 
-function dependencySourceLabel(source: DependencyEcosystemReport['source']): string {
+function dependencySourceLabel(
+  source: DependencyEcosystemReport['source'],
+  t: Translate,
+): string {
   switch (source) {
     case 'registry':
       return 'PyPI'
     case 'cache':
-      return 'кэш'
+      return t('repo.dependencySource.cache')
     case 'mixed':
-      return 'PyPI + кэш'
+      return t('repo.dependencySource.mixed')
     case 'stale_cache':
-      return 'устаревший кэш'
+      return t('repo.dependencySource.staleCache')
     default:
       return '—'
   }
 }
 
-function insightsNotice(report: InsightsReport): string | null {
+function insightsNotice(report: InsightsReport, t: Translate): string | null {
   switch (report.status) {
     case 'timeout':
-      return 'Git не ответил за 10 секунд. Данные могут быть неполными.'
+      return t('repo.insights.timeout')
     case 'unavailable':
-      return 'Не удалось прочитать историю Git.'
+      return t('repo.insights.unavailable')
     case 'no_branch':
-      return 'Ветка не определена — частота коммитов недоступна.'
+      return t('repo.insights.noBranch')
     case 'shallow_clone':
-      return 'Shallow clone: числа могут быть занижены.'
+      return t('repo.insights.shallowClone')
     case 'partial':
-      return 'Часть данных недоступна (история Git прочитана не полностью).'
+      return t('repo.insights.partial')
     default:
       return null
   }
@@ -1973,10 +2220,12 @@ function SecurityBadge({
   report,
   hasCritical,
   secrets,
+  t,
 }: {
   report: SecurityReport | null
   hasCritical: boolean
   secrets: number
+  t: Translate
 }) {
   if (report === null) {
     return (
@@ -1984,7 +2233,7 @@ function SecurityBadge({
         data-testid="security-status"
         className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200"
       >
-        Нет данных
+        {t('common.none')}
       </span>
     )
   }
@@ -1994,7 +2243,7 @@ function SecurityBadge({
         data-testid="security-status"
         className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200"
       >
-        Недоступно
+        {t('common.notAvailable')}
       </span>
     )
   }
@@ -2004,7 +2253,7 @@ function SecurityBadge({
       parts.push(`${report.summary.critical + report.summary.high} high/critical`)
     }
     if (secrets > 0) {
-      parts.push(`секреты: ${secrets}`)
+      parts.push(t('repo.security.secretsBadge', { count: secrets }))
     }
     return (
       <span
@@ -2020,16 +2269,18 @@ function SecurityBadge({
       data-testid="security-status"
       className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200"
     >
-      Уязвимостей не найдено
+      {t('repo.security.cleanBadge')}
     </span>
   )
 }
 
 function SecurityVulnerabilityRow({
   item,
+  t,
   onExplain,
 }: {
   item: SecurityVulnerability
+  t: Translate
   onExplain?: () => void
 }) {
   const osvUrl = `https://osv.dev/vulnerability/${encodeURIComponent(item.osv_id)}`
@@ -2045,7 +2296,7 @@ function SecurityVulnerabilityRow({
           </span>
           {item.version_source === 'lower_bound' && (
             <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-              диапазон
+              {t('repo.security.range')}
             </span>
           )}
         </div>
@@ -2084,7 +2335,7 @@ function SecurityVulnerabilityRow({
         ))}
         {item.fixed_version && (
           <span className="text-slate-500 dark:text-slate-400">
-            исправлено в {item.fixed_version}
+            {t('repo.security.fixedIn', { version: item.fixed_version })}
           </span>
         )}
         {onExplain && (
@@ -2093,7 +2344,7 @@ function SecurityVulnerabilityRow({
             onClick={onExplain}
             className="ml-auto rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Объяснить
+            {t('repo.security.explain')}
           </button>
         )}
       </div>
@@ -2116,34 +2367,40 @@ function securitySeverityClass(severity: SecurityVulnerability['severity']): str
   }
 }
 
-function secretTypeLabel(type: SecretFinding['type']): string {
+function secretTypeLabel(type: SecretFinding['type'], t: Translate): string {
   switch (type) {
     case 'aws_access_key':
-      return 'AWS access key'
+      return t('repo.secretType.awsAccessKey')
     case 'aws_secret_key':
-      return 'AWS secret key'
+      return t('repo.secretType.awsSecretKey')
     case 'github_token':
-      return 'GitHub token'
+      return t('repo.secretType.githubToken')
     case 'jwt':
-      return 'JWT'
+      return t('repo.secretType.jwt')
     case 'private_key':
-      return 'Private key'
+      return t('repo.secretType.privateKey')
     default:
       return type
   }
 }
 
-function DockerBadge({ status }: { status: DockerStatus['status'] | undefined }) {
+function DockerBadge({
+  status,
+  t,
+}: {
+  status: DockerStatus['status'] | undefined
+  t: Translate
+}) {
   const config =
     status === 'running'
-      ? { label: 'Running', className: 'bg-emerald-100 text-emerald-800 ring-emerald-200' }
+      ? { label: t('repo.docker.status.running'), className: 'bg-emerald-100 text-emerald-800 ring-emerald-200' }
       : status === 'stopped'
-        ? { label: 'Stopped', className: 'bg-slate-100 text-slate-600 ring-slate-200' }
+        ? { label: t('repo.docker.status.stopped'), className: 'bg-slate-100 text-slate-600 ring-slate-200' }
         : status === 'unavailable'
-          ? { label: 'Docker not available', className: 'bg-amber-100 text-amber-800 ring-amber-200' }
+          ? { label: t('repo.docker.status.unavailable'), className: 'bg-amber-100 text-amber-800 ring-amber-200' }
           : status === 'not_found'
-            ? { label: 'Not found', className: 'bg-slate-100 text-slate-500 ring-slate-200' }
-            : { label: 'Unknown', className: 'bg-slate-100 text-slate-500 ring-slate-200' }
+            ? { label: t('repo.docker.status.notFound'), className: 'bg-slate-100 text-slate-500 ring-slate-200' }
+            : { label: t('repo.docker.status.unknown'), className: 'bg-slate-100 text-slate-500 ring-slate-200' }
 
   return (
     <span
@@ -2163,9 +2420,9 @@ function formatPort(port: DockerPort): string {
   return `${port.host_ip ?? '0.0.0.0'}:${port.host_port}->${target}`
 }
 
-function formatContainerPorts(container: DockerContainer): string {
+function formatContainerPorts(container: DockerContainer, t: Translate): string {
   if (container.ports.length === 0) {
-    return 'нет опубликованных портов'
+    return t('repo.docker.noPorts')
   }
   return container.ports.map(formatPort).join(', ')
 }
@@ -2189,16 +2446,19 @@ function ProviderSummary({
   name,
   info,
   fullName,
+  t,
 }: {
   name: string
   info: MirrorProviderStatus | null
   fullName: string | null
+  t: Translate
 }) {
+  const { formatDate } = useI18n()
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 p-3 text-sm">
       <p className="font-semibold text-slate-700 dark:text-slate-300">{name}</p>
       <p className="truncate text-xs text-slate-500 dark:text-slate-400" title={info?.full_name ?? fullName ?? ''}>
-        {info?.full_name ?? fullName ?? 'не настроено'}
+        {info?.full_name ?? fullName ?? t('repo.mirror.notConfigured')}
       </p>
       <p className="mt-2 font-mono text-xs text-slate-700 dark:text-slate-300">
         {info?.head_sha ? info.head_sha.slice(0, 12) : '—'}

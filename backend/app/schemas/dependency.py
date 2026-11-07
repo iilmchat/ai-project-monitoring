@@ -27,6 +27,7 @@ class DependencyPackage(BaseModel):
     severity: DependencySeverity | None = None
     manifest_line: int | None = None
     manifest_section: str | None = None
+    manifest_path: str | None = None
 
 
 class DependencyEcosystemReport(BaseModel):
@@ -34,6 +35,7 @@ class DependencyEcosystemReport(BaseModel):
 
     ecosystem: DependencyEcosystem
     manifest: str | None = None
+    manifests: list[str] = Field(default_factory=list)
     status: DependencyEcosystemStatus
     source: DependencySource
     total: int = Field(default=0, ge=0)

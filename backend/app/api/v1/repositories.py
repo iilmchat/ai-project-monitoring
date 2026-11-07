@@ -7,6 +7,7 @@ import csv
 import io
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -48,6 +49,7 @@ from app.schemas.ai import (
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.dependency import DependencyReport
 from app.schemas.docker import DockerStatusResponse
+from app.schemas.docs import ReadmeResponse, RepositoryDocResponse
 from app.schemas.insights import InsightsReport
 from app.schemas.mirror import (
     MirrorCandidatesResponse,
@@ -83,6 +85,13 @@ from app.services.docker_service import DockerService
 from app.services.insights_service import InsightsService
 from app.services.llm_service import LLMService
 from app.services.mirror_service import MirrorService
+from app.services.readme_service import (
+    DocumentAccessError,
+    DocumentNotFoundError,
+    DocumentTooLargeError,
+    read_document,
+    read_readme,
+)
 from app.services.recommendation_service import generate_recommendations
 from app.services.security_service import SecurityService
 from app.services.status_service import StatusService
@@ -200,6 +209,75 @@ async def _get_repository(session: AsyncSession, repository_id: int) -> Reposito
             detail=f"repository {repository_id} not found",
         )
     return repository
+
+
+@router.get(
+    "/repositories/{repository_id}/readme",
+    response_model=ReadmeResponse,
+)
+async def repository_readme(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ReadmeResponse:
+    repository = await _get_repository(session, repository_id)
+    try:
+        readme = read_readme(Path(repository.path))
+    except DocumentTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except DocumentAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    if readme is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="README not found",
+        )
+    return ReadmeResponse(
+        repository_id=repository_id,
+        path=readme.path,
+        name=readme.name,
+        version=readme.version,
+        content=readme.content,
+    )
+
+
+@router.get(
+    "/repositories/{repository_id}/docs",
+    response_model=RepositoryDocResponse,
+)
+async def repository_document(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    path: Annotated[str, Query(min_length=1, max_length=2048)],
+) -> RepositoryDocResponse:
+    repository = await _get_repository(session, repository_id)
+    try:
+        document = read_document(Path(repository.path), path)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except DocumentTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except DocumentAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return RepositoryDocResponse(
+        repository_id=repository_id,
+        path=document.path,
+        content=document.content,
+    )
 
 
 @router.get(

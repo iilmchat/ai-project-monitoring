@@ -19,6 +19,7 @@ import GlobalDependencies from '../components/GlobalDependencies'
 import Heatmap from '../components/Heatmap'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
+import { ciLabel, mirrorLabel, statusLabel, useI18n } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -37,17 +38,12 @@ const MIRROR_OPTIONS = [
   'missing_on_gitflic',
   'missing_on_github',
   'behind_gitflic',
+  'behind_github',
   'diverged',
+  'history_rewritten',
+  'unavailable',
 ]
 const CI_OPTIONS = ['success', 'failure', 'pending']
-
-const COLUMN_LABELS: { key: ColumnKey; label: string }[] = [
-  { key: 'branch', label: 'Ветка' },
-  { key: 'status', label: 'Статус' },
-  { key: 'mirror', label: 'Зеркало' },
-  { key: 'ci', label: 'CI' },
-  { key: 'aheadBehind', label: 'Ahead / Behind' },
-]
 
 const EMPTY_FILTERS: SavedViewFilters = {
   status: [],
@@ -85,7 +81,25 @@ interface ContextState {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  const stateLabels = Object.fromEntries(
+    STATUS_OPTIONS.map((key) => [key, statusLabel(key, t)]),
+  )
+  const mirrorLabels = Object.fromEntries(
+    MIRROR_OPTIONS.map((key) => [key, mirrorLabel(key, t)]),
+  )
+  const ciLabels = Object.fromEntries(
+    CI_OPTIONS.map((key) => [key, ciLabel(key, t)]),
+  )
+  const columnLabels: { key: ColumnKey; label: string }[] = [
+    { key: 'branch', label: t('dashboard.column.branch') },
+    { key: 'status', label: t('dashboard.column.status') },
+    { key: 'mirror', label: t('dashboard.column.mirror') },
+    { key: 'ci', label: t('dashboard.column.ci') },
+    { key: 'aheadBehind', label: t('dashboard.column.aheadBehind') },
+  ]
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [filters, setFilters] = useState<SavedViewFilters>(() => ({
@@ -105,6 +119,8 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [busyRepository, setBusyRepository] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
@@ -143,7 +159,7 @@ export default function Dashboard() {
       setDashboard(await getDashboard())
       setError(null)
     } catch {
-      setError('Не удалось загрузить дашборд. Проверьте, запущен ли backend.')
+      setError(t('dashboard.loadError'))
     } finally {
       if (!silent) {
         setLoading(false)
@@ -163,7 +179,7 @@ export default function Dashboard() {
         setError(null)
       } catch {
         if (active) {
-          setError('Не удалось загрузить дашборд. Проверьте, запущен ли backend.')
+          setError(t('dashboard.loadError'))
         }
       } finally {
         if (active) {
@@ -228,7 +244,7 @@ export default function Dashboard() {
       }
       await loadDashboard()
     } catch {
-      setError('Сканирование не удалось.')
+      setError(t('dashboard.scanError'))
     } finally {
       setScanning(false)
     }
@@ -240,7 +256,7 @@ export default function Dashboard() {
       await trackRepository(repositoryId)
       await loadDashboard()
     } catch {
-      setError('Не удалось обновить список отслеживаемых репозиториев.')
+      setError(t('dashboard.trackError'))
     } finally {
       setBusyRepository(null)
     }
@@ -332,6 +348,17 @@ export default function Dashboard() {
     })
   }, [dashboard, filters, query, sortKey, sortDirection])
 
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map<string, DashboardRepository[]>()
+    for (const repository of dashboard?.repositories ?? []) {
+      const key = displayName(repository).toLowerCase()
+      const items = groups.get(key) ?? []
+      items.push(repository)
+      groups.set(key, items)
+    }
+    return groups
+  }, [dashboard])
+
   const selectedSet = useMemo(() => new Set(selectedRepoIds), [selectedRepoIds])
   const selectedVisible = useMemo(
     () => repositories.filter((repository) => selectedSet.has(repository.id)),
@@ -348,9 +375,9 @@ export default function Dashboard() {
     })
     try {
       await navigator.clipboard.writeText(markdown)
-      showToast('Сводка скопирована')
+      showToast(t('dashboard.summaryCopied'))
     } catch {
-      showToast('Не удалось скопировать сводку')
+      showToast(t('dashboard.summaryCopyError'))
     }
   }
 
@@ -379,11 +406,17 @@ export default function Dashboard() {
   }
 
   async function handleBulk(kind: 'fetch' | 'sync' | 'migrate') {
+    if (
+      kind === 'migrate' &&
+      !window.confirm(t('dashboard.migrateConfirm'))
+    ) {
+      return
+    }
     const ids = selectedVisible.length > 0 ? selectedVisible.map((repo) => repo.id) : undefined
     setBulkMessage(
       ids
-        ? `Задача для ${ids.length} выбранных запущена в фоне…`
-        : 'Задача запущена в фоне…',
+        ? t('dashboard.bulkSelected', { count: ids.length })
+        : t('dashboard.bulkStarted'),
     )
     try {
       if (kind === 'fetch') {
@@ -391,12 +424,18 @@ export default function Dashboard() {
       } else if (kind === 'sync') {
         await bulkSyncMirrorsAll(ids)
       } else {
-        await migrateToGitflic()
-        setBulkMessage('Миграция на GitFlic запущена в фоне…')
+        const result = await migrateToGitflic()
+        const updated = Number(result.updated ?? 0)
+        const skipped = Number(result.skipped ?? 0)
+        setBulkMessage(
+          t('dashboard.migrateResult', { updated, skipped }) +
+            (skipped > 0 ? t('dashboard.migrateSkippedReason') : '') +
+            '.',
+        )
       }
       setBulkPolling(true)
     } catch {
-      setBulkMessage('Не удалось запустить задачу.')
+      setBulkMessage(t('dashboard.bulkError'))
     }
   }
 
@@ -406,16 +445,16 @@ export default function Dashboard() {
       setBulkMessage(`Fetch ${displayName(repository)}: ${entry.status}`)
       await loadDashboard(true)
     } catch {
-      setBulkMessage(`Fetch ${displayName(repository)}: ошибка`)
+      setBulkMessage(t('dashboard.fetchError', { name: displayName(repository) }))
     }
   }
 
   async function handleCopyPath(repository: DashboardRepository) {
     try {
       await navigator.clipboard.writeText(repository.path)
-      setBulkMessage(`Путь скопирован: ${repository.path}`)
+      setBulkMessage(t('dashboard.pathCopied', { path: repository.path }))
     } catch {
-      setBulkMessage('Не удалось скопировать путь.')
+      setBulkMessage(t('dashboard.pathCopyError'))
     }
   }
 
@@ -442,9 +481,9 @@ export default function Dashboard() {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
-      setBulkMessage(`Экспорт ${format.toUpperCase()} готов.`)
+      setBulkMessage(t('dashboard.exportReady', { format: format.toUpperCase() }))
     } catch {
-      setBulkMessage('Не удалось выполнить экспорт.')
+      setBulkMessage(t('dashboard.exportError'))
     }
   }
 
@@ -522,6 +561,39 @@ export default function Dashboard() {
     setViewsOpen(false)
   }
 
+  function applySummaryFilter(
+    kind: 'total' | 'clean' | 'attention' | 'untracked' | 'mirror',
+  ) {
+    if (kind === 'total') {
+      setFilters({ ...EMPTY_FILTERS })
+    } else if (kind === 'clean') {
+      setFilters({ ...EMPTY_FILTERS, status: ['current'] })
+    } else if (kind === 'attention') {
+      setFilters({
+        ...EMPTY_FILTERS,
+        status: ['dirty', 'ahead', 'behind', 'diverged', 'no_upstream'],
+      })
+    } else if (kind === 'untracked') {
+      setFilters({ ...EMPTY_FILTERS, untrackedOnly: true })
+    } else {
+      setFilters({
+        ...EMPTY_FILTERS,
+        mirror: [
+          'missing_on_gitflic',
+          'missing_on_github',
+          'behind_gitflic',
+          'behind_github',
+          'diverged',
+          'history_rewritten',
+          'unavailable',
+        ],
+      })
+    }
+    document
+      .getElementById('repositories-list')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   function handleSaveView(event: FormEvent) {
     event.preventDefault()
     const name = viewName.trim()
@@ -542,9 +614,9 @@ export default function Dashboard() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Дашборд</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('dashboard.title')}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Локальное состояние репозиториев и расхождения с remote.
+            {t('dashboard.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -554,14 +626,14 @@ export default function Dashboard() {
             disabled={scanning}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {scanning ? 'Сканирование…' : 'Сканировать'}
+            {scanning ? t('dashboard.scanning') : t('dashboard.scan')}
           </button>
           <button
             type="button"
             onClick={() => void handleCopySummary()}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Скопировать сводку
+            {t('dashboard.copySummary')}
           </button>
           <div className="relative">
             <button
@@ -569,7 +641,7 @@ export default function Dashboard() {
               onClick={() => setExportOpen((current) => !current)}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Экспорт
+              {t('dashboard.export')}
             </button>
             {exportOpen && (
               <div className="absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
@@ -607,8 +679,8 @@ export default function Dashboard() {
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {selectedVisible.length > 0
-              ? `Fetch Selected (${selectedVisible.length})`
-              : 'Fetch All'}
+              ? `${t('dashboard.fetchSelected')} (${selectedVisible.length})`
+              : t('dashboard.fetchAll')}
           </button>
           <button
             type="button"
@@ -616,15 +688,16 @@ export default function Dashboard() {
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {selectedVisible.length > 0
-              ? `Sync Selected (${selectedVisible.length})`
-              : 'Sync Mirrors'}
+              ? `${t('dashboard.syncSelected')} (${selectedVisible.length})`
+              : t('dashboard.syncMirrors')}
           </button>
           <button
             type="button"
             onClick={() => void handleBulk('migrate')}
+            title={t('dashboard.migrateTitle')}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Мигрировать на GitFlic
+            {t('dashboard.migrateGitflic')}
           </button>
           {selectedRepoIds.length > 0 && (
             <button
@@ -632,7 +705,7 @@ export default function Dashboard() {
               onClick={clearSelected}
               className="text-xs font-medium text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
             >
-              Сбросить выбор ({selectedVisible.length})
+              {t('dashboard.resetSelection')} ({selectedVisible.length})
             </button>
           )}
           <div className="relative">
@@ -641,11 +714,11 @@ export default function Dashboard() {
               onClick={() => setColumnsOpen((current) => !current)}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Колонки
+              {t('dashboard.columns')}
             </button>
             {columnsOpen && (
               <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                {COLUMN_LABELS.map((column) => (
+                {columnLabels.map((column) => (
                   <label
                     key={column.key}
                     className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -667,7 +740,7 @@ export default function Dashboard() {
               onClick={() => setViewsOpen((current) => !current)}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Представления
+              {t('dashboard.views')}
             </button>
             {viewsOpen && (
               <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
@@ -680,11 +753,11 @@ export default function Dashboard() {
                   }}
                   className="w-full rounded px-2 py-1.5 text-left text-sm font-medium text-primary hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                  Сохранить текущее представление…
+                  {t('dashboard.saveView')}
                 </button>
                 {savedViews.length === 0 ? (
                   <p className="px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    Нет сохранённых представлений.
+                    {t('dashboard.noViews')}
                   </p>
                 ) : (
                   savedViews.map((view) => (
@@ -698,7 +771,7 @@ export default function Dashboard() {
                       </button>
                       <button
                         type="button"
-                        aria-label={`Удалить представление ${view.name}`}
+                        aria-label={`${t('dashboard.deleteView')} ${view.name}`}
                         onClick={() => removeView(view.id)}
                         className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
                       >
@@ -716,7 +789,7 @@ export default function Dashboard() {
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Поиск по имени или пути…"
+          placeholder={t('dashboard.searchPlaceholder')}
           className="w-full max-w-xs rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
       </div>
@@ -724,114 +797,178 @@ export default function Dashboard() {
       {bulkMessage && (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
           {bulkMessage}
-          {bulkPolling ? ' Обновление статусов каждые 2 с…' : ''}
+          {bulkPolling ? t('dashboard.polling') : ''}
         </div>
       )}
 
-      <div className="space-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Фильтры
-          </span>
-          {hasActiveFilters(filters) && (
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((current) => !current)}
+            aria-expanded={filtersOpen}
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-primary dark:text-slate-400"
+          >
+            <span aria-hidden="true">{filtersOpen ? '▾' : '▸'}</span>
+            {t('dashboard.filters')}
+            {hasActiveFilters(filters) && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold normal-case text-primary">
+                {t('dashboard.filtersActive')}
+              </span>
+            )}
+          </button>
+          <div className="flex items-center gap-3">
+            {hasActiveFilters(filters) && (
+              <button
+                type="button"
+                onClick={() => setFilters({ ...EMPTY_FILTERS })}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                {t('dashboard.clearAll')}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setFilters({ ...EMPTY_FILTERS })}
-              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => setAnalyticsOpen((current) => !current)}
+              aria-expanded={analyticsOpen}
+              className="text-xs font-medium text-slate-500 hover:text-primary dark:text-slate-400"
             >
-              Очистить всё
+              {analyticsOpen ? t('dashboard.hideAnalytics') : t('dashboard.showAnalytics')}
             </button>
-          )}
+          </div>
         </div>
-        <FilterRow
-          label="Статус"
-          options={STATUS_OPTIONS}
-          active={filters.status}
-          onToggle={(value) => toggleFilter('status', value)}
-        />
-        <FilterRow
-          label="Зеркало"
-          options={MIRROR_OPTIONS}
-          active={filters.mirror}
-          onToggle={(value) => toggleFilter('mirror', value)}
-        />
-        <FilterRow
-          label="CI"
-          options={CI_OPTIONS}
-          active={filters.ci}
-          onToggle={(value) => toggleFilter('ci', value)}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-20 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Прочее
-          </span>
-          <FilterChip
-            label="Не отслеживаются"
-            active={filters.untrackedOnly}
-            onClick={() =>
-              setFilters((current) => ({
-                ...current,
-                untrackedOnly: !current.untrackedOnly,
-              }))
-            }
-          />
-        </div>
+        {filtersOpen && (
+          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <FilterRow
+              label={t('dashboard.filterStatus')}
+              options={STATUS_OPTIONS}
+              active={filters.status}
+              labels={stateLabels}
+              onToggle={(value) => toggleFilter('status', value)}
+            />
+            <FilterRow
+              label={t('dashboard.filterMirror')}
+              options={MIRROR_OPTIONS}
+              active={filters.mirror}
+              labels={mirrorLabels}
+              onToggle={(value) => toggleFilter('mirror', value)}
+            />
+            <FilterRow
+              label={t('dashboard.filterCi')}
+              options={CI_OPTIONS}
+              active={filters.ci}
+              labels={ciLabels}
+              onToggle={(value) => toggleFilter('ci', value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-20 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t('dashboard.filterOther')}
+              </span>
+              <FilterChip
+                label={t('dashboard.untrackedOnly')}
+                active={filters.untrackedOnly}
+                onClick={() =>
+                  setFilters((current) => ({
+                    ...current,
+                    untrackedOnly: !current.untrackedOnly,
+                  }))
+                }
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <SummaryCard label="Всего" value={summary?.total ?? 0} testId="summary-total" />
-        <SummaryCard label="Чистые" value={summary?.clean ?? 0} testId="summary-clean" />
         <SummaryCard
-          label="Требуют внимания"
+          label={t('dashboard.total')}
+          value={summary?.total ?? 0}
+          testId="summary-total"
+          onClick={() => applySummaryFilter('total')}
+          hint={t('dashboard.showAll')}
+        />
+        <SummaryCard
+          label={t('dashboard.clean')}
+          value={summary?.clean ?? 0}
+          testId="summary-clean"
+          onClick={() => applySummaryFilter('clean')}
+          hint={t('dashboard.showClean')}
+        />
+        <SummaryCard
+          label={t('dashboard.needsAttention')}
           value={summary?.needs_attention ?? 0}
           testId="summary-attention"
+          onClick={() => applySummaryFilter('attention')}
+          hint={t('dashboard.showAttention')}
         />
         <SummaryCard
-          label="Не отслеживаются"
+          label={t('dashboard.untrackedOnly')}
           value={summary?.untracked ?? 0}
           testId="summary-untracked"
+          onClick={() => applySummaryFilter('untracked')}
+          hint={t('dashboard.showUntracked')}
         />
         <SummaryCard
-          label="Зеркала расходятся"
+          label={t('dashboard.mirrorIssues')}
           value={summary?.mirror_issues ?? 0}
           testId="summary-mirror"
+          onClick={() => applySummaryFilter('mirror')}
+          hint={t('dashboard.showMirrorIssues')}
         />
       </div>
 
-      {summary && (
-        <Suspense
-          fallback={
-            <p className="text-sm text-slate-500 dark:text-slate-400">Загрузка графиков…</p>
-          }
-        >
-          <DashboardCharts summary={summary} />
-        </Suspense>
+      {analyticsOpen && (
+        <div className="space-y-6">
+          {summary && (
+            <Suspense
+              fallback={
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t('charts.loading')}
+                </p>
+              }
+            >
+              <DashboardCharts summary={summary} />
+            </Suspense>
+          )}
+
+          <Heatmap />
+
+          <GlobalDependencies />
+        </div>
       )}
 
-      <Heatmap />
-
-      <GlobalDependencies />
-
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div
+        id="repositories-list"
+        className="scroll-mt-4 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {repositories.length} репозиториев
-            {selectedVisible.length > 0 ? ` · выбрано ${selectedVisible.length}` : ''}
+          <span className="inline-flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              {t('common.repositories')}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {repositories.length}
+            </span>
+            {selectedVisible.length > 0 && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                · {t('dashboard.selected', { count: selectedVisible.length })}
+              </span>
+            )}
           </span>
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {filters.status.length + filters.mirror.length + filters.ci.length > 0
-              ? 'OR внутри категории, AND между категориями'
-              : 'Фильтры не активны'}
+              ? t('dashboard.activeFilters')
+              : t('dashboard.noActiveFilters')}
           </span>
         </div>
 
         {loading ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            Загрузка…
+            {t('common.loading')}
           </p>
         ) : repositories.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            Нет репозиториев по текущим фильтрам.
+            {t('dashboard.noRepositories')}
           </p>
         ) : (
           <div className="overflow-x-auto" onKeyDown={handleTableKeyDown}>
@@ -853,7 +990,7 @@ export default function Dashboard() {
                   <th className="px-3 py-3">
                     <input
                       type="checkbox"
-                      aria-label="Выбрать все"
+                      aria-label={t('dashboard.selectAll')}
                       checked={allSelected}
                       ref={(element) => {
                         if (element) {
@@ -869,12 +1006,12 @@ export default function Dashboard() {
                       onClick={() => toggleSort('name')}
                       className="hover:text-slate-800 dark:hover:text-slate-200"
                     >
-                      Репозиторий{sortIndicator('name')}
+                      {t('dashboard.table.repository')}{sortIndicator('name')}
                     </button>
                   </th>
                   {visibleColumns.branch && (
                     <th className="relative px-4 py-3 font-medium">
-                      Ветка
+                      {t('dashboard.column.branch')}
                       <span
                         onMouseDown={(event) => startResize('branch', event)}
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40"
@@ -888,7 +1025,7 @@ export default function Dashboard() {
                         onClick={() => toggleSort('status')}
                         className="hover:text-slate-800 dark:hover:text-slate-200"
                       >
-                        Статус{sortIndicator('status')}
+                        {t('dashboard.column.status')}{sortIndicator('status')}
                       </button>
                       <span
                         onMouseDown={(event) => startResize('status', event)}
@@ -898,7 +1035,7 @@ export default function Dashboard() {
                   )}
                   {visibleColumns.mirror && (
                     <th className="relative px-4 py-3 font-medium">
-                      Зеркало
+                      {t('dashboard.column.mirror')}
                       <span
                         onMouseDown={(event) => startResize('mirror', event)}
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40"
@@ -907,7 +1044,7 @@ export default function Dashboard() {
                   )}
                   {visibleColumns.ci && (
                     <th className="relative px-4 py-3 font-medium">
-                      CI
+                      {t('dashboard.column.ci')}
                       <span
                         onMouseDown={(event) => startResize('ci', event)}
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40"
@@ -921,7 +1058,7 @@ export default function Dashboard() {
                         onClick={() => toggleSort('ahead')}
                         className="hover:text-slate-800 dark:hover:text-slate-200"
                       >
-                        Ahead / Behind{sortIndicator('ahead')}
+                        {t('dashboard.column.aheadBehind')}{sortIndicator('ahead')}
                       </button>
                       <span
                         onMouseDown={(event) => startResize('aheadBehind', event)}
@@ -929,7 +1066,7 @@ export default function Dashboard() {
                       />
                     </th>
                   )}
-                  <th className="px-4 py-3 font-medium">Действия</th>
+                  <th className="px-4 py-3 font-medium">{t('dashboard.table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -959,18 +1096,36 @@ export default function Dashboard() {
                     <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
-                        aria-label={`Выбрать ${displayName(repository)}`}
+                        aria-label={t('dashboard.selectRepository', { name: displayName(repository) })}
                         checked={selectedSet.has(repository.id)}
                         onChange={() => toggleSelected(repository.id)}
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <Link
-                        to={`/repo/${repository.id}`}
-                        className="font-medium text-slate-900 hover:text-primary dark:text-slate-100"
-                      >
-                        {displayName(repository)}
-                      </Link>
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Link
+                          to={`/repo/${repository.id}`}
+                          className="font-medium text-slate-900 hover:text-primary dark:text-slate-100"
+                        >
+                          {displayName(repository)}
+                        </Link>
+                        {(duplicateGroups.get(displayName(repository).toLowerCase())?.length ?? 0) >
+                          1 && (
+                          <span
+                            className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                            title={`${t('dashboard.duplicateTitle')}\n${(
+                              duplicateGroups.get(displayName(repository).toLowerCase()) ?? []
+                            )
+                              .map((item) => item.path)
+                              .join('\n')}`}
+                          >
+                            {
+                              duplicateGroups.get(displayName(repository).toLowerCase())
+                                ?.length
+                            } {t('dashboard.duplicateBadge')}
+                          </span>
+                        )}
+                      </span>
                       <p
                         className="max-w-xs truncate font-mono text-xs text-slate-500 dark:text-slate-400"
                         title={repository.path}
@@ -1001,7 +1156,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3">
                         <span
                           className="font-mono text-xs text-slate-600 dark:text-slate-300"
-                          title="CI status"
+                          title={t('dashboard.ciTitle')}
                         >
                           {repository.ci?.aggregate ?? '—'}
                         </span>
@@ -1020,7 +1175,7 @@ export default function Dashboard() {
                           to={`/repo/${repository.id}`}
                           className="text-sm font-medium text-primary hover:underline"
                         >
-                          Детали
+                          {t('common.details')}
                         </Link>
                       ) : (
                         <button
@@ -1032,7 +1187,7 @@ export default function Dashboard() {
                           disabled={busyRepository === repository.id}
                           className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                         >
-                          {busyRepository === repository.id ? '…' : 'Отслеживать'}
+                          {busyRepository === repository.id ? '…' : t('dashboard.track')}
                         </button>
                       )}
                     </td>
@@ -1051,15 +1206,15 @@ export default function Dashboard() {
           onClose={() => setContextMenu(null)}
           items={[
             {
-              label: 'Открыть детали',
+              label: t('dashboard.openDetails'),
               onSelect: () => navigate(`/repo/${contextMenu.repository.id}`),
             },
             {
-              label: 'Сделать Fetch',
+              label: t('dashboard.contextFetch'),
               onSelect: () => void handleContextFetch(contextMenu.repository),
             },
             {
-              label: 'Скопировать путь',
+              label: t('dashboard.copyPath'),
               onSelect: () => void handleCopyPath(contextMenu.repository),
             },
           ]}
@@ -1073,16 +1228,16 @@ export default function Dashboard() {
             className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
           >
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Сохранить представление
+              {t('dashboard.saveViewTitle')}
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Фильтры, сортировка и видимые колонки сохранятся локально.
+              {t('dashboard.saveViewHint')}
             </p>
             <input
               autoFocus
               value={viewName}
               onChange={(event) => setViewName(event.target.value)}
-              placeholder="Например, «Проблемы с зеркалом»"
+              placeholder={t('dashboard.saveViewPlaceholder')}
               className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
             <div className="mt-5 flex justify-end gap-2">
@@ -1091,14 +1246,14 @@ export default function Dashboard() {
                 onClick={() => setSaveViewOpen(false)}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={!viewName.trim()}
                 className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-container disabled:opacity-50"
               >
-                Сохранить
+                {t('common.save')}
               </button>
             </div>
           </form>
@@ -1119,10 +1274,12 @@ export default function Dashboard() {
 
 function FilterChip({
   label,
+  title,
   active,
   onClick,
 }: {
   label: string
+  title?: string
   active: boolean
   onClick: () => void
 }) {
@@ -1130,6 +1287,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
+      title={title}
       aria-pressed={active}
       className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
         active
@@ -1146,11 +1304,13 @@ function FilterRow({
   label,
   options,
   active,
+  labels,
   onToggle,
 }: {
   label: string
   options: string[]
   active: string[]
+  labels?: Record<string, string>
   onToggle: (value: string) => void
 }) {
   return (
@@ -1159,7 +1319,8 @@ function FilterRow({
       {options.map((option) => (
         <FilterChip
           key={option}
-          label={option}
+          label={labels?.[option] ?? option}
+          title={option}
           active={active.includes(option)}
           onClick={() => onToggle(option)}
         />
@@ -1172,13 +1333,22 @@ function SummaryCard({
   label,
   value,
   testId,
+  onClick,
+  hint,
 }: {
   label: string
   value: number
   testId: string
+  onClick?: () => void
+  hint?: string
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint}
+      className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-primary/60 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900"
+    >
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </p>
@@ -1188,6 +1358,6 @@ function SummaryCard({
       >
         {value}
       </p>
-    </div>
+    </button>
   )
 }

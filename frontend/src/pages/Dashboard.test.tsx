@@ -3,7 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { bulkFetchAll, getDashboard, getGlobalDependencies, getHeatmap } from '../api/client'
+import {
+  bulkFetchAll,
+  getDashboard,
+  getGlobalDependencies,
+  getHeatmap,
+  getRepositories,
+} from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import { useTableStore } from '../store/useTableStore'
 import { ThemeProvider } from '../theme/ThemeContext'
@@ -16,6 +22,7 @@ vi.mock('../api/client', () => ({
   getDashboard: vi.fn(),
   getGlobalDependencies: vi.fn(),
   getHeatmap: vi.fn(),
+  getRepositories: vi.fn(),
   migrateToGitflic: vi.fn(),
   runAction: vi.fn(),
   scan: vi.fn(),
@@ -147,6 +154,12 @@ describe('Dashboard', () => {
       },
     })
     vi.mocked(getDashboard).mockResolvedValue(dashboard)
+    vi.mocked(getRepositories).mockResolvedValue({
+      items: dashboard.repositories,
+      total: dashboard.repositories.length,
+      skip: 0,
+      limit: 500,
+    })
     vi.mocked(getHeatmap).mockResolvedValue({})
     vi.mocked(getGlobalDependencies).mockResolvedValue({
       checked_at: '2026-11-06T10:00:00Z',
@@ -166,12 +179,14 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('summary-clean')).toHaveTextContent('1')
     expect(screen.getByTestId('summary-attention')).toHaveTextContent('1')
     expect(screen.getByTestId('summary-untracked')).toHaveTextContent('1')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Показать аналитику' }))
     expect(await screen.findByTestId('dashboard-charts')).toBeInTheDocument()
 
     expect(screen.getByRole('columnheader', { name: /Репозиторий/ })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Ahead / Behind' })).toBeInTheDocument()
-    expect(screen.getAllByText('current').length).toBeGreaterThan(0)
-    expect(screen.getByText('untracked')).toBeInTheDocument()
+    expect(screen.getAllByText('чистый').length).toBeGreaterThan(0)
+    expect(screen.getByText('не отслеживается')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Отслеживать' })).toBeInTheDocument()
   })
 
@@ -181,6 +196,7 @@ describe('Dashboard', () => {
 
     expect(await screen.findByText('alpha')).toBeInTheDocument()
 
+    await user.click(screen.getByRole('button', { name: /Фильтры/ }))
     await user.click(screen.getByRole('button', { name: 'Не отслеживаются' }))
 
     expect(screen.queryByText('alpha')).not.toBeInTheDocument()
@@ -250,7 +266,9 @@ describe('Dashboard', () => {
 
     expect(await screen.findByText('beta')).toBeInTheDocument()
     expect(screen.queryByText('alpha')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'dirty' })).toHaveAttribute(
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Фильтры/ }))
+    expect(screen.getByRole('button', { name: 'есть изменения' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -296,9 +314,15 @@ describe('Dashboard', () => {
 
     renderDashboard()
 
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Показать аналитику' }))
     expect(await screen.findByTestId('global-dependencies')).toBeInTheDocument()
     expect(await screen.findByText('fastapi')).toBeInTheDocument()
     expect(screen.getByText('Унифицировать')).toBeInTheDocument()
     expect(screen.getByText('0.116.0')).toBeInTheDocument()
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Python/ }))
+    expect(screen.getByText('fastapi')).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: /Node/ }))
+    expect(screen.queryByText('fastapi')).not.toBeInTheDocument()
   })
 })

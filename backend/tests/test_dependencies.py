@@ -9,6 +9,7 @@ from app.models.entities import Repository
 from app.providers.pypi_client import PackageVersionResult
 from app.services.dependency_parser import parse_requirements
 from app.services.dependency_service import DependencyService
+from app.services.manifest_discovery import discover_manifests
 from app.services.node_parser import parse_package_json
 from fastapi import FastAPI
 from httpx import AsyncClient
@@ -443,3 +444,54 @@ async def test_dependencies_api_missing_repository(client: AsyncClient) -> None:
     response = await client.get("/api/v1/repositories/999999/dependencies")
 
     assert response.status_code == 404
+
+def test_manifest_discovery_finds_nested_and_ignores_noise(tmp_path: Path) -> None:
+    repo = tmp_path / "monorepo"
+    (repo / "backend").mkdir(parents=True)
+    (repo / "frontend").mkdir(parents=True)
+    (repo / "frontend" / "node_modules" / "pkg").mkdir(parents=True)
+    (repo / "backend" / "requirements.txt").write_text("fastapi==0.115.6\n")
+    (repo / "frontend" / "package.json").write_text('{"dependencies": {"react": "^19.0.0"}}')
+    (repo / "frontend" / "node_modules" / "pkg" / "package.json").write_text("{}")
+
+    found = discover_manifests(repo, max_depth=2)
+
+    assert [path.relative_to(repo).as_posix() for path in found.python] == [
+        "backend/requirements.txt"
+    ]
+    assert [path.relative_to(repo).as_posix() for path in found.node] == [
+        "frontend/package.json"
+    ]
+
+
+async def test_service_reads_nested_manifests_and_keeps_provenance(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "nested"
+    (repo / "backend").mkdir(parents=True)
+    (repo / "frontend").mkdir(parents=True)
+    (repo / "requirements.txt").write_text("httpx>=0.1\n", encoding="utf-8")
+    (repo / "backend" / "requirements.txt").write_text(
+        "httpx==0.28.1\nfastapi==0.115.6\n", encoding="utf-8"
+    )
+    (repo / "frontend" / "package.json").write_text(
+        '{"dependencies": {"react": "^19.0.0"}}', encoding="utf-8"
+    )
+    service = DependencyService(
+        session_factory,
+        FakeRegistry({"httpx": "0.28.1", "fastapi": "0.116.0"}),
+        FakeRegistry({"react": "19.2.0"}),
+    )
+
+    report = await service.get_report(1, str(repo), ecosystem="all")
+
+    python, node = report.ecosystems
+    assert set(python.manifests) == {"backend/requirements.txt", "requirements.txt"}
+    assert node.manifests == ["frontend/package.json"]
+    assert python.total == 2
+    by_name = {package.name: package for package in python.packages}
+    assert by_name["httpx"].current == "0.28.1"
+    assert by_name["httpx"].manifest_path == "backend/requirements.txt"
+    assert by_name["fastapi"].status == "outdated"
+    assert node.total == 1

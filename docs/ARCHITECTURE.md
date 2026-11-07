@@ -536,15 +536,17 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 репозиторий и не запуская пакетные менеджеры.
 
 **Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25;
-Node (`package.json`, npm) — в Sprint 26. `ecosystem=all` объединяет отчёты.
+Node (`package.json`, npm) — в Sprint 26. В v0.8.0 (Sprint 35) добавлен
+рекурсивный поиск вложенных манифестов (`backend/`, `frontend/`, `apps/*`).
+`ecosystem=all` объединяет отчёты.
 
 ### 11.1. Поток
 
 ```
 GET /repositories/{id}/dependencies
   → DependencyService
-      ├─ manifest detection: requirements.txt, package.json
-      ├─ parser → [{name, declared, kind, line, section}]
+      ├─ ManifestDiscovery: requirements.txt, package.json до depth 3
+      ├─ parser → [{name, declared, kind, line, section, manifest_path}]
       ├─ cache lookup (dependency_cache, 24 ч)
       ├─ registry fetch (PyPI / npm) для miss/stale, concurrency 4
       └─ normalize → DependencyReport
@@ -1036,7 +1038,58 @@ POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
 
 ---
 
-## 18. Что ещё не сделано (v0.8+)
+## 18. Manifest discovery, README & safe document access (v0.8.0, Sprint 35)
+
+`ManifestDiscovery` (`app/services/manifest_discovery.py`) обходит репозиторий
+до `DEPENDENCY_MANIFEST_MAX_DEPTH` (default 3), находит `requirements.txt` и
+`package.json`, игнорирует `node_modules`, `.venv`, `venv`, `dist`, `build`,
+`target`, `vendor`, `.git` и кэши. `DependencyService` и `SecurityService`
+используют один слой, поэтому CVE-сканер видит те же пакеты, что и аудит
+зависимостей. Пакеты из нескольких манифестов дедуплицируются по имени
+(exact > range с версией > range), провенанс сохраняется в `manifest_path`.
+
+`ReadmeService` (`app/services/readme_service.py`) ищет README без учёта
+регистра, извлекает H1 и версию, отдаёт исходный Markdown через
+`/repositories/{id}/readme`. Документы открываются через
+`/repositories/{id}/docs?path=...`: только `.md/.markdown/.txt`, только внутри
+корня, ≤ 512 KiB, `.git/**` запрещён. Backend не исполняет HTML. Frontend
+рендерит Markdown собственным безопасным парсером (`MarkdownView`), внутренние
+ссылки открываются в модалке с историей «Назад», внешние — в новой вкладке.
+
+**Инварианты:** discovery не следует по symlink'ам; ошибка одного манифеста не
+скрывает пакеты из другого; отсутствие манифеста — `no_manifest`, а не 500.
+
+---
+
+## 19. Repository identity & duplicates (Sprint 37, planned)
+
+Текущий UI уже показывает «возможные копии» по совпадению имени каталога и блок
+«Связанные репозитории». Sprint 37 добавит `RepositoryIdentityService`:
+нормализованное имя + remote URL (`origin`) + провайдерские full names + HEAD
+SHA. Группы: `same_remote` (точный дубль), `mirror_pair` (GitHub ↔ GitFlic),
+`same_name` (возможная связь). Автоматического объединения не будет — только
+отображение связи и объяснение.
+
+---
+
+## 20. i18n RU/EN (v0.8.0, Sprint 36)
+
+`src/i18n` — собственный провайдер без внешних зависимостей:
+`LanguageProvider` + `useI18n` + доменные словари (`common`, `dashboard`,
+`settings`, `components`, `repository`) для `ru` и `en`. `t(key, params)`
+подставляет `{name}`-параметры; `formatDate`/`formatNumber` используют `Intl`.
+Выбор языка хранится в `localStorage` (`iiruchating.locale`), применяется без
+перезагрузки и выставляет `document.documentElement.lang`.
+
+**Правила:** все пользовательские строки — только через `t()`
+(`docs/RULES.md` §4); технические идентификаторы (GitHub, GitFlic, git, pip,
+status codes) не переводятся; RU-значения сохраняют текущие формулировки для
+тестов и обратной совместимости. Переключатель RU/EN находится в шапке рядом
+с темой.
+
+---
+
+## 21. Что ещё не сделано (v0.8+)
 
 - Синхронизация saved views в БД между устройствами (v0.8.0; в v0.6.0–v0.7.0 —
   только файловый export/import).

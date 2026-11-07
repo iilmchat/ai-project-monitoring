@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 
 import { bulkFetchAll, getDashboard, migrateToGitflic, scan } from '../api/client'
 import type { DashboardRepository } from '../api/types'
+import { useI18n } from '../i18n'
 
-type CommandGroup = 'Репозитории' | 'Страницы' | 'Действия'
+type CommandGroup = string
 
 interface Command {
   id: string
@@ -29,6 +30,7 @@ function displayName(repository: DashboardRepository): string {
 
 export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [repositories, setRepositories] = useState<DashboardRepository[]>([])
@@ -63,20 +65,20 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     const staticCommands: Command[] = [
       {
         id: 'page-dashboard',
-        title: 'Дашборд',
-        group: 'Страницы',
+        title: t('palette.dashboard'),
+        group: t('palette.pages'),
         run: () => navigate('/'),
       },
       {
         id: 'page-settings',
-        title: 'Настройки',
-        group: 'Страницы',
+        title: t('palette.settings'),
+        group: t('palette.pages'),
         run: () => navigate('/settings'),
       },
       {
         id: 'action-scan',
-        title: 'Сканировать репозитории',
-        group: 'Действия',
+        title: t('palette.scan'),
+        group: t('palette.actions'),
         run: async () => {
           await scan()
           navigate('/')
@@ -84,9 +86,9 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       },
       {
         id: 'action-fetch-all',
-        title: 'Fetch All',
-        subtitle: 'git fetch для всех tracked репозиториев',
-        group: 'Действия',
+        title: t('palette.fetchAll'),
+        subtitle: t('palette.fetchAllSubtitle'),
+        group: t('palette.actions'),
         run: async () => {
           await bulkFetchAll()
           navigate('/')
@@ -94,9 +96,9 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       },
       {
         id: 'action-migrate',
-        title: 'Мигрировать на GitFlic',
-        subtitle: 'сменить canonical_provider на gitflic',
-        group: 'Действия',
+        title: t('palette.migrate'),
+        subtitle: t('palette.migrateSubtitle'),
+        group: t('palette.actions'),
         run: async () => {
           await migrateToGitflic()
           navigate('/')
@@ -107,11 +109,11 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       id: `repo-${repository.id}`,
       title: displayName(repository),
       subtitle: repository.path,
-      group: 'Репозитории',
+      group: t('palette.repositories'),
       run: () => navigate(`/repo/${repository.id}`),
     }))
     return [...repoCommands, ...staticCommands]
-  }, [navigate, repositories])
+  }, [navigate, repositories, t])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -180,16 +182,16 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Поиск репозиториев, страниц и действий…"
+            placeholder={t('palette.search')}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
         </div>
         <div className="max-h-80 overflow-y-auto py-1">
           {loading ? (
-            <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">Загрузка…</p>
+            <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{t('palette.loading')}</p>
           ) : filtered.length === 0 ? (
             <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-              Ничего не найдено.
+              {t('palette.empty')}
             </p>
           ) : (
             filtered.map((command, index) => {
@@ -228,8 +230,8 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
           )}
         </div>
         <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
-          <span>↑↓ навигация · Enter выбрать</span>
-          <span>Esc закрыть</span>
+          <span>{t('palette.navigation')}</span>
+          <span>{t('palette.close')}</span>
         </div>
       </div>
     </div>

@@ -41,6 +41,7 @@ class ParsedRequirement:
     current: str | None
     manifest_line: int | None = None
     manifest_section: str | None = None
+    manifest_path: str | None = None
 
 
 @dataclass(slots=True)
@@ -60,12 +61,17 @@ def normalize_package_name(name: str) -> str:
 def parse_requirements(
     repo_path: Path,
     *,
+    manifest_path: Path | None = None,
     max_include_depth: int = 3,
 ) -> RequirementsParseResult:
-    """Parse ``requirements.txt`` in ``repo_path`` without running pip."""
+    """Parse one ``requirements.txt`` without running pip.
+
+    ``manifest_path`` defaults to ``repo_path / requirements.txt``. Includes
+    (``-r``) are still restricted to the repository root.
+    """
     root = repo_path.resolve()
-    manifest = root / "requirements.txt"
-    if not manifest.is_file():
+    manifest = (manifest_path or (root / "requirements.txt")).resolve()
+    if not _is_inside(manifest, root) or not manifest.is_file():
         return RequirementsParseResult(packages=[], manifest_found=False)
 
     result = RequirementsParseResult()
@@ -80,7 +86,7 @@ def parse_requirements(
             result=result,
         )
     except OSError as exc:
-        result.error = f"requirements.txt: {exc}"
+        result.error = f"{_display_path(root, manifest)}: {exc}"
     return result
 
 
@@ -105,6 +111,7 @@ def _parse_file(
         # partial report; the UI can still show the packages that were read.
         return
 
+    manifest_rel = _display_path(root, resolved)
     index = 0
     while index < len(lines):
         start_line = index + 1
@@ -153,6 +160,7 @@ def _parse_file(
                     kind=_ignored_kind(target),
                     current=None,
                     manifest_line=start_line,
+                    manifest_path=manifest_rel,
                 )
             )
             continue
@@ -169,11 +177,16 @@ def _parse_file(
                     kind=_ignored_kind(line),
                     current=None,
                     manifest_line=start_line,
+                    manifest_path=manifest_rel,
                 )
             )
             continue
 
-        parsed = _parse_standard_requirement(line, manifest_line=start_line)
+        parsed = _parse_standard_requirement(
+            line,
+            manifest_line=start_line,
+            manifest_path=manifest_rel,
+        )
         if parsed is not None:
             result.packages.append(parsed)
 
@@ -194,10 +207,18 @@ def _is_inside(candidate: Path, root: Path) -> bool:
     return True
 
 
+def _display_path(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.name
+
+
 def _parse_standard_requirement(
     line: str,
     *,
     manifest_line: int,
+    manifest_path: str | None = None,
 ) -> ParsedRequirement | None:
     requirement = line.split(";", 1)[0].strip()
     if not requirement:
@@ -214,6 +235,7 @@ def _parse_standard_requirement(
             kind=_ignored_kind(reference.strip()),
             current=None,
             manifest_line=manifest_line,
+            manifest_path=manifest_path,
         )
 
     match = _NAME_RE.match(requirement)
@@ -231,6 +253,7 @@ def _parse_standard_requirement(
         kind=kind,
         current=current,
         manifest_line=manifest_line,
+        manifest_path=manifest_path,
     )
 
 

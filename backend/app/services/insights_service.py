@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -221,7 +221,9 @@ class InsightsService:
         frequency_ok = frequency_result is not None and _successful(
             frequency_result, self._max_output_bytes
         )
-        until = datetime.now(UTC).date()
+        # Git prints `%ad` in the author's local timezone; use the same local
+        # date here so commits made just after local midnight are not dropped.
+        until = datetime.now().astimezone().date()
         since = until - timedelta(days=days - 1)
         points = (
             parse_commit_frequency(
@@ -353,7 +355,7 @@ def parse_commit_frequency(
     until: date | None = None,
 ) -> list[CommitFrequencyPoint]:
     """Group ``%ad`` dates by day and fill gaps with zeroes."""
-    end = until or datetime.now(UTC).date()
+    end = until or datetime.now().astimezone().date()
     start = end - timedelta(days=days - 1)
     counts: Counter[date] = Counter()
     for raw_line in output.splitlines():

@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 
 import type { DashboardSummary } from '../api/types'
+import { mirrorLabel, statusLabel, useI18n } from '../i18n'
 import { useTheme } from '../theme/ThemeContext'
 
 /**
@@ -74,7 +75,7 @@ const CHART_THEMES: Record<'light' | 'dark', ChartTheme> = {
 interface TooltipPayloadItem {
   name?: string
   value?: number
-  payload?: { name?: string; value?: number }
+  payload?: { key?: string; label?: string; value?: number }
 }
 
 function ChartTooltip({
@@ -99,22 +100,35 @@ function ChartTooltip({
         color: theme.onSurface,
       }}
     >
-      {item.payload?.name ?? item.name}: {item.payload?.value ?? item.value}
+      {item.payload?.label ?? item.name}: {item.payload?.value ?? item.value}
     </div>
   )
 }
 
 export default function DashboardCharts({ summary }: { summary: DashboardSummary }) {
   const { resolved } = useTheme()
+  const { t } = useI18n()
   const theme = CHART_THEMES[resolved]
 
   const stateData = [
-    ...Object.entries(summary.by_state).map(([name, value]) => ({ name, value })),
-    { name: 'untracked', value: summary.untracked },
+    ...Object.entries(summary.by_state).map(([key, value]) => ({
+      key,
+      label: statusLabel(key, t),
+      value,
+    })),
+    {
+      key: 'untracked',
+      label: statusLabel('untracked', t),
+      value: summary.untracked,
+    },
   ].filter((item) => item.value > 0)
 
   const mirrorData = Object.entries(summary.by_mirror_status)
-    .map(([name, value]) => ({ name, value }))
+    .map(([key, value]) => ({
+      key,
+      label: mirrorLabel(key, t),
+      value,
+    }))
     .filter((item) => item.value > 0)
 
   return (
@@ -127,7 +141,7 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
           className="text-sm font-semibold uppercase tracking-wide"
           style={{ color: theme.onSurface }}
         >
-          Обзор состояния
+          {t('charts.state')}
         </h2>
         <div className="mt-3 h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -135,14 +149,14 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
               <Pie
                 data={stateData}
                 dataKey="value"
-                nameKey="name"
+                nameKey="label"
                 outerRadius="80%"
                 isAnimationActive={false}
               >
                 {stateData.map((entry) => (
                   <Cell
-                    key={entry.name}
-                    fill={STATE_COLORS[entry.name] ?? DEFAULT_SERIES_COLOR}
+                    key={entry.key}
+                    fill={STATE_COLORS[entry.key] ?? DEFAULT_SERIES_COLOR}
                   />
                 ))}
               </Pie>
@@ -166,7 +180,7 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
           className="text-sm font-semibold uppercase tracking-wide"
           style={{ color: theme.onSurface }}
         >
-          Состояние зеркал
+          {t('charts.mirror')}
         </h2>
         <div className="mt-3 h-64">
           {mirrorData.length === 0 ? (
@@ -174,7 +188,7 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
               className="pt-16 text-center text-sm"
               style={{ color: theme.onSurface }}
             >
-              Нет данных о зеркалах.
+              {t('charts.noMirror')}
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -185,7 +199,7 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
                   opacity={theme.gridOpacity}
                 />
                 <XAxis
-                  dataKey="name"
+                  dataKey="label"
                   tick={{ fontSize: 10, fill: theme.onSurface }}
                   stroke={theme.onSurface}
                   interval={0}
@@ -200,17 +214,11 @@ export default function DashboardCharts({ summary }: { summary: DashboardSummary
                   content={<ChartTooltip theme={theme} />}
                   cursor={{ fill: theme.onSurface, opacity: 0.06 }}
                 />
-                <Legend
-                  wrapperStyle={{ color: theme.onSurface, fontSize: 12 }}
-                  formatter={(value: string) => (
-                    <span style={{ color: theme.onSurface }}>{value}</span>
-                  )}
-                />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {mirrorData.map((entry) => (
                     <Cell
-                      key={entry.name}
-                      fill={MIRROR_COLORS[entry.name] ?? DEFAULT_SERIES_COLOR}
+                      key={entry.key}
+                      fill={MIRROR_COLORS[entry.key] ?? DEFAULT_SERIES_COLOR}
                     />
                   ))}
                 </Bar>

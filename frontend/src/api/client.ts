@@ -16,8 +16,10 @@ import type {
   MirrorCandidates,
   MirrorPolicyUpdate,
   MirrorStatus,
+  ReadmeMetadata,
   Recommendation,
   Repository,
+  RepositoryDoc,
   RepositoryListResponse,
   RepositoryStatus,
   ScanStarted,
@@ -77,6 +79,19 @@ export async function getRepositories(
 ): Promise<RepositoryListResponse> {
   return request<RepositoryListResponse>('/repositories', {
     query: { skip, limit },
+  })
+}
+
+export async function getReadme(repositoryId: number): Promise<ReadmeMetadata> {
+  return request<ReadmeMetadata>(`/repositories/${repositoryId}/readme`)
+}
+
+export async function getRepositoryDoc(
+  repositoryId: number,
+  path: string,
+): Promise<RepositoryDoc> {
+  return request<RepositoryDoc>(`/repositories/${repositoryId}/docs`, {
+    query: { path },
   })
 }
 

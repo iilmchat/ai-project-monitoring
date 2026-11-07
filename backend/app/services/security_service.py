@@ -31,8 +31,12 @@ from app.schemas.security import (
     SecurityVersionSource,
     SecurityVulnerability,
 )
-from app.services.dependency_parser import ParsedRequirement, parse_requirements
-from app.services.node_parser import parse_package_json
+from app.services.dependency_parser import ParsedRequirement
+from app.services.manifest_discovery import (
+    discover_manifests,
+    parse_node_manifests,
+    parse_python_manifests,
+)
 from app.services.secret_scanner import scan_secrets
 
 MinSeverity = Literal["critical", "high", "medium", "low", "all"]
@@ -73,6 +77,7 @@ class SecurityService:
         cache_ttl_seconds: int = 21600,
         concurrency: int = 4,
         max_include_depth: int = 3,
+        manifest_max_depth: int = 3,
         secret_scan_enabled: bool = True,
         secret_scan_max_files: int = 5000,
         secret_scan_max_file_bytes: int = 1_048_576,
@@ -83,6 +88,7 @@ class SecurityService:
         self._ttl = max(cache_ttl_seconds, 0)
         self._concurrency = max(concurrency, 1)
         self._max_include_depth = max(max_include_depth, 0)
+        self._manifest_max_depth = max(manifest_max_depth, 0)
         self._secret_scan_enabled = secret_scan_enabled
         self._secret_max_files = max(secret_scan_max_files, 1)
         self._secret_max_bytes = max(secret_scan_max_file_bytes, 1)
@@ -183,43 +189,67 @@ class SecurityService:
     async def _python_report(
         self, repo_path: str, *, refresh: bool
     ) -> SecurityEcosystemReport:
-        parsed = parse_requirements(
-            Path(repo_path),
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_python_manifests(
+            discovered,
             max_include_depth=self._max_include_depth,
         )
         if not parsed.manifest_found:
             return _empty("python", "requirements.txt", "no_manifest")
-        if parsed.error is not None:
+        if not parsed.packages and parsed.errors:
             return _empty(
-                "python", "requirements.txt", "parse_error", error=parsed.error
+                "python",
+                parsed.manifest_label or "requirements.txt",
+                "parse_error",
+                error="; ".join(parsed.errors),
+                manifests=parsed.manifests,
             )
-        return await self._check(
+        report = await self._check(
             parsed.packages,
             ecosystem="python",
-            manifest="requirements.txt",
+            manifest=parsed.manifest_label or "requirements.txt",
+            manifests=parsed.manifests,
             osv_ecosystem="PyPI",
             cache_prefix="pypi",
             refresh=refresh,
         )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
 
     async def _node_report(
         self, repo_path: str, *, refresh: bool
     ) -> SecurityEcosystemReport:
-        parsed = parse_package_json(Path(repo_path))
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_node_manifests(discovered)
         if not parsed.manifest_found:
             return _empty("node", "package.json", "no_manifest")
-        if parsed.error is not None:
+        if not parsed.packages and parsed.errors:
             return _empty(
-                "node", "package.json", "parse_error", error=parsed.error
+                "node",
+                parsed.manifest_label or "package.json",
+                "parse_error",
+                error="; ".join(parsed.errors),
+                manifests=parsed.manifests,
             )
-        return await self._check(
+        report = await self._check(
             parsed.packages,
             ecosystem="node",
-            manifest="package.json",
+            manifest=parsed.manifest_label or "package.json",
+            manifests=parsed.manifests,
             osv_ecosystem="npm",
             cache_prefix="npm",
             refresh=refresh,
         )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
 
     async def _check(
         self,
@@ -227,6 +257,7 @@ class SecurityService:
         *,
         ecosystem: Ecosystem,
         manifest: str,
+        manifests: list[str],
         osv_ecosystem: OsvEcosystem,
         cache_prefix: str,
         refresh: bool,
@@ -389,6 +420,7 @@ class SecurityService:
         return SecurityEcosystemReport(
             ecosystem=ecosystem,
             manifest=manifest,
+            manifests=manifests,
             status=status,
             total_packages=len(declared_names),
             packages_checked=len(checked_names),
@@ -477,10 +509,12 @@ def _empty(
     status: Literal["no_manifest", "parse_error"],
     *,
     error: str | None = None,
+    manifests: list[str] | None = None,
 ) -> SecurityEcosystemReport:
     return SecurityEcosystemReport(
         ecosystem=ecosystem,
         manifest=manifest,
+        manifests=manifests or [],
         status=status,
         error=error,
     )

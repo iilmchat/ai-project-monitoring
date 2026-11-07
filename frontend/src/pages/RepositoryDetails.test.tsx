@@ -13,6 +13,7 @@ import {
   getInsights,
   getLog,
   getMirror,
+  getReadme,
   getRecommendations,
   getRepositories,
   getSecurity,
@@ -46,6 +47,7 @@ vi.mock('../api/client', () => ({
   getInsights: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
+  getReadme: vi.fn(),
   getRecommendations: vi.fn(),
   getRepositories: vi.fn(),
   getSecurity: vi.fn(),
@@ -260,6 +262,13 @@ describe('RepositoryDetails actions', () => {
       },
     ])
     vi.mocked(getMirror).mockResolvedValue(mirror)
+    vi.mocked(getReadme).mockResolvedValue({
+      repository_id: 1,
+      path: 'README.md',
+      name: 'Demo repository',
+      version: 'v1.0.0',
+      content: '# Demo repository\n\nVersion: v1.0.0\n',
+    })
     vi.mocked(getActions).mockResolvedValue([])
     vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
     vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)

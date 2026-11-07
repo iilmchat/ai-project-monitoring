@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.models.entities import Repository
@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-TODAY = datetime.now(UTC).date()
+TODAY = datetime.now().astimezone().date()
 
 
 class FakeRunner:

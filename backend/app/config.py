@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     dependency_cache_ttl_seconds: int = 86400
     dependency_check_concurrency: int = 4
     dependency_http_timeout: float = 5.0
+    dependency_manifest_max_depth: int = 3
     osv_api_url: str = "https://api.osv.dev"
     security_cache_ttl_seconds: int = 21600
     security_check_concurrency: int = 4

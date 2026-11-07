@@ -44,20 +44,25 @@ def normalize_npm_name(name: str) -> str:
     return name.strip().lower()
 
 
-def parse_package_json(repo_path: Path) -> NodeParseResult:
-    """Parse root ``package.json`` without invoking npm or reading node_modules."""
+def parse_package_json(
+    repo_path: Path,
+    *,
+    manifest_path: Path | None = None,
+) -> NodeParseResult:
+    """Parse one ``package.json`` without invoking npm or reading node_modules."""
     root = repo_path.resolve()
-    manifest = root / "package.json"
-    if not manifest.is_file():
+    manifest = (manifest_path or (root / "package.json")).resolve()
+    if not _is_inside(manifest, root) or not manifest.is_file():
         return NodeParseResult(packages=[], manifest_found=False)
 
+    manifest_rel = _display_path(root, manifest)
     try:
         payload = json.loads(manifest.read_text(encoding="utf-8", errors="replace"))
     except (OSError, json.JSONDecodeError) as exc:
-        return NodeParseResult(error=f"package.json: {exc}")
+        return NodeParseResult(error=f"{manifest_rel}: {exc}")
 
     if not isinstance(payload, dict):
-        return NodeParseResult(error="package.json: root must be an object")
+        return NodeParseResult(error=f"{manifest_rel}: root must be an object")
 
     packages: list[ParsedRequirement] = []
     for section in _SECTION_NAMES:
@@ -79,9 +84,25 @@ def parse_package_json(repo_path: Path) -> NodeParseResult:
                     current=current,
                     manifest_line=None,
                     manifest_section=section,
+                    manifest_path=manifest_rel,
                 )
             )
     return NodeParseResult(packages=packages)
+
+
+def _is_inside(candidate: Path, root: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _display_path(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.name
 
 
 def _parse_node_spec(spec: str) -> tuple[RequirementKind, str | None]:

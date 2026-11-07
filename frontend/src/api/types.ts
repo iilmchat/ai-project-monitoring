@@ -8,6 +8,20 @@ export type RepoState =
   | 'detached'
   | 'error'
 
+export interface ReadmeMetadata {
+  repository_id: number
+  path: string
+  name: string
+  version: string | null
+  content: string
+}
+
+export interface RepositoryDoc {
+  repository_id: number
+  path: string
+  content: string
+}
+
 export interface Repository {
   id: number
   path: string
@@ -184,11 +198,13 @@ export interface DependencyPackage {
   severity: DependencySeverity | null
   manifest_line: number | null
   manifest_section: string | null
+  manifest_path?: string | null
 }
 
 export interface DependencyEcosystemReport {
   ecosystem: 'python' | 'node'
   manifest: string | null
+  manifests?: string[]
   status: 'ok' | 'no_manifest' | 'parse_error' | 'unavailable'
   source: 'registry' | 'cache' | 'mixed' | 'stale_cache' | 'none'
   total: number
@@ -248,6 +264,7 @@ export interface SecurityUnknownPackage {
 export interface SecurityEcosystemReport {
   ecosystem: 'python' | 'node'
   manifest: string
+  manifests?: string[]
   status: SecurityEcosystemStatus
   total_packages: number
   packages_checked: number
