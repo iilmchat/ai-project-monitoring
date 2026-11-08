@@ -8,6 +8,7 @@ of a 500.
 from __future__ import annotations
 
 import ipaddress
+import time
 from urllib.parse import urlparse
 
 import httpx
@@ -28,6 +29,14 @@ SECURITY_SYSTEM_PROMPT = (
 UNIFICATION_SYSTEM_PROMPT = (
     "Ты - senior инженер. Давай практичные советы по унификации версий "
     "зависимостей. Не выдумывай факты, опирайся только на переданные версии."
+)
+DEVOPS_SYSTEM_PROMPT = (
+    "Ты - DevOps-ассистент. Давай короткие приоритизированные рекомендации "
+    "по состоянию локальных репозиториев. Не выдумывай факты."
+)
+AGENT_TASK_SYSTEM_PROMPT = (
+    "Ты - Senior-разработчик. Пиши чёткие пошаговые инструкции для другого "
+    "AI-агента. Не выполняй действия сам, только составь задачу."
 )
 MAX_MESSAGE_CHARS = 2000
 MAX_EXPLANATION_CHARS = 2000
@@ -139,6 +148,108 @@ class LLMService:
             max_chars=MAX_EXPLANATION_CHARS,
         )
 
+    async def generate_dashboard_advice(
+        self,
+        stats: dict[str, int],
+        *,
+        language: str = "ru",
+    ) -> str | None:
+        """Return 2-3 prioritized recommendations for the dashboard."""
+        stats_text = ", ".join(f"{key}={value}" for key, value in sorted(stats.items()))
+        prompt = (
+            f"Состояние проектов: {stats_text}. "
+            "Дай 2-3 краткие рекомендации, с чего начать работу сегодня. "
+            + _language_instruction(language)
+        )
+        return await self._complete(
+            DEVOPS_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=320,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
+    async def generate_agent_task(
+        self,
+        context: dict[str, object],
+        *,
+        language: str = "ru",
+    ) -> str | None:
+        """Return a Markdown task for DSH/OpenCode."""
+        lines = [
+            f"Репозиторий: {context.get('repository', '—')}",
+            f"Состояние: {context.get('state', 'unknown')}",
+            f"Ветка: {context.get('branch', '—')}",
+            f"Ahead/Behind: {context.get('ahead', 0)}/{context.get('behind', 0)}",
+            f"Изменено/в индексе/untracked: {context.get('dirty', '0/0/0')}",
+        ]
+        conflicts = context.get("conflicts")
+        if isinstance(conflicts, list) and conflicts:
+            lines.append("Конфликтные файлы: " + ", ".join(str(item) for item in conflicts))
+        commits = context.get("commits")
+        if isinstance(commits, list) and commits:
+            lines.append("Последние коммиты:")
+            lines.extend(f"- {item}" for item in commits)
+        prompt = (
+            "Напиши чёткую пошаговую инструкцию (Markdown) для другого "
+            "AI-агента (DSH/OpenCode), как исправить текущую проблему в этом "
+            "репозитории. Не выполняй команды, только составь задачу с "
+            "acceptance criteria и списком проверок.\n\n"
+            + "\n".join(lines)
+            + "\n"
+            + _language_instruction(language)
+        )
+        return await self._complete(
+            AGENT_TASK_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=700,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
+    async def test_connection(self) -> tuple[bool, float, str | None]:
+        """Ping the configured model and return ``(ok, latency_ms, error)``."""
+        if not self.enabled:
+            return False, 0.0, "llm_disabled"
+        if not self.remote_allowed():
+            return False, 0.0, "llm_remote_not_allowed"
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0,
+            "max_tokens": 8,
+            "stream": False,
+        }
+        headers = {"Accept": "application/json"}
+        if self._settings.llm_api_key:
+            headers["Authorization"] = f"Bearer {self._settings.llm_api_key}"
+
+        started = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(
+                timeout=min(self._settings.llm_timeout_seconds, 15.0),
+                transport=self._transport,
+            ) as client:
+                response = await client.post(
+                    self._endpoint(),
+                    json=payload,
+                    headers=headers,
+                )
+        except httpx.TimeoutException:
+            return False, _elapsed_ms(started), "timeout"
+        except httpx.HTTPError:
+            return False, _elapsed_ms(started), "connection_error"
+
+        latency = _elapsed_ms(started)
+        if response.status_code != 200:
+            return False, latency, f"http_{response.status_code}"
+        try:
+            body = response.json()
+        except ValueError:
+            return False, latency, "invalid_json"
+        if _extract_message(body) is None:
+            return False, latency, "invalid_response"
+        return True, latency, None
+
     async def _complete(
         self,
         system_prompt: str,
@@ -221,6 +332,14 @@ class LLMService:
         return f"{base}/v1/chat/completions"
 
 
+def _language_instruction(language: str) -> str:
+    return "Answer in English." if language == "en" else "Отвечай на русском."
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000, 1)
+
+
 def _extract_message(body: object) -> str | None:
     if not isinstance(body, dict):
         return None
@@ -255,7 +374,9 @@ def _clean_message(value: str) -> str:
 
 
 __all__ = [
+    "AGENT_TASK_SYSTEM_PROMPT",
     "COMMIT_SYSTEM_PROMPT",
+    "DEVOPS_SYSTEM_PROMPT",
     "MAX_EXPLANATION_CHARS",
     "MAX_MESSAGE_CHARS",
     "SECURITY_SYSTEM_PROMPT",

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
-import { getSettings, updateSettings } from '../api/client'
-import type { AppSettings } from '../api/types'
+import { getSettings, testLlm, updateSettings } from '../api/client'
+import type { AppSettings, LLMTestResult } from '../api/types'
 import { useI18n } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -32,6 +32,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmTest, setLlmTest] = useState<LLMTestResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const viewsExport = useViewsStore((state) => state.getExportState)
@@ -135,6 +137,17 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleTestLlm() {
+    setLlmTesting(true)
+    try {
+      setLlmTest(await testLlm())
+    } catch {
+      setLlmTest({ status: 'error', latency_ms: 0, error: 'request_failed' })
+    } finally {
+      setLlmTesting(false)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div>
@@ -223,14 +236,24 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                 {t('settings.aiSection')}
               </h2>
-              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={llmEnabled}
-                  onChange={(event) => setLlmEnabled(event.target.checked)}
-                />
-                {t('settings.enableAi')}
-              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleTestLlm()}
+                  disabled={llmTesting}
+                  className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {llmTesting ? t('settings.testingLlm') : t('settings.testLlm')}
+                </button>
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={llmEnabled}
+                    onChange={(event) => setLlmEnabled(event.target.checked)}
+                  />
+                  {t('settings.enableAi')}
+                </label>
+              </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -296,6 +319,21 @@ export default function SettingsPage() {
               />
               {t('settings.allowRemote')}
             </label>
+            {llmTest && (
+              <p
+                className={`rounded-md px-3 py-2 text-sm ${
+                  llmTest.status === 'ok'
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                    : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
+                }`}
+              >
+                {llmTest.status === 'ok'
+                  ? `${t('settings.llmOk')} · ${t('settings.llmLatency', {
+                      ms: Math.round(llmTest.latency_ms),
+                    })}`
+                  : `${t('settings.llmError')}${llmTest.error ? ` (${llmTest.error})` : ''}`}
+              </p>
+            )}
           </div>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -201,4 +201,12 @@ export const repository = {
   'repo.unification.row':
     '{package}: you have {current}, other projects use {target}',
   'repo.unification.update': 'Update to {version}',
+  'repo.agentTask.title': 'Agent task',
+  'repo.agentTask.open': 'Create agent task',
+  'repo.agentTask.copy': 'Copy for DSH',
+  'repo.agentTask.loading': 'Generating task…',
+  'repo.agentTask.error': 'Could not create the task. Check the LLM.',
+  'repo.agentTask.copied': 'Task copied',
+  'repo.agentTask.copyError': 'Could not copy the task',
+  'repo.agentTask.hint': 'Paste the text into OpenCode or DSH.',
 } as const

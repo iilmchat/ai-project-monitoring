@@ -26,4 +26,9 @@ export const settings = {
   'settings.workspaceImported': 'Настройки workspace импортированы.',
   'settings.workspaceImportError':
     'Не удалось импортировать настройки: неверный формат или версия файла.',
+  'settings.testLlm': 'Проверить LLM',
+  'settings.testingLlm': 'Проверка…',
+  'settings.llmOk': 'LLM отвечает',
+  'settings.llmError': 'LLM недоступна',
+  'settings.llmLatency': 'за {ms} мс',
 } as const

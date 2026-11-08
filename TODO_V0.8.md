@@ -1,7 +1,7 @@
 # TODO v0.8.0 — Actionable UX, Correct Dependencies & AI Everywhere
 
 **Версия:** v0.8.0 «Actionable Dashboard»
-**Статус:** 🚧 Sprint 35–37 завершены; следующий — Sprint 38 (AI recommendations & agent tasks)
+**Статус:** 🚧 Sprint 35–38 завершены; следующий — Sprint 39 (multi-provider AI)
 **Предыдущий этап:** v0.7.0 — [`TODO_V0.7.md`](TODO_V0.7.md)
 **Последнее обновление:** 2026-11-07
 
@@ -157,27 +157,27 @@ AI-провайдеры.
 
 ---
 
-### Спринт 38 — AI Recommendations Everywhere & Agent Tasks
+### Спринт 38 — AI Recommendations Everywhere & Agent Tasks (✅ Завершён 2026-11-08)
 
-- [ ] **S38-001. AI-рекомендации проекта.**
+- [x] **S38-001. AI-рекомендации проекта.**
   - `POST /repositories/{id}/ai/recommendations`: вход — status, правила,
     зависимости, security summary, hotspots; **без diff и без кода**.
   - Ответ: `summary`, `actions[]` (приоритет, риск, почему), `risks[]`,
     `model`, `cached`, `grounding`.
   - Fallback: детерминированные рекомендации, если LLM недоступна.
-- [ ] **S38-002. Точки входа.**
+- [x] **S38-002. Точки входа.**
   - Кнопка AI у строки репозитория (рядом с «Детали») → модалка с
     рекомендациями и переходом в детали.
   - AI-сводка на дашборде по агрегатам (без списка кода).
   - AI-блок в карточке проекта; кнопка на каждой странице (в шапке).
-- [ ] **S38-003. Задача для DSH/OpenCode.**
+- [x] **S38-003. Задача для DSH/OpenCode.**
   - `POST /repositories/{id}/agent-task` с `target: dsh|opencode`.
   - Markdown: цель, контекст, факты, ограничения, acceptance criteria, файлы,
     команды проверки, риски; без секретов.
   - UI: «Задача для агента» → preview → копировать/скачать; без записи в
     чужой репозиторий.
   - Опционально: AI-обогащение формулировки, но факты — из приложения.
-- [ ] **S38-004. Tooltips, дисклеймеры, метрики.**
+- [x] **S38-004. Tooltips, дисклеймеры, метрики.**
   - «AI-сгенерировано», модель, время, «не является истиной».
   - Метрики: `ai_requests_total{feature,provider,status}`, latency, cache hit.
 

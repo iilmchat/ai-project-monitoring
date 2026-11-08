@@ -437,6 +437,26 @@ export interface GlobalDependencyReport {
   error: string | null
 }
 
+export interface DashboardAdvice {
+  advice: string
+  cached: boolean
+  model: string | null
+  generated_at: string
+  stats: Record<string, number>
+}
+
+export interface AgentTask {
+  task: string
+  model: string | null
+  generated_at: string
+}
+
+export interface LLMTestResult {
+  status: 'ok' | 'error'
+  latency_ms: number
+  error: string | null
+}
+
 export interface UnificationAdvice {
   ecosystem: 'python' | 'node'
   package: string

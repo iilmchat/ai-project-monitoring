@@ -80,4 +80,10 @@ export const dashboard = {
   'dashboard.selected': 'выбрано {count}',
   'dashboard.ciTitle': 'CI status',
   'dashboard.staleHint': 'Данные устарели — нажмите «Обновить»',
+  'dashboard.aiDigestTitle': 'AI Дайджест',
+  'dashboard.aiDigestHint': 'Сводка от локального LLM по состоянию проектов.',
+  'dashboard.aiDigestGenerate': 'Сгенерировать',
+  'dashboard.aiDigestLoading': 'AI анализирует…',
+  'dashboard.aiDigestError': 'Не удалось получить AI-дайджест. Проверьте LLM.',
+  'dashboard.aiDigestCached': 'из кэша',
 } as const

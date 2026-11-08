@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.schemas.ai import LLMTestResponse
 from app.schemas.settings import SettingsResponse, SettingsUpdate
+from app.services.llm_service import LLMService
 from app.services.settings_service import SettingsService, mask_secret
 
 router = APIRouter(tags=["settings"])
@@ -46,6 +48,17 @@ def _as_int(value: str | None, default: int) -> int:
 @router.get("/settings", response_model=SettingsResponse)
 async def get_settings(request: Request) -> SettingsResponse:
     return _response(await _service(request).get_settings())
+
+
+@router.post("/settings/llm/test", response_model=LLMTestResponse)
+async def test_llm(request: Request) -> LLMTestResponse:
+    service: LLMService = request.app.state.llm_service
+    ok, latency_ms, error = await service.test_connection()
+    return LLMTestResponse(
+        status="ok" if ok else "error",
+        latency_ms=latency_ms,
+        error=error,
+    )
 
 
 @router.patch("/settings", response_model=SettingsResponse)

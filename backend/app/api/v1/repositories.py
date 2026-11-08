@@ -42,6 +42,8 @@ from app.schemas.action import (
     DependencyUpdateRequest,
 )
 from app.schemas.ai import (
+    AgentTask,
+    AgentTaskRequest,
     CommitMessageSuggestion,
     CveExplainRequest,
     CveExplanation,
@@ -72,6 +74,10 @@ from app.services.action_service import (
     ActionService,
     ConfirmationRequiredError,
     UnknownActionError,
+)
+from app.services.agent_task_service import (
+    AgentTaskService,
+    AgentTaskUnavailableError,
 )
 from app.services.bulk_service import BulkService
 from app.services.ci_service import aggregate_ci
@@ -506,6 +512,35 @@ async def explain_repository_cve(
         model=service.model,
         generated_at=utcnow(),
     )
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/agent-task",
+    response_model=AgentTask,
+)
+async def generate_repository_agent_task(
+    repository_id: int,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    payload: AgentTaskRequest | None = None,
+) -> AgentTask:
+    repository = await _get_repository(session, repository_id)
+    status = await _status_service(request).get_status(
+        session,
+        repository,
+        use_cache=True,
+        fetch=False,
+    )
+    status_response = RepositoryStatusResponse.model_validate(status)
+    service: AgentTaskService = request.app.state.agent_task_service
+    try:
+        return await service.generate(
+            repository,
+            status_response,
+            language=payload.language if payload else "ru",
+        )
+    except AgentTaskUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/repositories", response_model=RepositoryListResponse)

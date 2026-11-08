@@ -77,6 +77,7 @@ const RECOMMENDATION_KEYS: Record<string, TranslationKey> = {
   'create-mirror': 'repo.recommendation.create-mirror',
 }
 
+const AgentTaskModal = lazy(() => import('../components/AgentTaskModal'))
 const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
 
 interface ActionPrompt {
@@ -165,6 +166,7 @@ export default function RepositoryDetails() {
   const [llmEnabled, setLlmEnabled] = useState(false)
   const [readme, setReadme] = useState<ReadmeMetadata | null>(null)
   const [readmeOpen, setReadmeOpen] = useState(false)
+  const [agentTaskOpen, setAgentTaskOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitMessage, setCommitMessage] = useState('')
@@ -986,12 +988,21 @@ export default function RepositoryDetails() {
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 {t('repo.sections.recommendations')}
               </h2>
-              <span
-                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                title={t('repo.recommendations.title')}
-              >
-                {recommendations.length}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  title={t('repo.recommendations.title')}
+                >
+                  {recommendations.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAgentTaskOpen(true)}
+                  className="rounded-md border border-primary px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                >
+                  {t('repo.agentTask.open')}
+                </button>
+              </div>
             </div>
             {recommendations.length === 0 ? (
               <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
@@ -2174,6 +2185,15 @@ export default function RepositoryDetails() {
 
       {readmeOpen && (
         <ReadmeModal repositoryId={repositoryId} onClose={() => setReadmeOpen(false)} />
+      )}
+
+      {agentTaskOpen && (
+        <Suspense fallback={null}>
+          <AgentTaskModal
+            repositoryId={repositoryId}
+            onClose={() => setAgentTaskOpen(false)}
+          />
+        </Suspense>
       )}
 
       {toast && (

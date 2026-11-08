@@ -21,6 +21,11 @@
 - feat(ai): `LLMService.advise_unification` и `POST /dashboard/global-dependencies/ai-advice`; промпт только по версиям/проектам, кэш `ai_cache` 7 дней (S37-002).
 - feat(ui): кнопка «AI Совет» с поповером для пакетов с `unification_needed` (S37-002).
 - feat(ui): блок «Унификация» в карточке проекта — версия у вас/в других проектах и кнопка «Обновить до X» через существующий update flow (S37-003).
+- feat(ai): `POST /ai/dashboard-advice` — агрегаты состояния, outdated и high/critical CVE; 2–3 рекомендации от LLM, кэш `ai_cache` 1 час (S38-001).
+- feat(ui): lazy-виджет «AI Дайджест» на дашборде с кнопкой «Сгенерировать» и Markdown-ответом (S38-001).
+- feat(ai): `POST /repositories/{id}/ai/agent-task` — Markdown-задача для DSH/OpenCode по state/dirty/конфликтам/последним коммитам; lazy-модалка с копированием (S38-002/003).
+- feat(settings): `POST /settings/llm/test` — ping модели и latency/error; кнопка «Проверить LLM» в настройках (S38-003).
+- test(ai): `test_dashboard_advice.py`, `test_agent_task.py`, тест `/settings/llm/test` и UI-тест AI-дайджеста (S38-004).
 
 ### Документация
 

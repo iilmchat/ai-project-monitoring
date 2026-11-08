@@ -200,4 +200,12 @@ export const repository = {
   'repo.unification.row':
     '{package}: у вас {current}, в других проектах {target}',
   'repo.unification.update': 'Обновить до {version}',
+  'repo.agentTask.title': 'Задача для агента',
+  'repo.agentTask.open': 'Создать задачу для агента',
+  'repo.agentTask.copy': 'Скопировать для DSH',
+  'repo.agentTask.loading': 'Генерация задачи…',
+  'repo.agentTask.error': 'Не удалось создать задачу. Проверьте LLM.',
+  'repo.agentTask.copied': 'Задача скопирована',
+  'repo.agentTask.copyError': 'Не удалось скопировать задачу',
+  'repo.agentTask.hint': 'Вставьте текст в OpenCode или DSH.',
 } as const

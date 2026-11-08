@@ -933,7 +933,25 @@ POST /repositories/{id}/ai/cve-explain
 - В `ai_cache` хранится только текст объяснения и модель, не diff и не секреты.
 - Объяснение не влияет на `SecurityReport` и не кэширует advisory.
 
-### 15.5. Приватность и read-only
+### 15.5. AI recommendations & agent tasks (Sprint 38)
+
+- `POST /ai/dashboard-advice`: `DashboardAdviceService` собирает агрегаты
+  (state-счётчики, outdated-пакеты через `DependencyService`, high/critical CVE
+  через `SecurityService`), отправляет в LLM только числа и просит 2–3
+  приоритетные рекомендации. Ответ кэшируется в `ai_cache` на 1 час
+  (`dashboard-advice:<language>:<model>`); `cached=true` при попадании.
+- `POST /repositories/{id}/ai/agent-task`: `AgentTaskService` собирает state,
+  dirty-счётчики, upstream, конфликтные файлы и темы последних 8 коммитов,
+  затем просит LLM написать Markdown-задачу для DSH/OpenCode. Код, diff и
+  секреты не отправляются.
+- `POST /settings/llm/test`: короткий `ping` к модели; возвращает
+  `{status, latency_ms, error}` (200 в обоих случаях), ошибки —
+  `llm_disabled`, `llm_remote_not_allowed`, `timeout`, `connection_error`,
+  `http_<code>`.
+- UI: AI-дайджест и модалка задачи загружаются через `React.lazy`, чтобы не
+  раздувать entry bundle.
+
+### 15.6. Приватность и read-only
 
 - По умолчанию трафик только на loopback; remote — явный opt-in с
   предупреждением в UI.

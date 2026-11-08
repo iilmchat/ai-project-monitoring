@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   bulkFetchAll,
   getDashboard,
+  getDashboardAdvice,
   getGlobalDependencies,
   getHeatmap,
   getRepositories,
@@ -21,6 +22,7 @@ vi.mock('../api/client', () => ({
   bulkSyncMirrorsAll: vi.fn(),
   exportRepositories: vi.fn(),
   getDashboard: vi.fn(),
+  getDashboardAdvice: vi.fn(),
   getGlobalDependencies: vi.fn(),
   getHeatmap: vi.fn(),
   getRepositories: vi.fn(),
@@ -190,6 +192,22 @@ describe('Dashboard', () => {
     expect(screen.getAllByText('чистый').length).toBeGreaterThan(0)
     expect(screen.getByText('не отслеживается')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Отслеживать' })).toBeInTheDocument()
+  })
+
+  it('renders AI digest after clicking generate', async () => {
+    vi.mocked(getDashboardAdvice).mockResolvedValue({
+      advice: 'Начните с dirty-репозиториев.',
+      cached: false,
+      model: 'fake',
+      generated_at: '2026-11-08T10:00:00Z',
+      stats: { dirty: 1 },
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    await user.click(await screen.findByRole('button', { name: 'Сгенерировать' }))
+
+    expect(await screen.findByText('Начните с dirty-репозиториев.')).toBeInTheDocument()
   })
 
   it('filters repositories by tab', async () => {

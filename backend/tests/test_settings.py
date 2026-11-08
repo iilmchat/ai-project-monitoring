@@ -8,6 +8,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
+class FakeLLM:
+    async def test_connection(self) -> tuple[bool, float, str | None]:
+        return True, 123.4, None
+
+
+async def test_llm_test_endpoint(
+    app,
+    client: AsyncClient,
+) -> None:
+    app.state.llm_service = FakeLLM()
+
+    response = await client.post("/api/v1/settings/llm/test")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "latency_ms": 123.4, "error": None}
+
+
 async def test_settings_are_masked_and_persisted(
     app,
     client: AsyncClient,

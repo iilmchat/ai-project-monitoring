@@ -21,9 +21,11 @@ from app.providers.npm_client import NpmClient
 from app.providers.osv_client import OsvClient
 from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
+from app.services.agent_task_service import AgentTaskService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
+from app.services.dashboard_advice_service import DashboardAdviceService
 from app.services.dependency_service import DependencyService
 from app.services.dependency_update_service import DependencyUpdateService
 from app.services.docker_service import DockerService
@@ -140,6 +142,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ai_cache_ttl_seconds=resolved.ai_cache_ttl_seconds,
     )
     identity_service = IdentityService(session_factory)
+    dashboard_advice_service = DashboardAdviceService(
+        session_factory,
+        dependency_service,
+        security_service,
+        llm_service,
+    )
+    agent_task_service = AgentTaskService(llm_service)
     dependency_update_service = DependencyUpdateService(
         session_factory,
         timeout_seconds=resolved.dependency_update_timeout_seconds,
@@ -210,6 +219,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.llm_service = llm_service
     application.state.global_analytics_service = global_analytics_service
     application.state.identity_service = identity_service
+    application.state.dashboard_advice_service = dashboard_advice_service
+    application.state.agent_task_service = agent_task_service
     application.state.dependency_update_service = dependency_update_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service

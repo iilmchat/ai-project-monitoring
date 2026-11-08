@@ -80,4 +80,10 @@ export const dashboard = {
   'dashboard.selected': '{count} selected',
   'dashboard.ciTitle': 'CI status',
   'dashboard.staleHint': 'Data is stale — click Refresh',
+  'dashboard.aiDigestTitle': 'AI Digest',
+  'dashboard.aiDigestHint': 'A local-LLM summary of the current project state.',
+  'dashboard.aiDigestGenerate': 'Generate',
+  'dashboard.aiDigestLoading': 'AI is analyzing…',
+  'dashboard.aiDigestError': 'Could not get the AI digest. Check the LLM.',
+  'dashboard.aiDigestCached': 'cached',
 } as const

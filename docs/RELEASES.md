@@ -4,6 +4,29 @@
 
 ---
 
+## Спринт 38: AI Recommendations & DSH Tasks (v0.8.0)
+
+**Дата:** 2026-11-08 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S38-001: `POST /ai/dashboard-advice` — агрегаты state/dirty/diverged/outdated/CVE, 2–3 рекомендации LLM, кэш `ai_cache` 1 час.
+- [x] S38-001 UI: lazy-виджет «AI Дайджест» с кнопкой «Сгенерировать» и Markdown.
+- [x] S38-002: `POST /repositories/{id}/ai/agent-task` — Markdown-задача для DSH/OpenCode по state, dirty, конфликтам и последним коммитам.
+- [x] S38-003 UI: кнопка «Создать задачу для агента» и lazy-модалка с копированием.
+- [x] S38-003: `POST /settings/llm/test` (ping, latency/error) и кнопка «Проверить LLM».
+- [x] S38-004: backend-тесты advice/agent task/LLM test, UI-тест дайджеста, SPEC §3.24, ARCHITECTURE §15.5.
+
+### Результаты
+
+- Backend-тесты: 225 passed (добавлено 5).
+- Frontend-тесты: 44 passed.
+- Entry bundle: **98.43 kB gzip** (< 100 kB). Новые тяжёлые части вынесены в lazy-чанки:
+  `AiDigest` 0.83 kB, `AgentTaskModal` 1.13 kB, общий `MarkdownView` 1.74 kB.
+- AI-дайджест и модалка задачи не попадают в основной бандл.
+
+---
+
 ## Спринт 37: Remote Identity & AI Unification (v0.8.0)
 
 **Дата:** 2026-11-08 · **Статус:** ✅ Завершён

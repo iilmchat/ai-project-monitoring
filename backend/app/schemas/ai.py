@@ -39,8 +39,51 @@ class CveExplanation(BaseModel):
     generated_at: datetime
 
 
+class DashboardAdviceRequest(BaseModel):
+    """Optional language for the AI dashboard digest."""
+
+    language: Literal["ru", "en"] = "ru"
+
+
+class DashboardAdvice(BaseModel):
+    """Result of ``POST /ai/dashboard-advice``."""
+
+    advice: str
+    cached: bool = False
+    model: str | None = None
+    generated_at: datetime
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class AgentTaskRequest(BaseModel):
+    """Optional language for the generated agent task."""
+
+    language: Literal["ru", "en"] = "ru"
+
+
+class AgentTask(BaseModel):
+    """Result of ``POST /repositories/{id}/ai/agent-task``."""
+
+    task: str
+    model: str | None = None
+    generated_at: datetime
+
+
+class LLMTestResponse(BaseModel):
+    """Result of ``POST /settings/llm/test``."""
+
+    status: Literal["ok", "error"]
+    latency_ms: float = Field(default=0, ge=0)
+    error: str | None = None
+
+
 __all__ = [
+    "AgentTask",
+    "AgentTaskRequest",
     "CommitMessageSuggestion",
     "CveExplainRequest",
     "CveExplanation",
+    "DashboardAdvice",
+    "DashboardAdviceRequest",
+    "LLMTestResponse",
 ]

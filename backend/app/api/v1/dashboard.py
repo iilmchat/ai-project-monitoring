@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
 from app.models.entities import Repository
+from app.schemas.ai import DashboardAdvice, DashboardAdviceRequest
 from app.schemas.ci import CISummary
 from app.schemas.dashboard import DashboardRepository, DashboardResponse, DashboardSummary
 from app.schemas.global_analytics import (
@@ -21,6 +22,10 @@ from app.schemas.global_analytics import (
 from app.schemas.identity import DuplicatesResponse
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
+from app.services.dashboard_advice_service import (
+    DashboardAdviceService,
+    DashboardAdviceUnavailableError,
+)
 from app.services.global_analytics_service import (
     GlobalAnalyticsService,
     LLMUnavailableError,
@@ -156,6 +161,18 @@ async def get_global_dependencies(
 ) -> GlobalDependencyReport:
     service: GlobalAnalyticsService = request.app.state.global_analytics_service
     return await service.get_global_dependencies(refresh=refresh)
+
+
+@router.post("/ai/dashboard-advice", response_model=DashboardAdvice)
+async def get_dashboard_advice(
+    request: Request,
+    payload: DashboardAdviceRequest | None = None,
+) -> DashboardAdvice:
+    service: DashboardAdviceService = request.app.state.dashboard_advice_service
+    try:
+        return await service.get_advice(payload.language if payload else "ru")
+    except DashboardAdviceUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/dashboard/duplicates", response_model=DuplicatesResponse)

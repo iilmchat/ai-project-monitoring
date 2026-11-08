@@ -27,6 +27,7 @@ import type { SavedViewFilters } from '../store/useViewsStore'
 import { buildDashboardMarkdown } from '../utils/markdown'
 import { isStatusStale } from '../utils/stale'
 
+const AiDigest = lazy(() => import('../components/AiDigest'))
 const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
 
 type SortKey = 'name' | 'status' | 'ahead'
@@ -670,6 +671,16 @@ export default function Dashboard() {
           {error}
         </div>
       )}
+
+      <Suspense
+        fallback={
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('common.loading')}
+          </p>
+        }
+      >
+        <AiDigest />
+      </Suspense>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-2">

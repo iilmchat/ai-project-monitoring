@@ -1,5 +1,6 @@
 import type {
   ActionLog,
+  AgentTask,
   AppSettings,
   CIStatus,
   CommitInfo,
@@ -7,6 +8,7 @@ import type {
   CveExplanation,
   CompareResponse,
   ConflictsResponse,
+  DashboardAdvice,
   DashboardResponse,
   DependencyReport,
   DockerStatus,
@@ -15,6 +17,7 @@ import type {
   UnificationAdvice,
   HeatmapData,
   InsightsReport,
+  LLMTestResult,
   MirrorCandidates,
   MirrorPolicyUpdate,
   MirrorStatus,
@@ -286,6 +289,29 @@ export async function getGlobalDependencies(
   return request<GlobalDependencyReport>('/dashboard/global-dependencies', {
     query: { refresh },
   })
+}
+
+export async function getDashboardAdvice(
+  language: 'ru' | 'en',
+): Promise<DashboardAdvice> {
+  return request<DashboardAdvice>('/ai/dashboard-advice', {
+    method: 'POST',
+    body: { language },
+  })
+}
+
+export async function generateAgentTask(
+  repositoryId: number,
+  language: 'ru' | 'en',
+): Promise<AgentTask> {
+  return request<AgentTask>(`/repositories/${repositoryId}/ai/agent-task`, {
+    method: 'POST',
+    body: { language },
+  })
+}
+
+export async function testLlm(): Promise<LLMTestResult> {
+  return request<LLMTestResult>('/settings/llm/test', { method: 'POST' })
 }
 
 export async function getDuplicates(): Promise<DuplicatesResponse> {

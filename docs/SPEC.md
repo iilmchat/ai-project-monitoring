@@ -1133,6 +1133,45 @@ Git-конфигурация только читается, репозитори
 
 ---
 
+### 3.24. AI recommendations, agent tasks & LLM test (v0.8.0, Sprint 38)
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/ai/dashboard-advice` | `{language?: ru\|en}` | `DashboardAdvice` |
+| POST | `/repositories/{id}/ai/agent-task` | `{language?: ru\|en}` | `AgentTask` |
+| POST | `/settings/llm/test` | — | `LLMTestResponse` |
+
+`DashboardAdvice`: `{advice, cached, model, generated_at, stats}`.
+`stats` содержит `repositories`, `current`, `dirty`, `diverged`, `behind`,
+`ahead`, `no_upstream`, `outdated_packages`, `high_critical_cves`.
+
+**Dashboard advice:**
+
+- Агрегаты собираются из tracked-репозиториев: статусы из БД, outdated — через
+  `DependencyService`, high/critical CVE — через `SecurityService`.
+- LLM получает только числа; промпт просит 2–3 приоритетные рекомендации.
+- Ответ кэшируется в `ai_cache` на **1 час**, ключ
+  `dashboard-advice:<language>:<model>`; `cached=true` при попадании.
+- LLM disabled/remote → `409`; LLM недоступна → `503`.
+
+**Agent task:**
+
+- `AgentTask`: `{task, model, generated_at}`; `task` — Markdown.
+- Контекст: `state`, dirty-счётчики, branch/upstream, ahead/behind, конфликтные
+  файлы, темы последних 8 коммитов. Код и diff не отправляются.
+- LLM disabled/remote → `409`; LLM недоступна → `503`.
+- Задача не выполняется автоматически и не пишется в репозиторий.
+
+**LLM test:**
+
+- Короткий `ping` к текущей модели; HTTP 200 в обоих случаях.
+- `{status: "ok", latency_ms: number}` или
+  `{status: "error", latency_ms: number, error: string}`.
+- Коды ошибок: `llm_disabled`, `llm_remote_not_allowed`, `timeout`,
+  `connection_error`, `http_<code>`, `invalid_json`, `invalid_response`.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
