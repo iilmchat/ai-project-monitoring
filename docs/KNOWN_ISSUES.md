@@ -2,7 +2,7 @@
 
 **Последнее обновление:** 2026-11-08
 
-**Всего проблем:** 18 (активных: 12, решено: 6; KI-015/016 не заводились)
+**Всего проблем:** 20 (активных: 14, решено: 6; KI-015/016 не заводились)
 
 ---
 
@@ -230,3 +230,45 @@ TTL, logout при закрытии приложения, CSP без remote-orig
 **План (Sprint 48/49):** ADR-0016/0017 фиксируют cookie для web и keychain +
 Bearer fallback для desktop; тесты на logout/expiry; аудит XSS/CSP в S49;
 секреты не логируются и не попадают в артефакты.
+
+---
+
+## KI-021 · Accepted · Med · desktop · SmartScreen предупреждает при установке `.exe`
+
+**Описание:** Windows-инсталляторы v1.0.0 (NSIS `.exe` и MSI) не подписаны
+код-сертификатом Authenticode. Windows SmartScreen показывает предупреждение
+«Windows protected your PC» / «Unknown publisher» при запуске установщика.
+
+**Влияние:** пользователь может испугаться предупреждения и отменить установку;
+корпоративные политики могут блокировать неподписанные бинарники. Автоподпись
+в CI без сертификата невозможна.
+
+**Workaround:** нажать «More info» → «Run anyway»; проверять SHA256 артефакта
+из GitHub Release; для организаций — подписать своим сертификатом через
+`signtool`. Публиковать checksums рядом с релизом.
+
+**План (Sprint 49+):** приобрести/настроить Authenticode-сертификат, добавить
+подпись и timestamp в CI, документировать проверку подписи; до этого явно
+указывать, что сборка неподписанная.
+
+---
+
+## KI-022 · Accepted · Med · desktop/rag · RAG недоступен в Desktop-версии на SQLite
+
+**Описание:** desktop-приложение по умолчанию использует SQLite в AppData
+(`TAURI_MODE=true`). `pgvector` и `code_chunks` — расширение/тип PostgreSQL;
+на SQLite RAG-эндпоинты возвращают `503 rag_unavailable`.
+
+**Влияние:** в установленном `.exe`/`.msi` поиск по коду не работает «из
+коробки»; для RAG нужен внешний PostgreSQL с расширением `vector` и
+`EMBEDDING_*`. Это осознанный trade-off, чтобы не упаковывать PostgreSQL в
+sidecar (KI-019).
+
+**Workaround:** запустить PostgreSQL + pgvector (Docker или локально), задать
+`DATABASE_URL=postgresql+asyncpg://...` и `EMBEDDING_*` перед запуском desktop;
+либо использовать серверный Docker-режим. Остальные функции desktop работают
+на SQLite.
+
+**План (v1.1):** рассмотреть встроенный PostgreSQL/pgvector в desktop-сборке
+или отдельный «RAG pack»; до этого явно показывать в UI, что RAG требует
+внешнего PostgreSQL.

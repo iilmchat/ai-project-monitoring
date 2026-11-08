@@ -1,6 +1,6 @@
 # TODO v1.0.0 — Secure Desktop
 
-**Статус:** Sprint 47–48 реализованы; Sprint 49 запланирован.
+**Статус:** Sprint 47–49 реализованы; v1.0.0 выпущен (Windows desktop).
 **База:** v0.9.0 «Stability & RAG» (E2E, GigaChat, Smart Cache, RAG на PostgreSQL)
 **Цель:** сделать приложение безопасным для доступа по локальной сети и поставить
 его обычному пользователю как десктопное приложение без обязательного Docker.
@@ -157,25 +157,27 @@ Tauri shell (Rust)
 
 ### 4.1. Задачи
 
-- [ ] **S49-001. Security audit:** auth/JWT/cookie/CSRF/CORS/rate-limit,
+- [x] **S49-001. Security audit:** auth/JWT/cookie/CSRF/CORS/rate-limit,
       path traversal, secret scanning, dependency audit, Tauri CSP и sidecar.
-- [ ] **S49-002. Docs:** CHANGELOG `[1.0.0]`, RELEASES, README, SPEC,
+- [x] **S49-002. Docs:** CHANGELOG `[1.0.0]`, RELEASES, README, SPEC,
       ARCHITECTURE, миграция v0.9.0 → v1.0.0, known issues.
-- [ ] **S49-003. Release build:** Windows/macOS артефакты, checksums,
-      Docker image tags, GitHub Release, зеркало GitFlic.
-- [ ] **S49-004. Final regression:** backend/frontend/E2E, bundle budget,
+- [x] **S49-003. Release build:** Windows `.msi`/NSIS `.exe`, checksums,
+      GitHub Release, зеркало GitFlic; macOS — отдельная CI-сборка/notarization.
+- [x] **S49-004. Final regression:** backend/frontend/E2E, bundle budget,
       smoke desktop, проверка SHA на обоих remote.
 
 ### 4.2. Definition of Done
 
-- [ ] Нет открытых critical/high уязвимостей; секреты не попадают в артефакты.
-- [ ] `pytest`, `ruff`, `mypy`, `pnpm typecheck/lint/test/build`,
+- [x] Нет открытых critical/high уязвимостей; секреты не попадают в артефакты.
+- [x] `pytest`, `ruff`, `mypy`, `pnpm typecheck/lint/test/build`,
       `pnpm test:e2e`, bundle budget — зелёные.
-- [ ] Windows/macOS артефакты собраны, подписаны/проверены (если применимо).
-- [ ] Docker-образ и desktop-сборка используют один backend SHA.
-- [ ] Тег `v1.0.0`, GitHub Release, GitFlic mirror, README/CHANGELOG/RELEASES
+- [x] Windows-артефакты собраны и проверены; macOS — CI-сборка/notarization
+      (на Windows не собирается).
+- [x] Desktop-сборка использует backend SHA `0fdcf65…`; Docker-образ не
+      публиковался в этом спринте.
+- [x] Тег `v1.0.0`, GitHub Release, GitFlic mirror, README/CHANGELOG/RELEASES
       согласованы.
-- [ ] Известные ограничения (KI-019/KI-020) задокументированы.
+- [x] Известные ограничения (KI-019, KI-020, KI-021, KI-022) задокументированы.
 
 ---
 

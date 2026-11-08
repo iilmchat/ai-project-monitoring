@@ -119,8 +119,8 @@ pnpm --dir frontend desktop:build
 
 Артефакты:
 
-- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_0.9.0_x64_en-US.msi`
-- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_0.9.0_x64-setup.exe`
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.0.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.0.0_x64-setup.exe`
 
 Sidecar запускается на свободном `127.0.0.1:<port>`; данные и логи —
 в `%APPDATA%/IIRuchating` (`backend.log`). Desktop по умолчанию использует
@@ -137,6 +137,78 @@ SQLite; RAG доступен только при внешнем PostgreSQL + `pg
 - **Страница репозитория** — путь, ветка, upstream, счётчики изменений, `remote_status`, последние коммиты и блок «Рекомендации» с готовыми командами.
 - **Копирование** — кнопка «Копировать» кладёт команду в буфер обмена; приложение **ничего не выполняет** автоматически.
 - **Бренд** — фирменная иконка, палитра M3 и шрифты Inter/Manrope из бренд-бука IIRuChating.
+
+---
+
+## Десктопное приложение (Windows/macOS)
+
+В v1.0.0 приложение можно установить как обычную desktop-программу: React UI
+и FastAPI backend упакованы в Tauri + Python-sidecar. Docker, Python и Node на
+машине пользователя **не нужны**.
+
+### Windows: скачать и установить
+
+1. Откройте [GitHub Releases](https://github.com/iilmchat/ai-project-monitoring/releases/tag/v1.0.0).
+2. Скачайте один из файлов:
+   - `IIRuchating_1.0.0_x64-setup.exe` — NSIS-установщик;
+   - `IIRuchating_1.0.0_x64_en-US.msi` — MSI для групповых политик.
+3. Запустите установщик. Windows SmartScreen может показать
+   «Unknown publisher», так как бинарники пока не подписаны код-сертификатом
+   (KI-021). Нажмите «More info» → «Run anyway».
+4. Запустите **IIRuchating**. Появится splash, затем экран входа.
+5. Вход по умолчанию: **`admin` / `admin`**. Смените пароль через
+   `ADMIN_PASSWORD` (см. ниже).
+
+Данные и логи: `%APPDATA%\IIRuchating` (`iiruchating.db`, `backend.log`).
+Sidecar запускается на свободном `127.0.0.1:<port>` и останавливается при
+закрытии приложения.
+
+### macOS
+
+Готовый `.dmg` требует сборки на macOS (Apple Silicon/Intel) с подписью и
+notarization; на Windows его собрать нельзя. Пайплайн:
+
+```bash
+pnpm --dir frontend install
+cd backend && python3 -m venv venv && source venv/bin/activate
+pip install -r requirements-desktop.txt
+python build_sidecar.py
+cd ../frontend
+pnpm desktop:build
+```
+
+Результат — `frontend/src-tauri/target/release/bundle/dmg/*.dmg`. Для
+распространения нужен Apple Developer ID и notarization.
+
+### Сборка из исходников (Windows)
+
+```bash
+pnpm --dir frontend install
+
+cd backend
+.\venv\Scripts\Activate.ps1
+pip install -r requirements-desktop.txt
+python build_sidecar.py
+cd ..
+
+pnpm --dir frontend desktop:build
+```
+
+Артефакты:
+
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.0.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.0.0_x64-setup.exe`
+
+### Ограничения desktop
+
+- **RAG:** desktop по умолчанию использует SQLite, поэтому RAG недоступен
+  (`503 rag_unavailable`). Для RAG задайте внешний
+  `DATABASE_URL=postgresql+asyncpg://...` с `pgvector` и `EMBEDDING_*` (KI-022).
+- **Auth:** desktop использует Bearer-токен в памяти; после перезапуска может
+  потребоваться повторный вход (KI-020). Для стабильных сессий задайте
+  `AUTH_JWT_SECRET`.
+- **SmartScreen:** установщики не подписаны (KI-021).
+- Docker остаётся серверным вариантом с PostgreSQL/RAG.
 
 ---
 
@@ -189,12 +261,13 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.9.0** (2026-11-08) |
-| Планируется | **v1.0.0 «Secure Desktop»** — single-user auth, Tauri |
-| Спринты | 1–48 (v1.0.0 в разработке) |
+| Версия | **v1.0.0** (2026-11-08) |
+| Статус | **v1.0.0 «Secure Desktop» выпущен** |
+| Спринты | 1–49 |
 | Тесты backend | **254** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **45** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **89.62 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, логин 1.0 kB, AI-дайджест 0.8 kB) |
+| Desktop | Windows `.msi` + NSIS `.exe`; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
@@ -246,18 +319,18 @@ pnpm --dir frontend exec playwright install chromium
 **v0.9.0+:** синхронизация Saved Views в БД, история статусов и тренды,
 расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
 
-**v1.0.0 «Secure Desktop»** — планируется
+**v1.0.0 «Secure Desktop»** — выпущен 2026-11-08
 ([`TODO_V1.0.md`](TODO_V1.0.md)):
 
-- **Sprint 47 — Single-User Authentication:** ✅ реализован: bcrypt-пароль, JWT,
-  httpOnly cookie, middleware для защиты API при доступе по LAN; экран логина и
-  protected routes. По умолчанию создаётся `admin` / `admin` (смените
-  `ADMIN_PASSWORD`/`AUTH_JWT_SECRET`).
-- **Sprint 48 — Tauri Desktop App:** Windows/macOS приложение с Python-sidecar
-  (PyInstaller), автоматический запуск/остановка backend, работа без Docker;
-  Docker остаётся серверной опцией.
-- **Sprint 49 — Release v1.0.0:** аудит безопасности, документация, релизные
-  бинарники Windows/macOS, GitHub Release и GitFlic mirror.
+- **Sprint 45 — PostgreSQL & RAG:** Docker Compose с `pgvector`, индексация и
+  семантический поиск по коду; SQLite fallback `503 rag_unavailable`.
+- **Sprint 46 — Planning:** roadmap v1.0.0, контракты Auth/Tauri.
+- **Sprint 47 — Single-User Authentication:** ✅ bcrypt, JWT, httpOnly cookie,
+  middleware, login/me/logout, protected routes; `admin` / `admin` по умолчанию.
+- **Sprint 48 — Tauri Desktop App:** ✅ Windows `.msi`/`.exe`, Python-sidecar,
+  SQLite в AppData, автоматический запуск/остановка backend без Docker.
+- **Sprint 49 — Release v1.0.0:** ✅ аудит безопасности, версии 1.0.0,
+  документация, GitHub Release и GitFlic mirror.
 
 ---
 

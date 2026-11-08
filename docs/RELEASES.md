@@ -1,6 +1,28 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.9.0 (2026-11-08)
+**Текущая версия:** v1.0.0 (2026-11-08)
+
+---
+
+## Релиз v1.0.0 — «Secure Desktop»
+
+**Дата:** 2026-11-08 · **Тег:** `v1.0.0`
+
+Итоги спринтов 45–49:
+
+- **S45 — PostgreSQL & RAG:** Docker Compose с `pgvector/pgvector:pg16`,
+  `code_chunks`, индексация и поиск; SQLite fallback `503 rag_unavailable`.
+- **S46 — Planning:** roadmap v1.0.0, контракты auth/Tauri, KI-019/KI-020.
+- **S47 — Single-User Auth:** bcrypt, JWT (7 дней), httpOnly cookie, middleware,
+  login/me/logout, rate-limit, protected routes.
+- **S48 — Tauri Desktop:** PyInstaller sidecar, SQLite в AppData, health poll,
+  graceful shutdown, Windows `.msi` + NSIS `.exe`.
+- **S49 — Release:** аудит безопасности, KI-021/KI-022, версии 1.0.0,
+  финальные артефакты и GitHub Release.
+- **Проверки:** backend 254 (253 passed, 1 skipped), frontend 45 unit + 3 E2E,
+  entry bundle 89.62 kB gzip.
+- **Ограничения:** неподписанные Windows-инсталляторы (KI-021); RAG в desktop
+  требует внешнего PostgreSQL (KI-022).
 
 ---
 

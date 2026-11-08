@@ -1,6 +1,10 @@
 # CHANGELOG — История версий
 
-## [Unreleased]
+## [1.0.0] - 2026-11-08
+
+Secure Desktop: single-user authentication, Tauri desktop app с Python-sidecar,
+RAG-поиск на PostgreSQL + pgvector, GigaChat OAuth, Smart Cache, E2E и
+оптимизированный bundle.
 
 ### Добавлено
 

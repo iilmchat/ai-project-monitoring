@@ -9,7 +9,7 @@ analytics §3.19 и dependency updates §3.20 — реализованы в Spri
 (Sprints 43–44). §3.28 (single-user auth) — **план v1.0.0** (Sprint 47);
 см. [`TODO_V1.0.md`](../TODO_V1.0.md).
 
-**Версия:** v0.9.0 «Stability & RAG» · **Планируется:** v1.0.0 «Secure Desktop» · **Обновлено:** 2026-11-08
+**Версия:** v1.0.0 «Secure Desktop» · **Планируется:** v1.1 · **Обновлено:** 2026-11-08
 
 ---
 

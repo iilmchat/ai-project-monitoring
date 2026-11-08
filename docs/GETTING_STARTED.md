@@ -133,7 +133,7 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
-# {"status":"ok","version":"0.9.0","db_ok":true,...}
+# {"status":"ok","version":"1.0.0","db_ok":true,...}
 ```
 
 ### Вход в приложение
