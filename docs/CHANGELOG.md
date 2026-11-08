@@ -1,5 +1,15 @@
 # CHANGELOG — История версий
 
+## [Unreleased]
+
+### Добавлено
+
+- feat(infra): Docker Compose поднимает `pgvector/pgvector:pg16`, backend использует `postgresql+asyncpg://...@db:5432/...`, ждёт healthy `db`; volume `./pgdata` (S45-001).
+- feat(infra): `backend/docker-entrypoint.sh` выполняет `alembic upgrade head` перед `uvicorn`, включая миграцию `011` (`code_chunks` + HNSW) (S45-002).
+- test(rag): `backend/tests/test_rag_postgres.py` — реальная индексация и поиск на PostgreSQL с детерминированными мок-эмбеддингами; skip без `TEST_DATABASE_URL` (S45-003).
+- feat(ui): на `/search` кнопка «Запустить индексацию (RAG)», статус «Индексация запущена…» и polling счётчика чанков (S45-004).
+- docs: `GETTING_STARTED.md` — раздел «Использование PostgreSQL и RAG»; `.env.example` — `POSTGRES_*` и `EMBEDDING_*`.
+
 ## [0.9.0] - 2026-11-08
 
 Stability & RAG: E2E-тесты Playwright, entry bundle < 90 kB gzip, GigaChat OAuth,

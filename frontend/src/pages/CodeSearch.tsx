@@ -102,7 +102,19 @@ function CodeSearchContent() {
     try {
       await indexCode({})
       setMessage(t('search.indexStarted'))
-      window.setTimeout(() => void loadStatus(), 1500)
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5000))
+        try {
+          const next = await getCodeSearchStatus()
+          setStatus(next)
+          setStatusError(null)
+          if (!next.running) {
+            break
+          }
+        } catch {
+          break
+        }
+      }
     } catch (cause) {
       setError(describeError(cause))
     } finally {

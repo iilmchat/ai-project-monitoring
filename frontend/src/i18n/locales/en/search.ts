@@ -8,7 +8,7 @@ export const search = {
   'search.results': 'Results',
   'search.empty': 'Nothing found. Change the query or the similarity threshold.',
   'search.noIndex': 'The index has not been built yet. Start indexing.',
-  'search.index': 'Index repositories',
+  'search.index': 'Start RAG indexing',
   'search.indexing': 'Indexing…',
   'search.indexStarted':
     'Indexing started. Refresh the status in a few seconds.',

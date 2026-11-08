@@ -27,11 +27,23 @@ cp .env.example .env
 SCAN_ROOTS=/projects
 SCAN_DEPTH=3
 SCAN_IGNORE=node_modules,.venv,vendor,dist,build,target
-GITHUB_TOKEN=<your-github-pat>          # опционально (зарезервировано для v0.2.0)
+GITHUB_TOKEN=<your-github-pat>          # опционально
 STATUS_TTL_SECONDS=60
 COMPARE_TTL_SECONDS=60
 FETCH_TIMEOUT=30
-DATABASE_URL=sqlite+aiosqlite:///./data/iiruchating.db
+
+# PostgreSQL (используется docker-compose db service и RAG)
+POSTGRES_USER=iiruchating
+POSTGRES_PASSWORD=password
+POSTGRES_DB=iiruchating
+# Docker Compose задаёт DATABASE_URL сам. Для локального запуска с PostgreSQL:
+# DATABASE_URL=postgresql+asyncpg://iiruchating:password@127.0.0.1:5432/iiruchating
+
+# Эмбеддинги для RAG (OpenAI-compatible /v1/embeddings)
+EMBEDDING_BASE_URL=http://127.0.0.1:1234/v1
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+EMBEDDING_ALLOW_REMOTE=false
 ```
 
 Для локального запуска без Docker укажите реальные хостовые пути
@@ -48,8 +60,21 @@ docker compose up -d --build
 - Frontend (UI): <http://127.0.0.1:3000>
 - API: <http://127.0.0.1:8000/api/v1/health>
 
-SQLite-файл сохраняется в `./data/` (volume). Backend при старте выполняет
-`alembic upgrade head`. Nginx проксирует `/api` на сервис `backend`.
+Compose поднимает три сервиса:
+
+| Сервис | Назначение |
+|---|---|
+| `db` | PostgreSQL 16 + `pgvector` (`pgvector/pgvector:pg16`), volume `./pgdata` |
+| `backend` | FastAPI + Alembic; ждёт healthy `db`, выполняет `alembic upgrade head` |
+| `frontend` | Nginx + собранный React UI |
+
+Backend при старте выполняет `alembic upgrade head` через
+`backend/docker-entrypoint.sh` (миграция `011` создаёт `code_chunks` и HNSW-индекс
+на PostgreSQL). Nginx проксирует `/api` на сервис `backend`.
+
+PostgreSQL-данные сохраняются в `./pgdata/` (добавлен в `.gitignore`). SQLite
+по-прежнему поддерживается для локального запуска без Docker, но RAG на нём
+недоступен (`503 rag_unavailable`).
 
 Каталог с проектами монтируется в контейнер: по умолчанию
 `${PROJECTS_ROOT:-C:/Projects}:/projects`, а `SCAN_ROOTS=/projects`. Если ваши
@@ -88,6 +113,73 @@ Backend читает `requirements.txt` в корне репозитория и 
 - `pip`/`npm` не запускаются; читаются только манифесты внутри репозитория.
 - Node: `ecosystem=node` читает `package.json` и проверяет версии через npm
   registry; `ecosystem=all` объединяет Python и Node.
+
+---
+
+## 3.1. Использование PostgreSQL и RAG
+
+PostgreSQL включается автоматически в Docker Compose. Для локального backend:
+
+```bash
+docker compose up -d db
+# в .env:
+# DATABASE_URL=postgresql+asyncpg://iiruchating:password@127.0.0.1:5432/iiruchating
+cd backend
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+Проверка подключения:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+# {"status":"ok","version":"0.9.0","db_ok":true,...}
+```
+
+Миграции применяются автоматически при старте контейнера
+(`docker-entrypoint.sh` → `alembic upgrade head`). Вручную:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+### Индексация и поиск
+
+1. Настройте эмбеддинги в `.env` (OpenAI-compatible `/v1/embeddings`):
+
+```env
+EMBEDDING_BASE_URL=http://127.0.0.1:1234/v1
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+EMBEDDING_ALLOW_REMOTE=false
+```
+
+Для локальной LM Studio используйте её base URL и модель эмбеддингов,
+например `nomic-embed-text-v1.5` (тогда задайте `EMBEDDING_DIMENSIONS=768` и
+пересоздайте таблицу `code_chunks` миграцией/переиндексацией).
+
+2. Запустите индексацию из UI (`/search` → «Запустить индексацию (RAG)») или
+через API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/search/code/index \
+  -H "Content-Type: application/json" -d "{}"
+
+curl http://127.0.0.1:8000/api/v1/search/code/status
+```
+
+3. Поиск:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/search/code \
+  -H "Content-Type: application/json" \
+  -d '{"query":"где у меня настроен Redis?","limit":5}'
+```
+
+RAG работает только на PostgreSQL + `pgvector`. На SQLite эндпоинты отвечают
+`503 rag_unavailable`; остальные функции приложения продолжают работать.
+Интеграционный тест: `TEST_DATABASE_URL=postgresql+asyncpg://... pytest -q
+tests/test_rag_postgres.py`.
 
 ---
 

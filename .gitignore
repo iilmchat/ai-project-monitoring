@@ -10,6 +10,7 @@
 /backend/data/*
 !/backend/data/.gitkeep
 backups/
+/pgdata/
 
 # Python
 __pycache__/

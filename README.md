@@ -66,8 +66,11 @@ docker compose up -d --build
 - API (напрямую): <http://127.0.0.1:8000/api/v1/health>
 
 Backend собирается из `backend/Dockerfile` (Python 3.12, `libgit2`, `git`),
-frontend — из `frontend/Dockerfile` (Node 20 build → nginx). SQLite хранится
-в `./data` (volume), nginx проксирует `/api` на сервис `backend`.
+frontend — из `frontend/Dockerfile` (Node 20 build → nginx). Docker Compose
+поднимает PostgreSQL 16 + `pgvector` (volume `./pgdata`), backend ждёт healthy
+`db` и выполняет `alembic upgrade head`; nginx проксирует `/api` на сервис
+`backend`. RAG-поиск по коду доступен на PostgreSQL (см.
+[GETTING_STARTED.md](docs/GETTING_STARTED.md#31-использование-postgresql-и-rag)).
 
 Для сканирования в Docker каталог с проектами монтируется в контейнер:
 по умолчанию `${PROJECTS_ROOT:-C:/Projects}:/projects`, а `SCAN_ROOTS=/projects`.

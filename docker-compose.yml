@@ -1,4 +1,23 @@
 services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iiruchating}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-iiruchating}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-iiruchating} -d ${POSTGRES_DB:-iiruchating}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -6,7 +25,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # SQLite database lives on the host and survives container rebuilds.
+      # Keep non-DB data (exports/backups) on the host.
       - ./data:/app/data
       # Host projects mounted read-write so scan/status/actions work.
       # PROJECTS_ROOT lets Windows/Linux users point at a different host root.
@@ -14,7 +33,7 @@ services:
       # Read-only Docker socket for container status (DooD, S24-002).
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      DATABASE_URL: sqlite+aiosqlite:////app/data/iiruchating.db
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iiruchating}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-iiruchating}
       SCAN_ROOTS: ${SCAN_ROOTS:-/projects}
       SCAN_DEPTH: ${SCAN_DEPTH:-3}
       DEBUG: ${DEBUG:-false}
@@ -26,6 +45,20 @@ services:
       DOCKER_PATH_MAP: ${DOCKER_PATH_MAP:-C:/Projects=/projects}
       DOCKER_STATUS_TTL_SECONDS: ${DOCKER_STATUS_TTL_SECONDS:-30}
       DOCKER_TIMEOUT_SECONDS: ${DOCKER_TIMEOUT_SECONDS:-3}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://127.0.0.1:1234/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1536}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_ALLOW_REMOTE: ${EMBEDDING_ALLOW_REMOTE:-false}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
+      RAG_MAX_FILE_BYTES: ${RAG_MAX_FILE_BYTES:-524288}
+      RAG_MAX_CHUNKS_PER_REPO: ${RAG_MAX_CHUNKS_PER_REPO:-2000}
+      RAG_CHUNK_CHARS: ${RAG_CHUNK_CHARS:-1000}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-150}
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - path: .env
         required: false

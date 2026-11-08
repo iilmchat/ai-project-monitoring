@@ -162,6 +162,8 @@ class CodeSearchService:
                     (await session.scalars(statement.order_by(Repository.id))).all()
                 )
                 for repository in repositories:
+                    repository_id = repository.id
+                    repository_path = repository.path
                     try:
                         indexed_chunks += await self._index_repository(
                             session, repository, force=force
@@ -169,10 +171,10 @@ class CodeSearchService:
                         await session.commit()
                     except Exception as exc:
                         await session.rollback()
-                        self._errors.append(f"{repository.path}: {exc}")
+                        self._errors.append(f"{repository_path}: {exc}")
                         logger.warning(
                             "rag_index_repository_failed",
-                            repository_id=repository.id,
+                            repository_id=repository_id,
                             error=str(exc),
                         )
             self._last_indexed_at = utcnow()
