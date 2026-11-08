@@ -194,10 +194,13 @@ class GlobalAnalyticsService:
             )
 
         llm = self._llm_service
-        if llm is None or not llm.enabled or not llm.remote_allowed():
+        if llm is None:
+            raise LLMUnavailableError("llm_unavailable")
+        config = await llm.resolve()
+        if not config.enabled or not llm.allows_remote(config):
             raise LLMUnavailableError("llm_unavailable")
 
-        cache_key = f"unification-advice:{ecosystem}:{package.name}:{llm.model}"
+        cache_key = f"unification-advice:{ecosystem}:{package.name}:{config.model}"
         async with self._session_factory() as session:
             row = await session.get(AICache, cache_key)
             if row is not None and _cache_is_fresh(row.checked_at, self._ai_ttl):
@@ -228,7 +231,7 @@ class GlobalAnalyticsService:
                 row = AICache(
                     key=cache_key,
                     kind="unification_advice",
-                    model=llm.model,
+                    model=config.model,
                 )
                 session.add(row)
             row.payload = {"advice": advice}
@@ -240,7 +243,7 @@ class GlobalAnalyticsService:
             package=package.name,
             advice=advice,
             cached=False,
-            model=llm.model,
+            model=config.model,
             generated_at=utcnow(),
         )
 

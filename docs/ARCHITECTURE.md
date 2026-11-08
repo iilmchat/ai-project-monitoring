@@ -961,6 +961,20 @@ POST /repositories/{id}/ai/cve-explain
   содержимое diff и его размер в логи не попадают.
 - AI-эндпоинты не меняют рабочую директорию, индекс и `.git`.
 
+### 15.7. AI provider profiles (Sprint 39)
+
+`AIProviderProfile` (`ai_provider_profiles`) хранит OpenAI-совместимые профили:
+`name`, `base_url`, `api_key`, `model_name`, `is_active`, `created_at`.
+`AIProviderService` выполняет CRUD и активацию (только один `is_active`).
+
+`LLMService.resolve()` при каждом AI-вызове читает активный профиль из БД и
+возвращает `LLMConfig`; при отсутствии активного профиля используется
+`Settings.llm_*` (обратная совместимость). Поэтому переключение профиля
+применяется без перезапуска. `api_key` берётся из профиля, маскируется в API и
+не логируется; remote endpoint разрешён только при `LLM_ALLOW_REMOTE=true`.
+Миграция `009` создаёт таблицу и переносит текущие `llm_*` из `app_settings` в
+первый профиль (активен, если `llm_enabled` был true).
+
 ---
 
 ## 16. GlobalAnalyticsService (v0.7.0, Sprint 33)

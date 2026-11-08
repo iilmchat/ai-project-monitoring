@@ -1,8 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
-import { getSettings, testLlm, updateSettings } from '../api/client'
-import type { AppSettings, LLMTestResult } from '../api/types'
+import {
+  activateAIProvider,
+  deleteAIProvider,
+  getAIProviders,
+  getSettings,
+  testLlm,
+  updateSettings,
+} from '../api/client'
+import type {
+  AIProviderProfile,
+  AppSettings,
+  LLMTestResult,
+} from '../api/types'
 import { useI18n } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -13,6 +24,8 @@ import {
   parseWorkspace,
 } from '../utils/workspace'
 
+const AIProviderModal = lazy(() => import('../components/AIProviderModal'))
+
 export default function SettingsPage() {
   const { t } = useI18n()
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -21,19 +34,17 @@ export default function SettingsPage() {
   const [gitflicToken, setGitflicToken] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [provider, setProvider] = useState<'github' | 'gitflic'>('github')
-  const [llmEnabled, setLlmEnabled] = useState(false)
-  const [llmBaseUrl, setLlmBaseUrl] = useState('http://127.0.0.1:1234/v1')
-  const [llmModel, setLlmModel] = useState('qwen2.5-coder-7b-instruct')
-  const [llmApiKey, setLlmApiKey] = useState('')
-  const [llmTimeout, setLlmTimeout] = useState(30)
-  const [llmMaxDiffChars, setLlmMaxDiffChars] = useState(10000)
-  const [llmAllowRemote, setLlmAllowRemote] = useState(false)
+  const [providers, setProviders] = useState<AIProviderProfile[]>([])
+  const [providersLoading, setProvidersLoading] = useState(true)
+  const [providerModal, setProviderModal] = useState<{
+    profile: AIProviderProfile | null
+  } | null>(null)
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmTest, setLlmTest] = useState<LLMTestResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [llmTesting, setLlmTesting] = useState(false)
-  const [llmTest, setLlmTest] = useState<LLMTestResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const viewsExport = useViewsStore((state) => state.getExportState)
@@ -43,29 +54,35 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let active = true
-    void getSettings()
-      .then((data) => {
+    void Promise.all([getSettings(), getAIProviders()])
+      .then(([data, providerData]) => {
         if (!active) return
         setSettings(data)
         setScanRoots(data.scan_roots)
         setProvider(data.default_canonical_provider === 'gitflic' ? 'gitflic' : 'github')
-        setLlmEnabled(data.llm_enabled)
-        setLlmBaseUrl(data.llm_base_url)
-        setLlmModel(data.llm_model)
-        setLlmTimeout(data.llm_timeout_seconds)
-        setLlmMaxDiffChars(data.llm_max_diff_chars)
-        setLlmAllowRemote(data.llm_allow_remote)
+        setProviders(providerData)
       })
       .catch(() => {
         if (active) setError(t('settings.loadError'))
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (active) {
+          setLoading(false)
+          setProvidersLoading(false)
+        }
       })
     return () => {
       active = false
     }
-  }, [])
+  }, [t])
+
+  async function reloadProviders() {
+    try {
+      setProviders(await getAIProviders())
+    } catch {
+      setError(t('settings.loadError'))
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -75,24 +92,16 @@ export default function SettingsPage() {
       const payload: Record<string, unknown> = {
         scan_roots: scanRoots,
         default_canonical_provider: provider,
-        llm_enabled: llmEnabled,
-        llm_base_url: llmBaseUrl.trim(),
-        llm_model: llmModel.trim(),
-        llm_timeout_seconds: llmTimeout,
-        llm_max_diff_chars: llmMaxDiffChars,
-        llm_allow_remote: llmAllowRemote,
       }
       if (githubToken.trim()) payload.github_token = githubToken.trim()
       if (gitflicToken.trim()) payload.gitflic_token = gitflicToken.trim()
       if (webhookSecret.trim()) payload.webhook_secret = webhookSecret.trim()
-      if (llmApiKey.trim()) payload.llm_api_key = llmApiKey.trim()
 
       const updated = await updateSettings(payload)
       setSettings(updated)
       setGithubToken('')
       setGitflicToken('')
       setWebhookSecret('')
-      setLlmApiKey('')
       setMessage(t('settings.saved'))
       setError(null)
     } catch {
@@ -100,6 +109,48 @@ export default function SettingsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleTestLlm() {
+    setLlmTesting(true)
+    try {
+      setLlmTest(await testLlm())
+    } catch {
+      setLlmTest({ status: 'error', latency_ms: 0, error: 'request_failed' })
+    } finally {
+      setLlmTesting(false)
+    }
+  }
+
+  async function handleActivate(profile: AIProviderProfile) {
+    try {
+      await activateAIProvider(profile.id)
+      await reloadProviders()
+      setLlmTest(null)
+      setMessage(t('settings.providerUpdated', { name: profile.name }))
+      setError(null)
+    } catch {
+      setError(t('settings.providerSaveError'))
+    }
+  }
+
+  async function handleDelete(profile: AIProviderProfile) {
+    if (!window.confirm(t('settings.providerDeleteConfirm', { name: profile.name }))) {
+      return
+    }
+    try {
+      await deleteAIProvider(profile.id)
+      await reloadProviders()
+      setMessage(t('settings.providerUpdated', { name: profile.name }))
+      setError(null)
+    } catch {
+      setError(t('settings.providerSaveError'))
+    }
+  }
+
+  function handleProviderSaved() {
+    void reloadProviders()
+    setLlmTest(null)
   }
 
   function handleExportWorkspace() {
@@ -134,17 +185,6 @@ export default function SettingsPage() {
       setError(t('settings.workspaceImportError'))
     } finally {
       event.target.value = ''
-    }
-  }
-
-  async function handleTestLlm() {
-    setLlmTesting(true)
-    try {
-      setLlmTest(await testLlm())
-    } catch {
-      setLlmTest({ status: 'error', latency_ms: 0, error: 'request_failed' })
-    } finally {
-      setLlmTesting(false)
     }
   }
 
@@ -231,111 +271,6 @@ export default function SettingsPage() {
             </label>
           </div>
 
-          <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {t('settings.aiSection')}
-              </h2>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleTestLlm()}
-                  disabled={llmTesting}
-                  className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  {llmTesting ? t('settings.testingLlm') : t('settings.testLlm')}
-                </button>
-                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={llmEnabled}
-                    onChange={(event) => setLlmEnabled(event.target.checked)}
-                  />
-                  {t('settings.enableAi')}
-                </label>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('settings.endpoint')}
-                <input
-                  value={llmBaseUrl}
-                  onChange={(event) => setLlmBaseUrl(event.target.value)}
-                  placeholder="http://127.0.0.1:1234/v1"
-                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('settings.model')}
-                <input
-                  value={llmModel}
-                  onChange={(event) => setLlmModel(event.target.value)}
-                  placeholder="qwen2.5-coder-7b-instruct"
-                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('settings.apiKey')}
-                <input
-                  type="password"
-                  value={llmApiKey}
-                  onChange={(event) => setLlmApiKey(event.target.value)}
-                  placeholder={settings?.llm_api_key || 'не задан'}
-                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('settings.timeout')}
-                  <input
-                    type="number"
-                    min={1}
-                    max={300}
-                    value={llmTimeout}
-                    onChange={(event) => setLlmTimeout(Number(event.target.value))}
-                    className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('settings.maxDiff')}
-                  <input
-                    type="number"
-                    min={100}
-                    max={100000}
-                    value={llmMaxDiffChars}
-                    onChange={(event) =>
-                      setLlmMaxDiffChars(Number(event.target.value))
-                    }
-                    className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                </label>
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={llmAllowRemote}
-                onChange={(event) => setLlmAllowRemote(event.target.checked)}
-              />
-              {t('settings.allowRemote')}
-            </label>
-            {llmTest && (
-              <p
-                className={`rounded-md px-3 py-2 text-sm ${
-                  llmTest.status === 'ok'
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                    : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
-                }`}
-              >
-                {llmTest.status === 'ok'
-                  ? `${t('settings.llmOk')} · ${t('settings.llmLatency', {
-                      ms: Math.round(llmTest.latency_ms),
-                    })}`
-                  : `${t('settings.llmError')}${llmTest.error ? ` (${llmTest.error})` : ''}`}
-              </p>
-            )}
-          </div>
-
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('settings.tokenHint')}
           </p>
@@ -351,6 +286,130 @@ export default function SettingsPage() {
           </div>
         </form>
       )}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {t('settings.aiProviders')}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.aiProvidersHint')}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleTestLlm()}
+              disabled={llmTesting}
+              className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {llmTesting ? t('settings.testingLlm') : t('settings.testLlm')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setProviderModal({ profile: null })}
+              className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
+            >
+              {t('settings.addProvider')}
+            </button>
+          </div>
+        </div>
+
+        {llmTest && (
+          <p
+            className={`mt-3 rounded-md px-3 py-2 text-sm ${
+              llmTest.status === 'ok'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
+            }`}
+          >
+            {llmTest.status === 'ok'
+              ? `${t('settings.llmOk')} · ${t('settings.llmLatency', {
+                  ms: Math.round(llmTest.latency_ms),
+                })}`
+              : `${t('settings.llmError')}${llmTest.error ? ` (${llmTest.error})` : ''}`}
+          </p>
+        )}
+
+        <div className="mt-4">
+          {providersLoading ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.providerLoading')}
+            </p>
+          ) : providers.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.providerEmpty')}
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {providers.map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 p-4 dark:border-slate-700"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-slate-900 dark:text-slate-100">
+                          {item.name}
+                        </p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            item.is_active
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                          title={
+                            item.is_active
+                              ? t('settings.providerActiveHint')
+                              : undefined
+                          }
+                        >
+                          {item.is_active
+                            ? t('settings.providerActive')
+                            : t('settings.providerInactive')}
+                        </span>
+                      </div>
+                      <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {item.model_name}
+                      </p>
+                      <p className="truncate font-mono text-xs text-slate-400 dark:text-slate-500">
+                        {item.base_url}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {!item.is_active && (
+                        <button
+                          type="button"
+                          onClick={() => void handleActivate(item)}
+                          className="rounded-md border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                        >
+                          {t('settings.activate')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setProviderModal({ profile: item })}
+                        className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {t('settings.edit')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(item)}
+                        className="rounded-md border border-red-200 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
+                      >
+                        {t('settings.delete')}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -386,6 +445,16 @@ export default function SettingsPage() {
           {t('settings.workspaceFormat', { filename: WORKSPACE_FILENAME })}
         </p>
       </div>
+
+      {providerModal && (
+        <Suspense fallback={null}>
+          <AIProviderModal
+            profile={providerModal.profile}
+            onClose={() => setProviderModal(null)}
+            onSaved={handleProviderSaved}
+          />
+        </Suspense>
+      )}
     </section>
   )
 }

@@ -22,6 +22,7 @@ from app.providers.osv_client import OsvClient
 from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.agent_task_service import AgentTaskService
+from app.services.ai_provider_service import AIProviderService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.compare_cache import CompareCache
@@ -131,7 +132,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hotspots_limit=resolved.insights_hotspots_limit,
         hotspots_days=resolved.insights_hotspots_days,
     )
-    llm_service = LLMService(resolved)
+    ai_provider_service = AIProviderService(session_factory)
+    llm_service = LLMService(resolved, session_factory=session_factory)
     global_analytics_service = GlobalAnalyticsService(
         session_factory,
         dependency_service,
@@ -221,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.identity_service = identity_service
     application.state.dashboard_advice_service = dashboard_advice_service
     application.state.agent_task_service = agent_task_service
+    application.state.ai_provider_service = ai_provider_service
     application.state.dependency_update_service = dependency_update_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service

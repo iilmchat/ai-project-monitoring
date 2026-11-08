@@ -10,6 +10,7 @@ from pathlib import Path
 from app.models.entities import Repository
 from app.schemas.repository import DirtyCountsResponse, RepositoryStatusResponse
 from app.services.agent_task_service import AgentTaskService
+from app.services.llm_service import LLMConfig
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -23,6 +24,20 @@ class FakeLLM:
         self.contexts: list[dict[str, object]] = []
 
     def remote_allowed(self) -> bool:
+        return True
+
+    async def resolve(self) -> LLMConfig:
+        return LLMConfig(
+            enabled=self.enabled,
+            provider="fake",
+            base_url="http://127.0.0.1:1234/v1",
+            model=self.model,
+            api_key="",
+            timeout=30.0,
+            allow_remote=True,
+        )
+
+    def allows_remote(self, config: LLMConfig) -> bool:
         return True
 
     async def generate_agent_task(

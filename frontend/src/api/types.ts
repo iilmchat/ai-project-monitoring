@@ -437,6 +437,30 @@ export interface GlobalDependencyReport {
   error: string | null
 }
 
+export interface AIProviderProfile {
+  id: number
+  name: string
+  base_url: string
+  api_key: string
+  model_name: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface AIProviderCreate {
+  name: string
+  base_url: string
+  model_name: string
+  api_key?: string
+}
+
+export interface AIProviderUpdate {
+  name?: string
+  base_url?: string
+  model_name?: string
+  api_key?: string
+}
+
 export interface DashboardAdvice {
   advice: string
   cached: boolean

@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import ipaddress
 import time
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import httpx
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.models.entities import AIProviderProfile
 
 logger = structlog.get_logger(__name__)
 
@@ -42,17 +46,74 @@ MAX_MESSAGE_CHARS = 2000
 MAX_EXPLANATION_CHARS = 2000
 
 
+@dataclass(frozen=True, slots=True)
+class LLMConfig:
+    """Effective LLM settings from an active profile or config fallback."""
+
+    enabled: bool
+    provider: str
+    base_url: str
+    model: str
+    api_key: str
+    timeout: float
+    allow_remote: bool
+
+
 class LLMService:
-    """Generate commit messages through a local OpenAI-compatible endpoint."""
+    """Generate commit messages through an OpenAI-compatible endpoint."""
 
     def __init__(
         self,
         settings: Settings,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self._settings = settings
         self._transport = transport
+        self._session_factory = session_factory
+
+    async def resolve(self) -> LLMConfig:
+        """Return the active DB profile, or the config fallback."""
+        if self._session_factory is not None:
+            async with self._session_factory() as session:
+                profile = await session.scalar(
+                    select(AIProviderProfile)
+                    .where(AIProviderProfile.is_active.is_(True))
+                    .order_by(AIProviderProfile.id)
+                    .limit(1)
+                )
+            if profile is not None:
+                return LLMConfig(
+                    enabled=True,
+                    provider=_provider_from_url(profile.base_url),
+                    base_url=profile.base_url.strip().rstrip("/"),
+                    model=profile.model_name,
+                    api_key=profile.api_key or "",
+                    timeout=self._settings.llm_timeout_seconds,
+                    allow_remote=self._settings.llm_allow_remote,
+                )
+        return LLMConfig(
+            enabled=bool(self._settings.llm_enabled),
+            provider=self.provider,
+            base_url=self.base_url,
+            model=self._settings.llm_model,
+            api_key=self._settings.llm_api_key,
+            timeout=self._settings.llm_timeout_seconds,
+            allow_remote=self._settings.llm_allow_remote,
+        )
+
+    async def availability(self) -> tuple[bool, str | None]:
+        """Return ``(ok, error)`` for the effective configuration."""
+        config = await self.resolve()
+        if not config.enabled:
+            return False, "llm_disabled"
+        if not _is_remote_allowed(config.base_url, config.allow_remote):
+            return False, "llm_remote_not_allowed"
+        return True, None
+
+    def allows_remote(self, config: LLMConfig) -> bool:
+        return _is_remote_allowed(config.base_url, config.allow_remote)
 
     @property
     def enabled(self) -> bool:
@@ -64,17 +125,7 @@ class LLMService:
 
     @property
     def provider(self) -> str:
-        parsed = urlparse(self._settings.llm_base_url)
-        host = (parsed.hostname or "").lower()
-        try:
-            port = parsed.port
-        except ValueError:
-            port = None
-        if port == 11434 or "ollama" in host:
-            return "ollama"
-        if port == 1234 or "lmstudio" in host:
-            return "lmstudio"
-        return "openai_compatible"
+        return _provider_from_url(self._settings.llm_base_url)
 
     @property
     def base_url(self) -> str:
@@ -82,16 +133,10 @@ class LLMService:
 
     def remote_allowed(self) -> bool:
         """Whether a non-loopback endpoint is explicitly permitted."""
-        if self._settings.llm_allow_remote:
-            return True
-        parsed = urlparse(self.base_url)
-        host = (parsed.hostname or "").lower()
-        if host in {"localhost", "localhost.localdomain"}:
-            return True
-        try:
-            return ipaddress.ip_address(host).is_loopback
-        except ValueError:
-            return False
+        return _is_remote_allowed(
+            self._settings.llm_base_url,
+            self._settings.llm_allow_remote,
+        )
 
     async def generate_commit_message(self, diff: str) -> str | None:
         """Return a generated commit message, or ``None`` on any failure."""
@@ -207,30 +252,31 @@ class LLMService:
 
     async def test_connection(self) -> tuple[bool, float, str | None]:
         """Ping the configured model and return ``(ok, latency_ms, error)``."""
-        if not self.enabled:
+        config = await self.resolve()
+        if not config.enabled:
             return False, 0.0, "llm_disabled"
-        if not self.remote_allowed():
+        if not _is_remote_allowed(config.base_url, config.allow_remote):
             return False, 0.0, "llm_remote_not_allowed"
 
         payload = {
-            "model": self.model,
+            "model": config.model,
             "messages": [{"role": "user", "content": "ping"}],
             "temperature": 0,
             "max_tokens": 8,
             "stream": False,
         }
         headers = {"Accept": "application/json"}
-        if self._settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {self._settings.llm_api_key}"
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
 
         started = time.perf_counter()
         try:
             async with httpx.AsyncClient(
-                timeout=min(self._settings.llm_timeout_seconds, 15.0),
+                timeout=min(config.timeout, 15.0),
                 transport=self._transport,
             ) as client:
                 response = await client.post(
-                    self._endpoint(),
+                    self._endpoint(config.base_url),
                     json=payload,
                     headers=headers,
                 )
@@ -258,11 +304,14 @@ class LLMService:
         max_tokens: int,
         max_chars: int,
     ) -> str | None:
-        if not self.enabled or not self.remote_allowed():
+        config = await self.resolve()
+        if not config.enabled:
+            return None
+        if not _is_remote_allowed(config.base_url, config.allow_remote):
             return None
 
         payload = {
-            "model": self.model,
+            "model": config.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -272,30 +321,30 @@ class LLMService:
             "stream": False,
         }
         headers = {"Accept": "application/json"}
-        if self._settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {self._settings.llm_api_key}"
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
 
         try:
             async with httpx.AsyncClient(
-                timeout=self._settings.llm_timeout_seconds,
+                timeout=config.timeout,
                 transport=self._transport,
             ) as client:
                 response = await client.post(
-                    self._endpoint(),
+                    self._endpoint(config.base_url),
                     json=payload,
                     headers=headers,
                 )
         except httpx.TimeoutException:
             logger.warning(
                 "llm_request_failed",
-                provider=self.provider,
+                provider=config.provider,
                 reason="timeout",
             )
             return None
         except httpx.HTTPError:
             logger.warning(
                 "llm_request_failed",
-                provider=self.provider,
+                provider=config.provider,
                 reason="http_error",
             )
             return None
@@ -303,7 +352,7 @@ class LLMService:
         if response.status_code != 200:
             logger.warning(
                 "llm_request_failed",
-                provider=self.provider,
+                provider=config.provider,
                 status_code=response.status_code,
             )
             return None
@@ -323,13 +372,40 @@ class LLMService:
             return None
         return message[:max_chars]
 
-    def _endpoint(self) -> str:
-        base = self.base_url
+    def _endpoint(self, base_url: str | None = None) -> str:
+        base = (base_url or self.base_url).strip().rstrip("/")
         if base.endswith("/chat/completions"):
             return base
         if base.endswith("/v1"):
             return f"{base}/chat/completions"
         return f"{base}/v1/chat/completions"
+
+
+def _provider_from_url(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port == 11434 or "ollama" in host:
+        return "ollama"
+    if port == 1234 or "lmstudio" in host:
+        return "lmstudio"
+    return "openai_compatible"
+
+
+def _is_remote_allowed(base_url: str, allow_remote: bool) -> bool:
+    if allow_remote:
+        return True
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").lower()
+    if host in {"localhost", "localhost.localdomain"}:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _language_instruction(language: str) -> str:
@@ -381,5 +457,6 @@ __all__ = [
     "MAX_MESSAGE_CHARS",
     "SECURITY_SYSTEM_PROMPT",
     "UNIFICATION_SYSTEM_PROMPT",
+    "LLMConfig",
     "LLMService",
 ]

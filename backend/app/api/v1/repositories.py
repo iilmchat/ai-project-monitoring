@@ -387,16 +387,13 @@ async def generate_commit_message(
 ) -> CommitMessageSuggestion:
     repository = await _get_repository(session, repository_id)
     service = _llm_service(request)
-    if not service.enabled:
+    ok, error = await service.availability()
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="llm_disabled",
+            detail=error or "llm_disabled",
         )
-    if not service.remote_allowed():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="llm_remote_not_allowed",
-        )
+    config = await service.resolve()
 
     diff_result = await asyncio.to_thread(
         get_worktree_diff, repository.path, 10
@@ -431,8 +428,8 @@ async def generate_commit_message(
     return CommitMessageSuggestion(
         repository_id=repository_id,
         message=message,
-        provider=service.provider,
-        model=service.model,
+        provider=config.provider,
+        model=config.model,
         truncated=truncated,
         diff_chars=len(original),
         files_changed=_count_diff_files(original),
@@ -461,18 +458,15 @@ async def explain_repository_cve(
 ) -> CveExplanation:
     await _get_repository(session, repository_id)
     service = _llm_service(request)
-    if not service.enabled:
+    ok, error = await service.availability()
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="llm_disabled",
+            detail=error or "llm_disabled",
         )
-    if not service.remote_allowed():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="llm_remote_not_allowed",
-        )
+    config = await service.resolve()
 
-    cache_key = f"cve-explain:{payload.cve_id.strip()}:{service.model}"
+    cache_key = f"cve-explain:{payload.cve_id.strip()}:{config.model}"
     row = await session.get(AICache, cache_key)
     ttl = int(request.app.state.settings.ai_cache_ttl_seconds)
     if row is not None and _cache_is_fresh(row.checked_at, ttl):
@@ -500,7 +494,7 @@ async def explain_repository_cve(
         row = AICache(
             key=cache_key,
             kind="cve_explain",
-            model=service.model,
+            model=config.model,
         )
         session.add(row)
     row.payload = {"explanation": explanation}
@@ -509,7 +503,7 @@ async def explain_repository_cve(
     return CveExplanation(
         explanation=explanation,
         cached=False,
-        model=service.model,
+        model=config.model,
         generated_at=utcnow(),
     )
 

@@ -35,7 +35,8 @@ class AgentTaskService:
         *,
         language: str = "ru",
     ) -> AgentTask:
-        if not self._llm.enabled or not self._llm.remote_allowed():
+        config = await self._llm.resolve()
+        if not config.enabled or not self._llm.allows_remote(config):
             raise AgentTaskUnavailableError("llm_unavailable")
 
         conflicts = await asyncio.to_thread(get_conflicts, repository.path)
@@ -72,7 +73,7 @@ class AgentTaskService:
         )
         return AgentTask(
             task=task,
-            model=self._llm.model,
+            model=config.model,
             generated_at=utcnow(),
         )
 

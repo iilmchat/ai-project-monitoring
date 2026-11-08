@@ -26,6 +26,10 @@
 - feat(ai): `POST /repositories/{id}/ai/agent-task` — Markdown-задача для DSH/OpenCode по state/dirty/конфликтам/последним коммитам; lazy-модалка с копированием (S38-002/003).
 - feat(settings): `POST /settings/llm/test` — ping модели и latency/error; кнопка «Проверить LLM» в настройках (S38-003).
 - test(ai): `test_dashboard_advice.py`, `test_agent_task.py`, тест `/settings/llm/test` и UI-тест AI-дайджеста (S38-004).
+- feat(ai): `AIProviderProfile` + миграция `009`; CRUD `/settings/ai-providers`, активация, маскировка ключей и перенос текущих `llm_*` в профиль по умолчанию (S39-001).
+- feat(ai): `LLMService.resolve()` читает активный профиль из БД при каждом вызове; fallback на `config.py`, переключение без перезапуска (S39-002).
+- feat(ui): список AI-провайдеров в настройках, lazy-модалка добавления/редактирования, активация/удаление, пустой ключ сохраняет старый (S39-003).
+- test(ai): `test_ai_providers.py` — CRUD, маскировка, активация и переключение LLMService (S39-004).
 
 ### Документация
 

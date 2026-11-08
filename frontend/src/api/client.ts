@@ -1,6 +1,9 @@
 import type {
   ActionLog,
   AgentTask,
+  AIProviderCreate,
+  AIProviderProfile,
+  AIProviderUpdate,
   AppSettings,
   CIStatus,
   CommitInfo,
@@ -36,7 +39,7 @@ import type {
 const API_BASE = '/api/v1'
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH'
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>
 }
@@ -57,6 +60,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+  }
+  if (response.status === 204) {
+    return undefined as T
   }
   return (await response.json()) as T
 }
@@ -308,6 +314,44 @@ export async function generateAgentTask(
     method: 'POST',
     body: { language },
   })
+}
+
+export async function getAIProviders(): Promise<AIProviderProfile[]> {
+  return request<AIProviderProfile[]>('/settings/ai-providers')
+}
+
+export async function createAIProvider(
+  payload: AIProviderCreate,
+): Promise<AIProviderProfile> {
+  return request<AIProviderProfile>('/settings/ai-providers', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function updateAIProvider(
+  profileId: number,
+  payload: AIProviderUpdate,
+): Promise<AIProviderProfile> {
+  return request<AIProviderProfile>(`/settings/ai-providers/${profileId}`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export async function deleteAIProvider(profileId: number): Promise<void> {
+  await request<void>(`/settings/ai-providers/${profileId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function activateAIProvider(
+  profileId: number,
+): Promise<AIProviderProfile> {
+  return request<AIProviderProfile>(
+    `/settings/ai-providers/${profileId}/activate`,
+    { method: 'POST' },
+  )
 }
 
 export async function testLlm(): Promise<LLMTestResult> {

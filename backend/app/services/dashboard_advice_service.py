@@ -45,10 +45,11 @@ class DashboardAdviceService:
         self._concurrency = max(concurrency, 1)
 
     async def get_advice(self, language: str = "ru") -> DashboardAdvice:
-        if not self._llm.enabled or not self._llm.remote_allowed():
+        config = await self._llm.resolve()
+        if not config.enabled or not self._llm.allows_remote(config):
             raise DashboardAdviceUnavailableError("llm_unavailable")
 
-        cache_key = f"dashboard-advice:{language}:{self._llm.model}"
+        cache_key = f"dashboard-advice:{language}:{config.model}"
         async with self._session_factory() as session:
             row = await session.get(AICache, cache_key)
             if row is not None and _cache_is_fresh(row.checked_at, self._ttl):
@@ -77,7 +78,7 @@ class DashboardAdviceService:
                 row = AICache(
                     key=cache_key,
                     kind="dashboard_advice",
-                    model=self._llm.model,
+                    model=config.model,
                 )
                 session.add(row)
             row.payload = {"advice": advice, "stats": stats}
@@ -87,7 +88,7 @@ class DashboardAdviceService:
         return DashboardAdvice(
             advice=advice,
             cached=False,
-            model=self._llm.model,
+            model=config.model,
             generated_at=utcnow(),
             stats=stats,
         )

@@ -1,7 +1,7 @@
 # TODO v0.8.0 — Actionable UX, Correct Dependencies & AI Everywhere
 
 **Версия:** v0.8.0 «Actionable Dashboard»
-**Статус:** 🚧 Sprint 35–38 завершены; следующий — Sprint 39 (multi-provider AI)
+**Статус:** 🚧 Sprint 35–39 завершены; следующий — Sprint 40 (release v0.8.0)
 **Предыдущий этап:** v0.7.0 — [`TODO_V0.7.md`](TODO_V0.7.md)
 **Последнее обновление:** 2026-11-07
 
@@ -187,23 +187,23 @@ AI-провайдеры.
 
 ---
 
-### Спринт 39 — Multi-Provider AI (OpenAI-compatible & adapters)
+### Спринт 39 — Multi-Provider AI (OpenAI-compatible & adapters) — ✅ Завершён (2026-11-08)
 
-- [ ] **S39-001. Профили провайдеров.**
+- [x] **S39-001. Профили провайдеров.**
   - Таблица `llm_profiles`: name, kind, base_url, model, api_key, headers,
     enabled, is_default, allow_remote.
   - Поддержка: local (LM Studio/Ollama), OpenAI, DeepSeek, OpenRouter,
     Yandex Foundation Models, GigaChat (OAuth adapter), GPtunnel, OpenCode.
   - Backward compatible: старые `llm_*` настройки → профиль `default`.
-- [ ] **S39-002. API и UI.**
+- [x] **S39-002. API и UI.**
   - CRUD профилей, «Проверить подключение», выбор default и per-feature
     (commit/CVE/рекомендации).
   - Маскировка ключей, предупреждение для remote, никогда не отдавать ключ.
-- [ ] **S39-003. Надёжность.**
+- [x] **S39-003. Надёжность.**
   - Timeout, circuit breaker, retry с backoff (только идемпотентные запросы),
     rate-limit ответы, fallback на детерминированный текст.
   - Метрики по провайдеру; логи без промптов и ключей.
-- [ ] **S39-004. ADR и тесты.**
+- [x] **S39-004. ADR и тесты.**
   - ADR-0012 «Multi-provider AI profiles».
   - Тесты: маскировка, remote guard, выбор профиля, OAuth GigaChat (mock),
     ошибки 401/403/429/5xx, fallback.
