@@ -156,6 +156,7 @@ pnpm --dir frontend exec playwright install chromium
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.9.0** (2026-11-08) |
+| Планируется | **v1.0.0 «Secure Desktop»** — single-user auth, Tauri |
 | Спринты | 1–44 (v0.9.0 «Stability & RAG») |
 | Тесты backend | **246** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **44** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
@@ -210,6 +211,18 @@ pnpm --dir frontend exec playwright install chromium
 
 **v0.9.0+:** синхронизация Saved Views в БД, история статусов и тренды,
 расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
+
+**v1.0.0 «Secure Desktop»** — планируется
+([`TODO_V1.0.md`](TODO_V1.0.md)):
+
+- **Sprint 47 — Single-User Authentication:** bcrypt-пароль, JWT, httpOnly
+  cookie, middleware для защиты API при доступе по LAN; экран логина и protected
+  routes.
+- **Sprint 48 — Tauri Desktop App:** Windows/macOS приложение с Python-sidecar
+  (PyInstaller), автоматический запуск/остановка backend, работа без Docker;
+  Docker остаётся серверной опцией.
+- **Sprint 49 — Release v1.0.0:** аудит безопасности, документация, релизные
+  бинарники Windows/macOS, GitHub Release и GitFlic mirror.
 
 ---
 

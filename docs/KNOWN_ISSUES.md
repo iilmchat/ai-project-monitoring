@@ -2,7 +2,7 @@
 
 **Последнее обновление:** 2026-11-08
 
-**Всего проблем:** 16 (активных: 10, решено: 6; KI-015/016 не заводились)
+**Всего проблем:** 18 (активных: 12, решено: 6; KI-015/016 не заводились)
 
 ---
 
@@ -183,3 +183,50 @@ refresh + retry; `expires_at` показывается в UI; ошибки
 `invalid_client`/`unsupported_scope`/`provider_unavailable` различимы. Тесты —
 с mock HTTP, без реальных ключей. Токен и `client_secret` не логируются и не
 возвращаются API.
+
+---
+
+## KI-019 · Accepted · High · desktop · Сборка Python-бинарника с pygit2/pgvector под разные ОС
+
+**Описание:** Tauri-приложение запускает backend как PyInstaller-sidecar. В
+зависимостях есть нативные компоненты: `pygit2` (libgit2), `asyncpg`, а для RAG —
+PostgreSQL + `pgvector`. PyInstaller должен найти и включить `.dll`/`.so`/`.dylib`
+libgit2 и скрытые импорты Alembic/asyncpg; на Windows, macOS (Intel/ARM) и Linux
+наборы бинарников различаются. `pgvector` — серверное расширение, его нельзя
+«встроить» в Python-бинарник без отдельного PostgreSQL.
+
+**Влияние:** sidecar может упасть на чистой машине с `ImportError`/`DLL load
+failed`, особенно на macOS ARM и Windows без Visual C++ Runtime. Desktop-сборка
+без внешнего PostgreSQL не даёт RAG, хотя остальные функции работают.
+
+**Workaround:** собирать sidecar на целевой ОС в CI-матрице; использовать
+one-folder (не one-file) для предсказуемых путей к libgit2; проверять
+`ldd`/`otool`/`dumpbin`; документировать, что RAG в desktop требует внешнего
+PostgreSQL с pgvector; для macOS — universal2 или отдельные Intel/ARM сборки.
+
+**План (Sprint 48):** spec-файл PyInstaller с hidden imports, CI-сборка
+Windows/macOS, smoke-тест на чистой машине, fallback `rag_unavailable` при
+отсутствии PostgreSQL. Встроенный PostgreSQL/pgvector — кандидат v1.1.
+
+---
+
+## KI-020 · Accepted · Med · desktop · Хранение JWT в десктопном приложении
+
+**Описание:** в web-режиме токен хранится в `httpOnly` cookie и недоступен JS.
+В Tauri webview cookie может сохраняться между запусками, но при использовании
+Bearer-токена его нужно где-то хранить. `localStorage` уязвим к XSS; файл в
+app data — к чтению другим пользователем ОС. При этом desktop-приложение
+single-user и работает на локальной машине.
+
+**Влияние:** компрометация webview/XSS может привести к краже сессии; при
+хранении токена в файле — к доступу после смены пользователя ОС. Долгий TTL
+увеличивает окно атаки; logout должен очищать хранилище.
+
+**Workaround:** использовать `httpOnly` cookie в web; в desktop — OS keychain
+(Windows Credential Manager / macOS Keychain) или Tauri secure storage; короткий
+TTL, logout при закрытии приложения, CSP без remote-origin, запрет
+`dangerousRemoteDomainIpcAccess`.
+
+**План (Sprint 48/49):** ADR-0016/0017 фиксируют cookie для web и keychain +
+Bearer fallback для desktop; тесты на logout/expiry; аудит XSS/CSP в S49;
+секреты не логируются и не попадают в артефакты.

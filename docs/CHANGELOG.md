@@ -9,6 +9,7 @@
 - test(rag): `backend/tests/test_rag_postgres.py` — реальная индексация и поиск на PostgreSQL с детерминированными мок-эмбеддингами; skip без `TEST_DATABASE_URL` (S45-003).
 - feat(ui): на `/search` кнопка «Запустить индексацию (RAG)», статус «Индексация запущена…» и polling счётчика чанков (S45-004).
 - docs: `GETTING_STARTED.md` — раздел «Использование PostgreSQL и RAG»; `.env.example` — `POSTGRES_*` и `EMBEDDING_*`.
+- docs(planning): `TODO_V1.0.md` — roadmap v1.0.0 (single-user auth, Tauri desktop, release), контракты auth в SPEC §3.28, архитектура AuthService/Tauri в ARCHITECTURE §24–25, KI-019/KI-020.
 
 ## [0.9.0] - 2026-11-08
 

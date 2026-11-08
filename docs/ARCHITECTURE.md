@@ -7,7 +7,8 @@
 §16 (global analytics) — в Sprint 33; §17 (dependency updates) — в Sprint 34;
 §18 (manifest discovery/README) — в Sprint 35; §19 (identity/duplicates) —
 в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 (`CodeSearchService`) и
-§22 (`GigaChatProvider`) — **план v0.9.0** (Sprints 43–44); §23 — дальнейшее.
+§22 (`GigaChatProvider`) — реализованы в v0.9.0 (Sprints 43–44); §23 — дальнейшее;
+§24 (`AuthService`) и §25 (Tauri desktop) — **план v1.0.0** (Sprints 47–48).
 
 ---
 
@@ -1340,8 +1341,8 @@ UI (модалка профиля)
 
 ## 23. Что ещё не сделано (v0.9+)
 
-- Полноценная аутентификация/регистрация пользователей (SPEC §2: один
-  пользователь; отдельная фича с ADR).
+- Single-user auth (v1.0.0, Sprint 47) — см. §24 и SPEC §3.28.
+- Desktop-приложение Tauri (v1.0.0, Sprint 48) — см. §25.
 - RAG на SQLite (v0.9.0 — только PostgreSQL + pgvector).
 - Синхронизация saved views в БД между устройствами (v0.8.0; в v0.6.0–v0.7.0 —
   только файловый export/import).
@@ -1352,3 +1353,99 @@ UI (модалка профиля)
 - Полное сканирование истории Git на секреты (gitleaks/trufflehog).
 - Приватные registry и аутентификация в PyPI/npm, OSV Enterprise.
 - Остальные DORA-метрики (lead time, change failure rate, MTTR).
+
+---
+
+## 24. AuthService — single-user JWT (v1.0.0, Sprint 47 — план)
+
+> **Статус:** план. В v0.9.0 API без auth; контракт фиксируется в SPEC §3.28.
+
+**Задача.** Закрыть API при доступе по LAN, сохранив локальный single-user
+сценарий и read-only политику.
+
+### 24.1. Компоненты
+
+- `users` (миграция `012`): `id`, `username* UNIQUE`, `password_hash`,
+  `is_active`, `created_at`, `last_login_at`.
+- `AuthService`:
+  - bcrypt-hash/verify (cost ≥ 12), bootstrap пользователя из
+    `AUTH_ADMIN_USERNAME` + `AUTH_ADMIN_PASSWORD_HASH`;
+  - issue/verify JWT HS256 (`sub`, `iat`, `exp`, `jti`), секрет
+    `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS`;
+  - login rate-limit (5/60 с на IP+username), без логирования пароля.
+- `AuthMiddleware`/dependency:
+  - принимает `iiruchating_session` cookie **или** `Authorization: Bearer`;
+  - пропускает `/api/v1/health`, `/api/v1/metrics`, `/api/v1/auth/login`;
+  - при ошибке — `401`/`403`/`429` без раскрытия деталей.
+
+### 24.2. Поток
+
+```
+POST /api/v1/auth/login {username,password}
+  → AuthService.verify (bcrypt)
+  → JWT + Set-Cookie HttpOnly; SameSite=Lax; Secure (HTTPS)
+  → LoginResponse {access_token, expires_at, user}
+
+Любой защищённый запрос
+  → AuthMiddleware: cookie/Bearer → verify JWT → request.state.user
+  → 401 token_expired / invalid_credentials
+```
+
+### 24.3. Frontend
+
+- `AuthProvider`: bootstrap через `GET /auth/me`, состояние `loading/authenticated`.
+- `/login`: форма, ошибки `invalid_credentials`/`too_many_attempts`, RU/EN.
+- Protected routes: редирект на `/login?next=...`; `401` → logout/redirect.
+- Web: httpOnly cookie + `credentials: include`. Desktop: Bearer fallback
+  (KI-020).
+
+### 24.4. Безопасность
+
+- Пароли — только bcrypt-hash; JWT/пароль/cookie не логируются.
+- Cookie `HttpOnly`, `SameSite=Lax`, `Secure` при HTTPS; CSRF — same-site +
+  проверка Origin для мутаций.
+- `AUTH_ENABLED=false` для localhost, `true` для Docker/LAN (решение ADR-0016).
+- Auth не ослабляет read-only: мутации по-прежнему требуют `confirm=true`.
+
+---
+
+## 25. Tauri desktop app (v1.0.0, Sprint 48 — план)
+
+> **Статус:** план. Docker остаётся серверным вариантом; desktop не требует
+> Docker/Python/Node у пользователя.
+
+### 25.1. Упаковка
+
+```
+Tauri shell (Rust)
+  ├─ sidecar: iiruchating-backend(.exe) — PyInstaller one-folder
+  │    ├─ FastAPI + uvicorn
+  │    ├─ pygit2/libgit2, SQLite (default)
+  │    └─ data dir: %APPDATA%/IIRuchating | ~/Library/Application Support/IIRuchating
+  ├─ spawn: --port <free> --data-dir <appdata>
+  ├─ health poll: GET /api/v1/health (db_ok=true)
+  ├─ webview: React UI → http://127.0.0.1:<port>
+  └─ exit: graceful shutdown sidecar → fallback kill
+```
+
+- `bundle.externalBin` указывает на sidecar; сборка — CI-матрица Windows/macOS.
+- Порт выбирается свободный; при конфликте — повтор. Логи — в app data.
+- SQLite по умолчанию; RAG — только при внешнем PostgreSQL + pgvector
+  (`DATABASE_URL`). Встроенный PostgreSQL — v1.1 (KI-019).
+- Auth: webview cookie или Bearer из OS keychain (KI-020).
+- CSP: только `http://127.0.0.1:<port>`, без remote-origin; single-instance lock.
+
+### 25.2. Lifecycle и надёжность
+
+- `spawn` → health poll с таймаутом → показать UI; ошибка → понятный экран/лог.
+- Закрытие окна → SIGTERM/CTRL_BREAK → ожидание завершения → kill при таймауте.
+- Падение sidecar → перезапуск с backoff и лог; не оставлять orphan-процессы.
+- Обновления приложения — через Tauri updater (план), данные не удаляются.
+
+### 25.3. Сборка и релиз
+
+- PyInstaller spec: hidden imports pygit2, asyncpg, alembic; libgit2 в bundle.
+- Windows `.msi`/`.exe`, macOS `.dmg`; checksums и подпись (если сертификат).
+- Docker-образ и desktop-сборка используют один backend SHA.
+- Тесты: sidecar start/stop, health, port conflict, crash recovery, smoke
+  установки на чистую машину.

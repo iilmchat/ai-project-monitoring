@@ -5,10 +5,11 @@ Docker §3.14 реализован в Sprint 24; dependency §3.15 (Python/Node)
 Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33), global
 analytics §3.19 и dependency updates §3.20 — реализованы в Sprint 32–34.
-§3.26 (RAG-поиск по коду) и §3.27 (GigaChat OAuth) — **план v0.9.0**
-(Sprints 43–44), в v0.8.0 не реализованы; см. [`TODO_V0.9.md`](../TODO_V0.9.md).
+§3.26 (RAG-поиск по коду) и §3.27 (GigaChat OAuth) реализованы в v0.9.0
+(Sprints 43–44). §3.28 (single-user auth) — **план v1.0.0** (Sprint 47);
+см. [`TODO_V1.0.md`](../TODO_V1.0.md).
 
-**Версия:** v0.8.0 «AI Workspace» · **Планируется:** v0.9.0 «Search & Reliability» · **Обновлено:** 2026-11-08
+**Версия:** v0.9.0 «Stability & RAG» · **Планируется:** v1.0.0 «Secure Desktop» · **Обновлено:** 2026-11-08
 
 ---
 
@@ -32,9 +33,11 @@ analytics §3.19 и dependency updates §3.20 — реализованы в Spri
 | **R12** | **AI (v0.7.0): локальный LLM через OpenAI-совместимый API — черновик commit message и объяснение CVE без автоматических мутаций** |
 | **R13** | **Global analytics (v0.7.0): сводка версий популярных пакетов по всем tracked-репозиториям и кандидаты на унификацию** |
 | **R14** | **Dependency updates (v0.7.0): обновление пакетов только по явному подтверждению, на чистом worktree и с аудитом `action_log`** |
-| **R15** | **E2E и bundle budget (v0.9.0, план): 3 критических сценария Playwright; entry bundle < 90 kB gzip** |
-| **R16** | **GigaChat OAuth и smart cache (v0.9.0, план): нативный OAuth 2.0 adapter и отказ от вызова LLM при неизменном состоянии** |
-| **R17** | **RAG-поиск по коду (v0.9.0, план): индексация README/docs/src в pgvector и семантический поиск без изменения репозиториев** |
+| **R15** | **E2E и bundle budget (v0.9.0): 3 критических сценария Playwright; entry bundle < 90 kB gzip** |
+| **R16** | **GigaChat OAuth и smart cache (v0.9.0): нативный OAuth 2.0 adapter и отказ от вызова LLM при неизменном состоянии** |
+| **R17** | **RAG-поиск по коду (v0.9.0): индексация README/docs/src в pgvector и семантический поиск без изменения репозиториев** |
+| **R18** | **Single-user auth (v1.0.0, план): защита API при доступе по LAN через bcrypt-пароль, JWT и httpOnly cookie; один пользователь без RBAC** |
+| **R19** | **Desktop app (v1.0.0, план): Tauri-обёртка с автоматическим запуском Python-sidecar; Docker остаётся серверной опцией** |
 
 **Вне области v0.1.0:** автоматический merge/rebase, CI-интеграция, мобильное приложение, мультипользовательский режим.
 
@@ -42,13 +45,23 @@ analytics §3.19 и dependency updates §3.20 — реализованы в Spri
 
 ## 2. Роли
 
-В v0.1.0 — **один пользователь** (владелец локальной машины). Аутентификация отсутствует (bind на `127.0.0.1`). Провайдеры GitHub/GitFlic авторизуются персональными токенами (`GITHUB_TOKEN`, `GITFLIC_TOKEN`), хранятся в `.env`. LLM API key (если нужен) хранится в `app_settings`, маскируется в API и не экспортируется.
+В v0.9.0 — **один пользователь** (владелец локальной машины). Аутентификация
+отсутствует при bind на `127.0.0.1`; при доступе по LAN включается single-user
+auth (v1.0.0, §3.28). Провайдеры GitHub/GitFlic авторизуются персональными
+токенами (`GITHUB_TOKEN`, `GITFLIC_TOKEN`), хранятся в `.env`. LLM API key (если
+нужен) хранится в `app_settings`, маскируется в API и не экспортируется.
+
+**v1.0.0 (план):** без регистрации и RBAC. Пользователь создаётся bootstrap-ом
+из `.env`; пароль хранится только как bcrypt-hash; JWT выдаётся на ограниченный
+TTL. Подробности — §3.28 и [`TODO_V1.0.md`](../TODO_V1.0.md).
 
 ---
 
 ## 3. API (v1)
 
-Базовый путь: `/api/v1`. Аутентификация локального API не требуется.
+Базовый путь: `/api/v1`. В v0.9.0 аутентификация локального API не требуется.
+В v1.0.0 (план) все роуты, кроме `/health`, `/metrics` и `/auth/login`,
+требуют JWT (cookie или `Authorization: Bearer`); см. §3.28.
 
 ### 3.1. Health
 
@@ -1379,6 +1392,70 @@ running, errors[]}`.
 
 ---
 
+### 3.28. Single-user authentication (v1.0.0, Sprint 47 — план)
+
+> **Статус:** план. В v0.9.0 auth нет; API доступен локально. Контракт
+> фиксируется заранее, чтобы Sprint 47 не менял SPEC задним числом.
+> См. [`TODO_V1.0.md`](../TODO_V1.0.md) и ADR-0016.
+
+Один пользователь без регистрации, ролей и мультитенантности. Auth включается
+флагом `AUTH_ENABLED`; при `true` все роуты, кроме перечисленных ниже, требуют
+валидный JWT.
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/api/v1/auth/login` | `{username, password}` | `LoginResponse` + `Set-Cookie` |
+| GET | `/api/v1/auth/me` | — | `{id, username}` |
+| POST | `/api/v1/auth/logout` | — | `204`, cookie очищена |
+
+**`LoginResponse`:**
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer",
+  "expires_at": "2026-11-09T08:00:00Z",
+  "user": {"id": 1, "username": "owner"}
+}
+```
+
+- JWT: HS256, claims `sub` (user id), `iat`, `exp`, `jti`; секрет
+  `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (default 43200).
+- Cookie: `iiruchating_session=<jwt>; HttpOnly; SameSite=Lax; Path=/;
+  Max-Age=<ttl>`; `Secure` — если запрос пришёл по HTTPS.
+- Middleware принимает cookie **или** `Authorization: Bearer <jwt>`.
+- Без токена: `/api/v1/health`, `/api/v1/metrics`, `/api/v1/auth/login`
+  доступны; остальные — `401`.
+- Ошибки: `401 invalid_credentials`, `401 token_expired`,
+  `403 user_disabled`, `429 too_many_attempts`.
+- Rate-limit логина: 5 попыток / 60 с на IP+username; пароль и JWT не логируются.
+- Пароль хранится только как bcrypt-hash (cost ≥ 12); в ответах и логах hash
+  отсутствует.
+- Bootstrap: при пустой `users` пользователь создаётся из
+  `AUTH_ADMIN_USERNAME` + `AUTH_ADMIN_PASSWORD_HASH`. При
+  `AUTH_ENABLED=true` и отсутствии hash приложение не стартует.
+- `AUTH_ENABLED` default `false` для локального `127.0.0.1`; для Docker/LAN
+  рекомендуется `true` (см. `.env.example`).
+- Frontend: `/login`, `AuthProvider`, protected routes, редирект на `/login`
+  при `401`, logout; в desktop-сборке — Bearer fallback (KI-020).
+- Read-only политика не меняется: auth только закрывает доступ, но не даёт
+  права на мутации без существующих подтверждений.
+
+**Схема `users`:**
+
+```
+users(
+  id, username* UNIQUE, password_hash, is_active BOOLEAN,
+  created_at, last_login_at NULL
+)
+```
+
+**Переменные окружения:** `AUTH_ENABLED`, `AUTH_ADMIN_USERNAME`,
+`AUTH_ADMIN_PASSWORD_HASH`, `AUTH_JWT_SECRET`, `AUTH_TOKEN_TTL_SECONDS`,
+`AUTH_LOGIN_RATE_LIMIT`, `AUTH_LOGIN_RATE_WINDOW_SECONDS`.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
@@ -1392,6 +1469,11 @@ repositories(
   mirror_policy      TEXT DEFAULT 'github_to_gitflic',
   last_seen_at, created_at, updated_at,
   tags JSONB
+)
+
+users(                      -- v1.0.0 (план, Sprint 47)
+  id, username* UNIQUE, password_hash, is_active BOOLEAN,
+  created_at, last_login_at NULL
 )
 
 repository_status(
@@ -1519,6 +1601,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
+| **Auth (v1.0.0, план)** | **`AUTH_ENABLED` (default false для localhost), `AUTH_ADMIN_USERNAME`, `AUTH_ADMIN_PASSWORD_HASH` (bcrypt), `AUTH_JWT_SECRET` (≥32 байта), `AUTH_TOKEN_TTL_SECONDS` (default 43200), `AUTH_LOGIN_RATE_LIMIT` (default 5), `AUTH_LOGIN_RATE_WINDOW_SECONDS` (default 60); cookie `iiruchating_session` HttpOnly/SameSite=Lax** |
 | **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
 | **RAG (v0.9.0, реализовано)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL` (default `text-embedding-3-small`), `EMBEDDING_DIMENSIONS` (default 1536), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO` (default 2000), `RAG_CHUNK_CHARS` (default 1000), `RAG_CHUNK_OVERLAP` (default 150); на SQLite — `503 rag_unavailable`** |
 
@@ -1637,11 +1720,11 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 - [x] Релиз: версии `0.8.0`, CHANGELOG/RELEASES/README/SPEC/ARCHITECTURE
       согласованы; `ruff`/`mypy`/`pytest`/frontend-проверки зелёные.
 
-### 6.6. v0.9.0 (план, спринты 42–44)
+### 6.6. v0.9.0 (реализовано, спринты 42–44)
 
-- [ ] E2E: Playwright, 3 сценария (onboarding→scan→dashboard, RU/EN+тема,
+- [x] E2E: Playwright, 3 сценария (onboarding→scan→dashboard, RU/EN+тема,
       AI-коммит с мок-LLM) на изолированных tmp-репозиториях; 0 flaky.
-- [ ] Bundle: entry **< 90 kB gzip**; словари `settings`/`repository` — в
+- [x] Bundle: entry **< 90 kB gzip**; словари `settings`/`repository` — в
       lazy-чанках; budget-check падает при превышении.
 - [x] GigaChat: `POST /api/v1/settings/ai-providers/gigachat/auth` выполняет
       OAuth 2.0, не возвращает токен/секрет; refresh автоматический,
@@ -1649,11 +1732,22 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 - [x] Smart cache: повторный запрос при неизменном состоянии → `cached=true`,
       LLM не вызывается; изменение состояния/`refresh=true` → вызов;
       ошибки не кэшируются.
-- [ ] RAG: `POST /api/v1/search/code` ищет по README/docs/src всех tracked
+- [x] RAG: `POST /api/v1/search/code` ищет по README/docs/src всех tracked
       проектов; индексация инкрементальна и не меняет репозитории; на SQLite —
       `503 rag_unavailable`; KI-017.
-- [ ] Релиз: версии `0.9.0`, CHANGELOG/RELEASES/SPEC/ARCHITECTURE/README
+- [x] Релиз: версии `0.9.0`, CHANGELOG/RELEASES/SPEC/ARCHITECTURE/README
       согласованы; тег и зеркало GitFlic совпадают по SHA.
+
+### 6.7. v1.0.0 (план, спринты 47–49)
+
+- [ ] Auth: `POST /auth/login`, JWT + httpOnly cookie, middleware защищает все
+      роуты кроме `/health`, `/metrics`, `/auth/login`; один пользователь,
+      bcrypt, rate-limit.
+- [ ] Desktop: Tauri + Python sidecar, автоматический старт/остановка backend,
+      Windows/macOS установщики, работа без Docker.
+- [ ] Release: аудит безопасности, артефакты, `v1.0.0`, GitHub Release и
+      GitFlic mirror.
+- [ ] Документы: ADR-0016/0017, KI-019/KI-020, `TODO_V1.0.md`.
 
 ---
 
