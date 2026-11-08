@@ -194,4 +194,10 @@ export const repository = {
     'Зеркало отстаёт — отправьте изменения в GitFlic.',
   'repo.recommendation.create-mirror':
     'Создайте зеркало проекта в GitFlic.',
+  'repo.unification.title': 'Унификация',
+  'repo.unification.hint':
+    'Пакеты, которые в других проектах объявлены в более новой версии.',
+  'repo.unification.row':
+    '{package}: у вас {current}, в других проектах {target}',
+  'repo.unification.update': 'Обновить до {version}',
 } as const

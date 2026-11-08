@@ -32,6 +32,24 @@ class GlobalDependencySummary(BaseModel):
     unification_candidates: int = Field(default=0, ge=0)
 
 
+class UnificationAdviceRequest(BaseModel):
+    """Ask the LLM for advice on unifying one package."""
+
+    ecosystem: Literal["python", "node"]
+    package: str
+
+
+class UnificationAdvice(BaseModel):
+    """LLM advice for a package that is declared in different versions."""
+
+    ecosystem: Literal["python", "node"]
+    package: str
+    advice: str
+    cached: bool = False
+    model: str | None = None
+    generated_at: datetime
+
+
 class GlobalDependencyReport(BaseModel):
     """API response for ``GET /dashboard/global-dependencies``."""
 
@@ -49,5 +67,7 @@ __all__ = [
     "GlobalDependencyPackage",
     "GlobalDependencyReport",
     "GlobalDependencySummary",
+    "UnificationAdvice",
+    "UnificationAdviceRequest",
     "VersionDistribution",
 ]

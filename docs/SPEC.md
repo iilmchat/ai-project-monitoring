@@ -1072,6 +1072,67 @@ Read-only просмотр README и связанных Markdown-докумен�
 
 ---
 
+### 3.22. Remote duplicates (v0.8.0, Sprint 37)
+
+Поиск локальных клонов, указывающих на один и тот же remote URL. Read-only:
+Git-конфигурация только читается, репозитории не изменяются.
+
+| Метод | Путь | Ответ |
+|-------|------|-------|
+| GET | `/dashboard/duplicates` | `DuplicatesResponse` |
+
+```json
+{
+  "checked": 25,
+  "groups": [
+    {
+      "remote_url": "github.com/acme/project",
+      "repositories": [
+        {"id": 1, "path": "K:/Projects/AI/project", "name": "project"},
+        {"id": 2, "path": "K:/Projects/GitFlic/project", "name": "project"}
+      ]
+    }
+  ]
+}
+```
+
+**Правила:**
+
+- URL берётся из `remote.origin.url`; fallback — `github_full_name` /
+  `gitflic_full_name`.
+- Нормализация: `https://`, `ssh://`, `git@host:owner/repo`, trailing `.git`,
+  регистр host/path; локальные пути и URLs без host игнорируются.
+- В `groups` попадают только URL с ≥ 2 репозиториями; `checked` — число
+  проверенных Repository.
+- Ошибка чтения одного remote не даёт 500 — репозиторий пропускается.
+
+---
+
+### 3.23. AI unification advice (v0.8.0, Sprint 37)
+
+Совет локального LLM, на какую версию пакета унифицироваться, если в проектах
+объявлены разные версии.
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/dashboard/global-dependencies/ai-advice` | `{ecosystem, package}` | `UnificationAdvice` |
+
+`UnificationAdvice`: `{ecosystem, package, advice, cached, model, generated_at}`.
+
+**Правила:**
+
+- Совет доступен только при `unification_needed=true`; иначе `400`.
+- Пакет ищется в актуальном глобальном отчёте; отсутствие — `404`.
+- LLM выключена, remote endpoint без opt-in или LLM не ответила — `503`.
+- Промпт содержит только имя пакета и распределение версий/проектов; код,
+  diff и секреты не отправляются.
+- Кэш `ai_cache`, ключ
+  `unification-advice:<ecosystem>:<package>:<model>`, TTL
+  `AI_CACHE_TTL_SECONDS` (default 7 дней); при попадании `cached=true`.
+- Ответ LLM ограничен `MAX_EXPLANATION_CHARS` (2000).
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(

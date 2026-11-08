@@ -4,6 +4,27 @@
 
 ---
 
+## Спринт 37: Remote Identity & AI Unification (v0.8.0)
+
+**Дата:** 2026-11-08 · **Статус:** ✅ Завершён
+
+### Задачи
+
+- [x] S37-001: `IdentityService` — чтение `remote.origin.url`, нормализация https/ssh/scp, группировка одинаковых remote; `GET /dashboard/duplicates`.
+- [x] S37-002: `LLMService.advise_unification` и `POST /dashboard/global-dependencies/ai-advice`; кэш `ai_cache` 7 дней; 400/404/503-контракты.
+- [x] S37-002 UI: кнопка «AI Совет»/«AI advice» с поповером и признаком кэша.
+- [x] S37-003: блок «Унификация» в карточке проекта с версией у вас/в других проектах и кнопкой «Обновить до X».
+- [x] S37-004: `test_duplicates.py`, `test_ai_unification.py`, frontend-тест AI-совета; SPEC §3.22–3.23, ARCHITECTURE §16.4/§19.
+
+### Результаты
+
+- Дубликаты группируются по нормализованному remote, а не только по имени каталога.
+- AI-совет отправляет только имя пакета и распределение версий/проектов; код и diff не уходят.
+- Backend-тесты: 220 passed (добавлено 6 тестов), frontend — 43.
+- Entry bundle 98.0 kB gzip (лимит 100 kB); новые UI-элементы в существующих lazy-сегментах.
+
+---
+
 ## Спринт 36: RU/EN i18n & Dashboard Interaction (v0.8.0)
 
 **Дата:** 2026-11-08 · **Статус:** ✅ Завершён

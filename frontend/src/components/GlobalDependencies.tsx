@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { getGlobalDependencies, getRepositories } from '../api/client'
+import {
+  getGlobalDependencies,
+  getRepositories,
+  getUnificationAdvice,
+} from '../api/client'
 import type {
   GlobalDependencyPackage,
   GlobalDependencyReport,
@@ -28,6 +32,13 @@ export default function GlobalDependencies() {
   const [error, setError] = useState<string | null>(null)
   const [ecosystem, setEcosystem] = useState<EcosystemTab>('all')
   const [repositoryIds, setRepositoryIds] = useState<Record<string, number>>({})
+  const [advice, setAdvice] = useState<{
+    key: string
+    loading: boolean
+    text?: string
+    error?: string
+    cached?: boolean
+  } | null>(null)
 
   async function load(refresh = false) {
     if (refresh) {
@@ -109,6 +120,26 @@ export default function GlobalDependencies() {
     all: allPackages.length,
     python: allPackages.filter((item) => item.ecosystem === 'python').length,
     node: allPackages.filter((item) => item.ecosystem === 'node').length,
+  }
+
+  async function requestAdvice(item: EcosystemPackage) {
+    const key = `${item.ecosystem}:${item.name}`
+    setAdvice({ key, loading: true })
+    try {
+      const result = await getUnificationAdvice(item.ecosystem, item.name)
+      setAdvice({
+        key,
+        loading: false,
+        text: result.advice,
+        cached: result.cached,
+      })
+    } catch {
+      setAdvice({
+        key,
+        loading: false,
+        error: t('global.aiAdviceError'),
+      })
+    }
   }
 
   return (
@@ -275,15 +306,45 @@ export default function GlobalDependencies() {
                         </details>
                       </td>
                       <td className="px-3 py-2">
-                        {item.unification_needed ? (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                            {t('global.unify')}
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
-                            {t('global.aligned')}
-                          </span>
-                        )}
+                        <div className="flex flex-col items-start gap-1">
+                          {item.unification_needed ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                              {t('global.unify')}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                              {t('global.aligned')}
+                            </span>
+                          )}
+                          {item.unification_needed && (
+                            <button
+                              type="button"
+                              onClick={() => void requestAdvice(item)}
+                              title={t('global.aiAdviceTitle')}
+                              disabled={
+                                advice?.key === `${item.ecosystem}:${item.name}` &&
+                                advice.loading
+                              }
+                              className="rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              {advice?.key === `${item.ecosystem}:${item.name}` &&
+                              advice.loading
+                                ? t('global.aiAdviceLoading')
+                                : t('global.aiAdvice')}
+                            </button>
+                          )}
+                          {advice?.key === `${item.ecosystem}:${item.name}` &&
+                            !advice.loading && (
+                              <div className="max-w-xs rounded-md bg-sky-50 px-2 py-1 text-[11px] text-sky-900 dark:bg-sky-900/30 dark:text-sky-100">
+                                {advice.error ?? advice.text}
+                                {advice.cached && (
+                                  <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-300">
+                                    ({t('global.aiAdviceCached')})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))}

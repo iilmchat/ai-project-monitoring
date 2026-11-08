@@ -6,23 +6,43 @@ import asyncio
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.base import utcnow
-from app.models.entities import Repository
+from app.models.entities import AICache, Repository
 from app.schemas.dependency import DependencyReport
 from app.schemas.global_analytics import (
     GlobalDependencyPackage,
     GlobalDependencyReport,
     GlobalDependencySummary,
+    UnificationAdvice,
     VersionDistribution,
 )
 from app.services.dependency_service import DependencyService
+from app.services.llm_service import LLMService
 
 _VERSION_RE = re.compile(r"^\s*v?(?:\d+!)?(\d+(?:\.\d+)*)")
+
+
+class GlobalAnalyticsError(Exception):
+    """Base class for global analytics domain errors."""
+
+
+class PackageNotFoundError(GlobalAnalyticsError):
+    """The requested package is not present in the global report."""
+
+
+class UnificationNotNeededError(GlobalAnalyticsError):
+    """The package has a single version across projects."""
+
+
+class LLMUnavailableError(GlobalAnalyticsError):
+    """The LLM is disabled, remote-blocked, or returned no advice."""
 
 
 @dataclass(slots=True)
@@ -42,12 +62,16 @@ class GlobalAnalyticsService:
         cache_ttl_seconds: int = 3600,
         limit: int = 50,
         concurrency: int = 4,
+        llm_service: LLMService | None = None,
+        ai_cache_ttl_seconds: int = 604800,
     ) -> None:
         self._session_factory = session_factory
         self._dependency_service = dependency_service
         self._ttl = max(cache_ttl_seconds, 0)
         self._limit = max(min(limit, 200), 1)
         self._concurrency = max(concurrency, 1)
+        self._llm_service = llm_service
+        self._ai_ttl = max(ai_cache_ttl_seconds, 0)
         self._cache: tuple[float, GlobalDependencyReport] | None = None
 
     async def get_global_dependencies(
@@ -145,6 +169,81 @@ class GlobalAnalyticsService:
             error="partial_errors" if errors else None,
         )
 
+    async def get_ai_unification_advice(
+        self,
+        ecosystem: Literal["python", "node"],
+        package_name: str,
+    ) -> UnificationAdvice:
+        """Return cached or generated LLM advice for one package."""
+        report = await self.get_global_dependencies()
+        package = next(
+            (
+                item
+                for item in report.ecosystems.get(ecosystem, [])
+                if item.name == package_name
+            ),
+            None,
+        )
+        if package is None:
+            raise PackageNotFoundError(
+                f"package {package_name} not found in {ecosystem}"
+            )
+        if not package.unification_needed:
+            raise UnificationNotNeededError(
+                f"package {package_name} already uses a single version"
+            )
+
+        llm = self._llm_service
+        if llm is None or not llm.enabled or not llm.remote_allowed():
+            raise LLMUnavailableError("llm_unavailable")
+
+        cache_key = f"unification-advice:{ecosystem}:{package.name}:{llm.model}"
+        async with self._session_factory() as session:
+            row = await session.get(AICache, cache_key)
+            if row is not None and _cache_is_fresh(row.checked_at, self._ai_ttl):
+                advice = (
+                    row.payload.get("advice")
+                    if isinstance(row.payload, dict)
+                    else None
+                )
+                if isinstance(advice, str) and advice:
+                    return UnificationAdvice(
+                        ecosystem=ecosystem,
+                        package=package.name,
+                        advice=advice,
+                        cached=True,
+                        model=row.model,
+                        generated_at=utcnow(),
+                    )
+
+            versions = {
+                distribution.version: list(distribution.projects)
+                for distribution in package.distribution
+            }
+            advice = await llm.advise_unification(package.name, versions)
+            if advice is None:
+                raise LLMUnavailableError("llm_unavailable")
+
+            if row is None:
+                row = AICache(
+                    key=cache_key,
+                    kind="unification_advice",
+                    model=llm.model,
+                )
+                session.add(row)
+            row.payload = {"advice": advice}
+            row.checked_at = utcnow()
+            await session.commit()
+
+        return UnificationAdvice(
+            ecosystem=ecosystem,
+            package=package.name,
+            advice=advice,
+            cached=False,
+            model=llm.model,
+            generated_at=utcnow(),
+        )
+
     def _packages(
         self, bucket: dict[str, _Aggregate]
     ) -> list[GlobalDependencyPackage]:
@@ -186,4 +285,20 @@ def _version_key(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split("."))
 
 
-__all__ = ["GlobalAnalyticsService"]
+def _cache_is_fresh(checked_at: datetime, ttl_seconds: int) -> bool:
+    if ttl_seconds <= 0:
+        return False
+    value = checked_at
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    age = (utcnow() - value).total_seconds()
+    return 0 <= age < ttl_seconds
+
+
+__all__ = [
+    "GlobalAnalyticsError",
+    "GlobalAnalyticsService",
+    "LLMUnavailableError",
+    "PackageNotFoundError",
+    "UnificationNotNeededError",
+]

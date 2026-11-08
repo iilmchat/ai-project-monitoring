@@ -10,6 +10,7 @@ import {
   getConflicts,
   getDependencies,
   getDockerStatus,
+  getGlobalDependencies,
   getInsights,
   getLog,
   getMirror,
@@ -44,6 +45,7 @@ vi.mock('../api/client', () => ({
   getConflicts: vi.fn(),
   getDependencies: vi.fn(),
   getDockerStatus: vi.fn(),
+  getGlobalDependencies: vi.fn(),
   getInsights: vi.fn(),
   getLog: vi.fn(),
   getMirror: vi.fn(),
@@ -273,6 +275,12 @@ describe('RepositoryDetails actions', () => {
     vi.mocked(getConflicts).mockResolvedValue({ repository_id: 1, files: [] })
     vi.mocked(getDockerStatus).mockResolvedValue(dockerUnavailable)
     vi.mocked(getDependencies).mockResolvedValue(dependenciesNoManifest)
+    vi.mocked(getGlobalDependencies).mockResolvedValue({
+      checked_at: '2026-11-08T10:00:00Z',
+      ecosystems: { python: [], node: [] },
+      summary: { repositories: 0, packages: 0, unification_candidates: 0 },
+      error: null,
+    })
     vi.mocked(getSecurity).mockResolvedValue(cleanSecurity)
     vi.mocked(getInsights).mockResolvedValue(cleanInsights)
     vi.mocked(getSettings).mockResolvedValue(appSettings)

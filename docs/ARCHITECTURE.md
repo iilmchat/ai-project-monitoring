@@ -989,6 +989,17 @@ GET /dashboard/global-dependencies?refresh=false
   но не блокирует event loop.
 - Никаких новых таблиц: агрегация строится из манифестов + существующего кэша.
 
+### 16.4. AI unification advice (v0.8.0, Sprint 37)
+
+`GlobalAnalyticsService.get_ai_unification_advice(ecosystem, package)` берёт
+пакет из актуального отчёта и, если `unification_needed=true`, отправляет в
+`LLMService.advise_unification` только имя пакета и распределение
+`версия → проекты`. Промпт не содержит кода, diff или секретов. Ответ
+кэшируется в `ai_cache` (ключ
+`unification-advice:<ecosystem>:<package>:<model>`, TTL `AI_CACHE_TTL_SECONDS`,
+default 7 дней). LLM off/remote-guard/ошибка → `503`; пакет без расхождений →
+`400`; отсутствующий пакет → `404`. Ответ ограничен 2000 символами.
+
 ---
 
 ## 17. Automated dependency updates (v0.7.0, Sprint 34)
@@ -1061,14 +1072,21 @@ POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
 
 ---
 
-## 19. Repository identity & duplicates (Sprint 37, planned)
+## 19. Repository identity & duplicates (v0.8.0, Sprint 37)
 
-Текущий UI уже показывает «возможные копии» по совпадению имени каталога и блок
-«Связанные репозитории». Sprint 37 добавит `RepositoryIdentityService`:
-нормализованное имя + remote URL (`origin`) + провайдерские full names + HEAD
-SHA. Группы: `same_remote` (точный дубль), `mirror_pair` (GitHub ↔ GitFlic),
-`same_name` (возможная связь). Автоматического объединения не будет — только
-отображение связи и объяснение.
+`IdentityService` (`app/services/identity_service.py`) читает
+`remote.origin.url` каждого репозитория read-only через `git config` (fallback —
+`github_full_name`/`gitflic_full_name`), нормализует URL к виду
+`host/owner/repo` (https/ssh/scp, без `.git`, нижний регистр) и группирует
+репозитории с одинаковым remote. `GET /dashboard/duplicates` возвращает только
+группы из ≥ 2 репозиториев и число проверенных.
+
+UI дополнительно показывает «возможные копии» по совпадению имени каталога
+(бейдж «2 копии» и блок «Связанные репозитории»), но точная identity-группировка
+строится на remote URL. Автоматического объединения/удаления нет.
+
+**Инварианты:** ошибка чтения одного remote не ломает отчёт; локальные пути не
+считаются remote; группы детерминированно сортируются по URL.
 
 ---
 

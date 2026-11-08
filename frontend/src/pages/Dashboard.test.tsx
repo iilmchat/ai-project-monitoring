@@ -9,6 +9,7 @@ import {
   getGlobalDependencies,
   getHeatmap,
   getRepositories,
+  getUnificationAdvice,
 } from '../api/client'
 import type { DashboardResponse, RepositoryStatus } from '../api/types'
 import { useTableStore } from '../store/useTableStore'
@@ -23,6 +24,7 @@ vi.mock('../api/client', () => ({
   getGlobalDependencies: vi.fn(),
   getHeatmap: vi.fn(),
   getRepositories: vi.fn(),
+  getUnificationAdvice: vi.fn(),
   migrateToGitflic: vi.fn(),
   runAction: vi.fn(),
   scan: vi.fn(),
@@ -319,6 +321,17 @@ describe('Dashboard', () => {
     expect(await screen.findByText('fastapi')).toBeInTheDocument()
     expect(screen.getByText('Унифицировать')).toBeInTheDocument()
     expect(screen.getByText('0.116.0')).toBeInTheDocument()
+
+    vi.mocked(getUnificationAdvice).mockResolvedValue({
+      ecosystem: 'python',
+      package: 'fastapi',
+      advice: 'Унифицируйтесь на 0.116.0.',
+      cached: false,
+      model: 'fake',
+      generated_at: '2026-11-08T10:00:00Z',
+    })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'AI Совет' }))
+    expect(await screen.findByText('Унифицируйтесь на 0.116.0.')).toBeInTheDocument()
 
     await userEvent.setup().click(screen.getByRole('button', { name: /Python/ }))
     expect(screen.getByText('fastapi')).toBeInTheDocument()

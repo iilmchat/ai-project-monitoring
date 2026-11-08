@@ -437,6 +437,31 @@ export interface GlobalDependencyReport {
   error: string | null
 }
 
+export interface UnificationAdvice {
+  ecosystem: 'python' | 'node'
+  package: string
+  advice: string
+  cached: boolean
+  model: string | null
+  generated_at: string
+}
+
+export interface DuplicateRepository {
+  id: number
+  path: string
+  name: string
+}
+
+export interface DuplicateGroup {
+  remote_url: string
+  repositories: DuplicateRepository[]
+}
+
+export interface DuplicatesResponse {
+  groups: DuplicateGroup[]
+  checked: number
+}
+
 export interface DashboardResponse {
   summary: DashboardSummary
   repositories: DashboardRepository[]

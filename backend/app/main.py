@@ -28,6 +28,7 @@ from app.services.dependency_service import DependencyService
 from app.services.dependency_update_service import DependencyUpdateService
 from app.services.docker_service import DockerService
 from app.services.global_analytics_service import GlobalAnalyticsService
+from app.services.identity_service import IdentityService
 from app.services.insights_service import InsightsService
 from app.services.llm_service import LLMService
 from app.services.mirror_scheduler import MirrorScheduler
@@ -135,7 +136,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cache_ttl_seconds=resolved.global_analytics_cache_ttl_seconds,
         limit=resolved.global_analytics_limit,
         concurrency=resolved.global_analytics_concurrency,
+        llm_service=llm_service,
+        ai_cache_ttl_seconds=resolved.ai_cache_ttl_seconds,
     )
+    identity_service = IdentityService(session_factory)
     dependency_update_service = DependencyUpdateService(
         session_factory,
         timeout_seconds=resolved.dependency_update_timeout_seconds,
@@ -205,6 +209,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.insights_service = insights_service
     application.state.llm_service = llm_service
     application.state.global_analytics_service = global_analytics_service
+    application.state.identity_service = identity_service
     application.state.dependency_update_service = dependency_update_service
     application.state.mirror_scheduler = mirror_scheduler
     application.state.action_service = action_service

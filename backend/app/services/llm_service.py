@@ -23,7 +23,11 @@ COMMIT_SYSTEM_PROMPT = (
     "Ответь только текстом коммита, без кавычек."
 )
 SECURITY_SYSTEM_PROMPT = (
-    "Ты — эксперт по безопасности. Отвечай кратко и только по фактам описания."
+    "Ты - эксперт по безопасности. Отвечай кратко и только по фактам описания."
+)
+UNIFICATION_SYSTEM_PROMPT = (
+    "Ты - senior инженер. Давай практичные советы по унификации версий "
+    "зависимостей. Не выдумывай факты, опирайся только на переданные версии."
 )
 MAX_MESSAGE_CHARS = 2000
 MAX_EXPLANATION_CHARS = 2000
@@ -104,6 +108,32 @@ class LLMService:
         )
         return await self._complete(
             SECURITY_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=256,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
+    async def advise_unification(
+        self,
+        package: str,
+        versions: dict[str, list[str]],
+    ) -> str | None:
+        """Return a short advice on which version to standardise on."""
+        name = package.strip()
+        if not name or not versions:
+            return None
+        lines = []
+        for version, projects in sorted(versions.items()):
+            projects_text = ", ".join(projects[:8]) if projects else "—"
+            lines.append(f"{version}: {projects_text}")
+        prompt = (
+            f"В проектах используются разные версии пакета {name}:\n"
+            + "\n".join(lines)
+            + "\n\nНапиши краткий совет (1-2 предложения), на какую версию "
+            "лучше унифицироваться и почему."
+        )
+        return await self._complete(
+            UNIFICATION_SYSTEM_PROMPT,
             prompt,
             max_tokens=256,
             max_chars=MAX_EXPLANATION_CHARS,
@@ -229,5 +259,6 @@ __all__ = [
     "MAX_EXPLANATION_CHARS",
     "MAX_MESSAGE_CHARS",
     "SECURITY_SYSTEM_PROMPT",
+    "UNIFICATION_SYSTEM_PROMPT",
     "LLMService",
 ]

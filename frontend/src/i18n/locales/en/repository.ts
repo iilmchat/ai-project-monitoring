@@ -195,4 +195,10 @@ export const repository = {
     'The mirror is behind — push the changes to GitFlic.',
   'repo.recommendation.create-mirror':
     'Create a project mirror in GitFlic.',
+  'repo.unification.title': 'Unification',
+  'repo.unification.hint':
+    'Packages declared in a newer version in other projects.',
+  'repo.unification.row':
+    '{package}: you have {current}, other projects use {target}',
+  'repo.unification.update': 'Update to {version}',
 } as const

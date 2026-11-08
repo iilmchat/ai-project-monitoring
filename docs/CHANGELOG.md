@@ -17,6 +17,10 @@
 - feat(ui): переключатель RU/EN рядом с темой; переведены шапка, дашборд, настройки, карточка репозитория, статусы/зеркала, графики, Global Dependencies, README-модалка, Command Palette и горячие клавиши (S36-004).
 - feat(ui): tooltips/aria для статусов, зеркал, CI, дублей, опасных действий и AI-настроек (S36-005, частично).
 - fix(insights): commit frequency использует локальную дату, чтобы коммиты после локальной полуночи не выпадали из окна (найдено при полном прогоне тестов).
+- feat(identity): `IdentityService` — нормализация `remote.origin.url` (https/ssh/scp, `.git`, регистр) и группировка дубликатов; `GET /dashboard/duplicates` (S37-001).
+- feat(ai): `LLMService.advise_unification` и `POST /dashboard/global-dependencies/ai-advice`; промпт только по версиям/проектам, кэш `ai_cache` 7 дней (S37-002).
+- feat(ui): кнопка «AI Совет» с поповером для пакетов с `unification_needed` (S37-002).
+- feat(ui): блок «Унификация» в карточке проекта — версия у вас/в других проектах и кнопка «Обновить до X» через существующий update flow (S37-003).
 
 ### Документация
 

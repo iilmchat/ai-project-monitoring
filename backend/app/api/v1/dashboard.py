@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,10 +13,21 @@ from app.db.session import get_session
 from app.models.entities import Repository
 from app.schemas.ci import CISummary
 from app.schemas.dashboard import DashboardRepository, DashboardResponse, DashboardSummary
-from app.schemas.global_analytics import GlobalDependencyReport
+from app.schemas.global_analytics import (
+    GlobalDependencyReport,
+    UnificationAdvice,
+    UnificationAdviceRequest,
+)
+from app.schemas.identity import DuplicatesResponse
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
-from app.services.global_analytics_service import GlobalAnalyticsService
+from app.services.global_analytics_service import (
+    GlobalAnalyticsService,
+    LLMUnavailableError,
+    PackageNotFoundError,
+    UnificationNotNeededError,
+)
+from app.services.identity_service import IdentityService
 from app.services.mirror_service import ATTENTION_STATUSES, snapshot_from_row
 from app.services.status_service import snapshot_from_row as status_snapshot_from_row
 
@@ -145,3 +156,48 @@ async def get_global_dependencies(
 ) -> GlobalDependencyReport:
     service: GlobalAnalyticsService = request.app.state.global_analytics_service
     return await service.get_global_dependencies(refresh=refresh)
+
+
+@router.get("/dashboard/duplicates", response_model=DuplicatesResponse)
+async def get_remote_duplicates(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DuplicatesResponse:
+    service: IdentityService = request.app.state.identity_service
+    groups = await service.find_remote_duplicates()
+    checked = await session.scalar(select(func.count(Repository.id))) or 0
+    return DuplicatesResponse(
+        checked=checked,
+        groups=[
+            {
+                "remote_url": group.remote_url,
+                "repositories": [
+                    {"id": item.id, "path": item.path, "name": item.name}
+                    for item in group.repositories
+                ],
+            }
+            for group in groups
+        ],
+    )
+
+
+@router.post(
+    "/dashboard/global-dependencies/ai-advice",
+    response_model=UnificationAdvice,
+)
+async def get_unification_advice(
+    payload: UnificationAdviceRequest,
+    request: Request,
+) -> UnificationAdvice:
+    service: GlobalAnalyticsService = request.app.state.global_analytics_service
+    try:
+        return await service.get_ai_unification_advice(
+            payload.ecosystem,
+            payload.package,
+        )
+    except PackageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UnificationNotNeededError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

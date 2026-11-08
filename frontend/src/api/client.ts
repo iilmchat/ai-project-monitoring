@@ -10,7 +10,9 @@ import type {
   DashboardResponse,
   DependencyReport,
   DockerStatus,
+  DuplicatesResponse,
   GlobalDependencyReport,
+  UnificationAdvice,
   HeatmapData,
   InsightsReport,
   MirrorCandidates,
@@ -284,6 +286,23 @@ export async function getGlobalDependencies(
   return request<GlobalDependencyReport>('/dashboard/global-dependencies', {
     query: { refresh },
   })
+}
+
+export async function getDuplicates(): Promise<DuplicatesResponse> {
+  return request<DuplicatesResponse>('/dashboard/duplicates')
+}
+
+export async function getUnificationAdvice(
+  ecosystem: 'python' | 'node',
+  packageName: string,
+): Promise<UnificationAdvice> {
+  return request<UnificationAdvice>(
+    '/dashboard/global-dependencies/ai-advice',
+    {
+      method: 'POST',
+      body: { ecosystem, package: packageName },
+    },
+  )
 }
 
 export async function getHeatmap(days = 365): Promise<HeatmapData> {

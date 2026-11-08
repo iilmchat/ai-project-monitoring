@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -8,6 +8,7 @@ import {
   getConflicts,
   getDependencies,
   getDockerStatus,
+  getGlobalDependencies,
   getInsights,
   getLog,
   getMirror,
@@ -37,6 +38,7 @@ import type {
   DockerContainer,
   DockerPort,
   DockerStatus,
+  GlobalDependencyReport,
   InsightsReport,
   MirrorProviderStatus,
   MirrorStatus,
@@ -92,6 +94,25 @@ function recommendationReason(
   return key ? t(key) : item.reason
 }
 
+function isNewerVersion(target: string, current: string): boolean {
+  const parse = (value: string): number[] =>
+    value
+      .replace(/^v/i, '')
+      .split(/[.+-]/)
+      .map((part) => Number.parseInt(part, 10))
+      .filter((part) => !Number.isNaN(part))
+  const left = parse(target)
+  const right = parse(current)
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = left[index] ?? 0
+    const b = right[index] ?? 0
+    if (a !== b) {
+      return a > b
+    }
+  }
+  return false
+}
+
 function repositoryLabel(repository: Repository): string {
   if (repository.alias) {
     return repository.alias
@@ -117,6 +138,11 @@ export default function RepositoryDetails() {
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [dockerRefreshing, setDockerRefreshing] = useState(false)
   const [dependencies, setDependencies] = useState<DependencyReport | null>(null)
+  const [globalDependencies, setGlobalDependencies] =
+    useState<GlobalDependencyReport | null>(null)
+  const [dependencyUpdateTarget, setDependencyUpdateTarget] = useState<string | null>(
+    null,
+  )
   const [dependenciesLoading, setDependenciesLoading] = useState(!invalidId)
   const [dependenciesRefreshing, setDependenciesRefreshing] = useState(false)
   const [dependenciesError, setDependenciesError] = useState<string | null>(null)
@@ -279,6 +305,24 @@ export default function RepositoryDetails() {
       active = false
     }
   }, [invalidId, repositoryId])
+
+  useEffect(() => {
+    let active = true
+    void getGlobalDependencies()
+      .then((report) => {
+        if (active) {
+          setGlobalDependencies(report)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setGlobalDependencies(null)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     if (invalidId) {
@@ -452,13 +496,16 @@ export default function RepositoryDetails() {
     try {
       await updateDependencies(repositoryId, dependencyEcosystem)
       setDependencyUpdateOpen(false)
+      setDependencyUpdateTarget(null)
       showToast(t('repo.toast.dependenciesUpdated'))
-      const [report, updatedStatus] = await Promise.all([
+      const [report, updatedStatus, globalReport] = await Promise.all([
         getDependencies(repositoryId, 'all', true),
         refreshRepository(repositoryId, false),
+        getGlobalDependencies(true),
       ])
       setDependencies(report)
       setStatus(updatedStatus)
+      setGlobalDependencies(globalReport)
     } catch {
       setDependencyUpdateError(t('repo.errors.updateDependencies'))
     } finally {
@@ -668,6 +715,49 @@ export default function RepositoryDetails() {
 
   const selectedDependencies =
     dependencies?.ecosystems.find((item) => item.ecosystem === dependencyEcosystem) ?? null
+
+  const unificationItems = useMemo(() => {
+    if (!dependencies || !globalDependencies) {
+      return []
+    }
+    const items: {
+      ecosystem: 'python' | 'node'
+      name: string
+      current: string
+      target: string
+      projects: string[]
+    }[] = []
+    for (const ecosystem of dependencies.ecosystems) {
+      const globalPackages = globalDependencies.ecosystems[ecosystem.ecosystem] ?? []
+      for (const packageItem of ecosystem.packages) {
+        if (!packageItem.current) {
+          continue
+        }
+        const globalPackage = globalPackages.find(
+          (item) => item.name === packageItem.name,
+        )
+        if (!globalPackage?.unification_needed) {
+          continue
+        }
+        const target =
+          globalPackage.latest_version ??
+          globalPackage.distribution[globalPackage.distribution.length - 1]?.version
+        if (!target || !isNewerVersion(target, packageItem.current)) {
+          continue
+        }
+        items.push({
+          ecosystem: ecosystem.ecosystem,
+          name: packageItem.name,
+          current: packageItem.current,
+          target,
+          projects: globalPackage.distribution.flatMap(
+            (distribution) => distribution.projects,
+          ),
+        })
+      }
+    }
+    return items
+  }, [dependencies, globalDependencies])
 
   const securityVulnerabilities =
     security?.ecosystems.flatMap((item) => item.vulnerabilities) ?? []
@@ -1112,6 +1202,57 @@ export default function RepositoryDetails() {
             </div>
           </div>
 
+          {unificationItems.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 shadow-sm dark:border-amber-800 dark:bg-amber-900/10">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 px-4 py-3 dark:border-amber-800">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                  {t('repo.unification.title')}
+                </h2>
+                <span className="text-xs text-amber-700 dark:text-amber-300">
+                  {t('repo.unification.hint')}
+                </span>
+              </div>
+              <ul className="divide-y divide-amber-100 dark:divide-amber-900/40">
+                {unificationItems.map((item) => (
+                  <li
+                    key={`${item.ecosystem}-${item.name}`}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <span className="text-sm text-slate-800 dark:text-slate-200">
+                      {t('repo.unification.row', {
+                        package: item.name,
+                        current: item.current,
+                        target: item.target,
+                      })}
+                      {item.projects.length > 0 && (
+                        <span
+                          className="ml-1 text-xs text-slate-500 dark:text-slate-400"
+                          title={item.projects.join(', ')}
+                        >
+                          ({item.projects.slice(0, 3).join(', ')}
+                          {item.projects.length > 3 ? '…' : ''})
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDependencyEcosystem(item.ecosystem)
+                        setDependencyUpdateTarget(item.target)
+                        setDependencyUpdateError(null)
+                        setDependencyUpdateOpen(true)
+                      }}
+                      className="rounded-md bg-amber-600 px-3 py-1 text-sm font-medium text-white hover:bg-amber-700"
+                      title={t('repo.unification.update', { version: item.target })}
+                    >
+                      {t('repo.unification.update', { version: item.target })}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div
             data-testid="dependencies-block"
             className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
@@ -1126,6 +1267,7 @@ export default function RepositoryDetails() {
                   type="button"
                   onClick={() => {
                     setDependencyUpdateError(null)
+                    setDependencyUpdateTarget(null)
                     setDependencyUpdateOpen(true)
                   }}
                   disabled={
@@ -1951,6 +2093,13 @@ export default function RepositoryDetails() {
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
               {t('repo.dependencyUpdate.body', { ecosystem: dependencyEcosystem })}
             </p>
+            {dependencyUpdateTarget && (
+              <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                {t('repo.unification.update', {
+                  version: dependencyUpdateTarget,
+                })}
+              </p>
+            )}
             {dependencyUpdateError && (
               <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
                 {dependencyUpdateError}
