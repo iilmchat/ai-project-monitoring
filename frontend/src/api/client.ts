@@ -5,6 +5,7 @@ import type {
   AIProviderProfile,
   AIProviderUpdate,
   AppSettings,
+  AuthUser,
   CIStatus,
   CodeIndexJob,
   CodeIndexStatus,
@@ -25,6 +26,7 @@ import type {
   HeatmapData,
   InsightsReport,
   LLMTestResult,
+  LoginResponse,
   MirrorCandidates,
   MirrorPolicyUpdate,
   MirrorStatus,
@@ -59,6 +61,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(url, {
     method: options.method ?? 'GET',
+    credentials: 'include',
     headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   })
@@ -415,6 +418,24 @@ export async function indexCode(
 
 export async function getCodeSearchStatus(): Promise<CodeIndexStatus> {
   return request<CodeIndexStatus>('/search/code/status')
+}
+
+export async function login(
+  username: string,
+  password: string,
+): Promise<LoginResponse> {
+  return request<LoginResponse>('/auth/login', {
+    method: 'POST',
+    body: { username, password },
+  })
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  return request<AuthUser>('/auth/me')
+}
+
+export async function logout(): Promise<void> {
+  await request<void>('/auth/logout', { method: 'POST' })
 }
 
 export async function getUnificationAdvice(

@@ -1356,22 +1356,23 @@ UI (модалка профиля)
 
 ---
 
-## 24. AuthService — single-user JWT (v1.0.0, Sprint 47 — план)
+## 24. AuthService — single-user JWT (v1.0.0, Sprint 47 — реализовано)
 
-> **Статус:** план. В v0.9.0 API без auth; контракт фиксируется в SPEC §3.28.
+> **Статус:** реализовано. Контракт — SPEC §3.28; при `AUTH_ENABLED=false`
+> сохраняется локальный режим без входа.
 
 **Задача.** Закрыть API при доступе по LAN, сохранив локальный single-user
 сценарий и read-only политику.
 
 ### 24.1. Компоненты
 
-- `users` (миграция `012`): `id`, `username* UNIQUE`, `password_hash`,
+- `users` (миграция `012`): `id`, `username* UNIQUE`, `hashed_password`,
   `is_active`, `created_at`, `last_login_at`.
 - `AuthService`:
   - bcrypt-hash/verify (cost ≥ 12), bootstrap пользователя из
-    `AUTH_ADMIN_USERNAME` + `AUTH_ADMIN_PASSWORD_HASH`;
+    `ADMIN_USERNAME` + `ADMIN_PASSWORD`;
   - issue/verify JWT HS256 (`sub`, `iat`, `exp`, `jti`), секрет
-    `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS`;
+    `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (7 дней);
   - login rate-limit (5/60 с на IP+username), без логирования пароля.
 - `AuthMiddleware`/dependency:
   - принимает `iiruchating_session` cookie **или** `Authorization: Bearer`;
@@ -1405,6 +1406,8 @@ POST /api/v1/auth/login {username,password}
 - Cookie `HttpOnly`, `SameSite=Lax`, `Secure` при HTTPS; CSRF — same-site +
   проверка Origin для мутаций.
 - `AUTH_ENABLED=false` для localhost, `true` для Docker/LAN (решение ADR-0016).
+  По умолчанию в приложении `true`; bootstrap создаёт `admin/admin`, пароль
+  сразу хэшируется.
 - Auth не ослабляет read-only: мутации по-прежнему требуют `confirm=true`.
 
 ---

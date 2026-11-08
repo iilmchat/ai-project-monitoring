@@ -276,6 +276,23 @@ export async function installApiMocks(
       await json(route, [])
       return
     }
+    if (method === 'GET' && path === '/auth/me') {
+      await json(route, { id: 1, username: 'admin', is_active: true })
+      return
+    }
+    if (method === 'POST' && path === '/auth/login') {
+      await json(route, {
+        access_token: 'e2e-token',
+        token_type: 'bearer',
+        expires_at: NOW,
+        user: { id: 1, username: 'admin', is_active: true },
+      })
+      return
+    }
+    if (method === 'POST' && path === '/auth/logout') {
+      await route.fulfill({ status: 204 })
+      return
+    }
     if (method === 'GET' && path === '/dashboard/global-dependencies') {
       await json(route, globalDependenciesReport)
       return

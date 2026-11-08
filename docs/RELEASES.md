@@ -4,6 +4,20 @@
 
 ---
 
+## Спринт 47: Single-User Authentication (v1.0.0)
+
+**Дата:** 2026-11-08 · **Статус:** ✅ Завершён
+
+- [x] Модель `User` и миграция `012_users`; bcrypt (cost 12).
+- [x] `AuthService`: JWT HS256 (7 дней), bootstrap `admin/admin`, rate-limit 5/60.
+- [x] API `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`; httpOnly cookie `iiruchating_session` + Bearer.
+- [x] `AuthMiddleware`: все `/api/v1/*`, кроме `/health`, `/metrics`, `/auth/login`.
+- [x] Frontend: lazy `/login`, `useAuthStore`, protected routes, logout в шапке, RU/EN.
+- [x] Тесты: backend auth/rate-limit/cookie/Bearer; frontend Login; E2E-моки auth.
+- **Проверки:** `pytest` (254 collected: 253 passed, 1 skipped), `ruff`, `mypy`, 45 unit, 3 E2E, entry bundle 89.32 kB gzip.
+
+---
+
 ## Релиз v0.9.0 — «Stability & RAG»
 
 **Дата:** 2026-11-08 · **Тег:** `v0.9.0`

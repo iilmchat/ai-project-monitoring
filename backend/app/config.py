@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     rag_max_chunks_per_repo: int = 2000
     rag_chunk_chars: int = 1000
     rag_chunk_overlap: int = 150
+    auth_enabled: bool = True
+    admin_username: str = "admin"
+    admin_password: str = "admin"
+    auth_jwt_secret: str = ""
+    auth_token_ttl_seconds: int = 604800
+    auth_login_rate_limit: int = 5
+    auth_login_rate_window_seconds: int = 60
     global_analytics_cache_ttl_seconds: int = 3600
     global_analytics_limit: int = 50
     global_analytics_concurrency: int = 4

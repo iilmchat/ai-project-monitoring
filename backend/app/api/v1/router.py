@@ -8,6 +8,7 @@ from app.api.v1 import (
     activity,
     admin,
     ai_providers,
+    auth,
     dashboard,
     health,
     metrics,
@@ -21,6 +22,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(metrics.router)
+api_router.include_router(auth.router)
 api_router.include_router(scan.router)
 api_router.include_router(settings.router)
 api_router.include_router(ai_providers.router)

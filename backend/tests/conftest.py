@@ -25,6 +25,7 @@ def settings(tmp_path: Path) -> Settings:
         scan_ignore="node_modules,.venv,vendor,dist,build,target",
         scan_concurrency=4,
         debug=False,
+        auth_enabled=False,
     )
 
 

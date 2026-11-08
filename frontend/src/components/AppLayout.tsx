@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useNavigate } from 'react-router-dom'
 
 import { useI18n } from '../i18n'
+import { useAuthStore } from '../store/useAuthStore'
 import LanguageToggle from './LanguageToggle'
 import ThemeToggle from './ThemeToggle'
 
@@ -10,8 +11,15 @@ const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'))
 
 export default function AppLayout() {
   const { t } = useI18n()
+  const navigate = useNavigate()
+  const logout = useAuthStore((state) => state.logout)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
+  async function handleLogout() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -78,6 +86,13 @@ export default function AppLayout() {
             </Link>
             <LanguageToggle />
             <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="rounded-md border border-slate-300 px-2.5 py-1 text-sm text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {t('common.logout')}
+            </button>
           </nav>
         </div>
       </header>

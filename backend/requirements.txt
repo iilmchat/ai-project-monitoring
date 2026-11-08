@@ -11,6 +11,8 @@ pygit2==1.15.1
 structlog==24.4.0
 prometheus_client==0.21.1
 docker==7.1.0
+bcrypt==4.2.1
+PyJWT==2.10.1
 
 # Tests
 pytest==8.3.4

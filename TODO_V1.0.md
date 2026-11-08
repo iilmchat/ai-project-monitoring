@@ -1,6 +1,6 @@
 # TODO v1.0.0 — Secure Desktop
 
-**Статус:** планирование (Sprint 46)
+**Статус:** Sprint 47 реализован; спринты 48–49 запланированы.
 **База:** v0.9.0 «Stability & RAG» (E2E, GigaChat, Smart Cache, RAG на PostgreSQL)
 **Цель:** сделать приложение безопасным для доступа по локальной сети и поставить
 его обычному пользователю как десктопное приложение без обязательного Docker.
@@ -43,13 +43,14 @@ single-user сценарий.
 
 ### 2.1. Контракты
 
-- Таблица `users`: `id`, `username` (unique), `password_hash` (bcrypt),
+- Таблица `users`: `id`, `username` (unique), `hashed_password` (bcrypt),
   `is_active`, `created_at`, `last_login_at`.
-- Bootstrap при пустой таблице: `AUTH_ADMIN_USERNAME` +
-  `AUTH_ADMIN_PASSWORD_HASH` (bcrypt) из `.env`. Пароль в открытом виде не
-  хранится; при отсутствии hash — приложение не стартует с `AUTH_ENABLED=true`.
+- Bootstrap при пустой таблице: `ADMIN_USERNAME` + `ADMIN_PASSWORD` из `.env`.
+  Пароль в открытом виде не хранится; при `AUTH_ENABLED=true` пользователь
+  создаётся, пароль сразу хэшируется bcrypt.
 - JWT: HS256, `sub` = user id, `iat`, `exp`, `jti`; секрет
-  `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (default 43200).
+  `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (default 604800 —
+  7 дней).
 - Эндпоинты:
   - `POST /api/v1/auth/login` → `{access_token, token_type, expires_at, user}` и
     `Set-Cookie: iiruchating_session=...; HttpOnly; SameSite=Lax; Path=/`
@@ -62,35 +63,36 @@ single-user сценарий.
 - Ошибки: `401 invalid_credentials`, `429 too_many_attempts`,
   `401 token_expired`, `403 user_disabled`.
 - Rate-limit логина: не более 5 попыток / 60 с на IP+username.
-- `AUTH_ENABLED`: default `false` для локального `127.0.0.1`; в Docker/LAN
-  рекомендуется `true`. Явное значение всегда приоритетнее.
+- `AUTH_ENABLED`: default `true`; для локального `127.0.0.1` можно выключить
+  (`false`). В Docker/LAN рекомендуется `true`. Явное значение всегда
+  приоритетнее.
 
 ### 2.2. Задачи
 
-- [ ] **S47-001. ADR-0016 «Single-user authentication»:** threat model, cookie vs
+- [x] **S47-001. ADR-0016 «Single-user authentication»:** threat model, cookie vs
       Bearer, JWT secret rotation, rate-limit, fail-closed.
-- [ ] **S47-002. Миграция `012_users`:** таблица `users`, индексы, bootstrap из
+- [x] **S47-002. Миграция `012_users`:** таблица `users`, индексы, bootstrap из
       `.env`; `AuthService` с bcrypt (cost ≥ 12).
-- [ ] **S47-003. API:** `login`/`me`/`logout`, JWT issue/verify, rate-limit,
+- [x] **S47-003. API:** `login`/`me`/`logout`, JWT issue/verify, rate-limit,
       аудит неуспешных попыток без логирования пароля.
-- [ ] **S47-004. Защита API:** middleware/dependency для всех роутов, кроме
+- [x] **S47-004. Защита API:** middleware/dependency для всех роутов, кроме
       health/metrics/login; тесты на обход.
-- [ ] **S47-005. Frontend:** `AuthProvider`, `/login`, protected routes,
+- [x] **S47-005. Frontend:** `AuthProvider`, `/login`, protected routes,
       редирект на `/login`, logout, обработка `401`, RU/EN, `aria`.
-- [ ] **S47-006. Тесты и E2E:** bcrypt, JWT expiry, cookie/Bearer, exemptions,
+- [x] **S47-006. Тесты и E2E:** bcrypt, JWT expiry, cookie/Bearer, exemptions,
       rate-limit, отсутствие hash/секретов в ответах, login E2E.
 
 ### 2.3. Definition of Done
 
-- [ ] При `AUTH_ENABLED=true` все защищённые API отвечают `401` без валидного
+- [x] При `AUTH_ENABLED=true` все защищённые API отвечают `401` без валидного
       токена/cookie; `/health` и `/metrics` доступны.
-- [ ] Логин выдаёт JWT и httpOnly cookie; logout очищает сессию.
-- [ ] Пароли хранятся только как bcrypt-hash; в логах/ответах нет пароля, hash,
+- [x] Логин выдаёт JWT и httpOnly cookie; logout очищает сессию.
+- [x] Пароли хранятся только как bcrypt-hash; в логах/ответах нет пароля, hash,
       JWT и cookie.
-- [ ] Frontend не показывает данные до `/auth/me`; после истечения токена —
+- [x] Frontend не показывает данные до `/auth/me`; после истечения токена —
       редирект на `/login`.
-- [ ] `pytest`, `ruff`, `mypy`, `pnpm typecheck/lint/test/build`, E2E — зелёные.
-- [ ] ADR-0016, SPEC §3.28, README и `.env.example` обновлены.
+- [x] `pytest`, `ruff`, `mypy`, `pnpm typecheck/lint/test/build`, E2E — зелёные.
+- [x] ADR-0016, SPEC §3.28, README и `.env.example` обновлены.
 
 ---
 

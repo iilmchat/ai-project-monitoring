@@ -36,7 +36,7 @@ analytics §3.19 и dependency updates §3.20 — реализованы в Spri
 | **R15** | **E2E и bundle budget (v0.9.0): 3 критических сценария Playwright; entry bundle < 90 kB gzip** |
 | **R16** | **GigaChat OAuth и smart cache (v0.9.0): нативный OAuth 2.0 adapter и отказ от вызова LLM при неизменном состоянии** |
 | **R17** | **RAG-поиск по коду (v0.9.0): индексация README/docs/src в pgvector и семантический поиск без изменения репозиториев** |
-| **R18** | **Single-user auth (v1.0.0, план): защита API при доступе по LAN через bcrypt-пароль, JWT и httpOnly cookie; один пользователь без RBAC** |
+| **R18** | **Single-user auth (v1.0.0): защита API при доступе по LAN через bcrypt-пароль, JWT и httpOnly cookie; один пользователь без RBAC** |
 | **R19** | **Desktop app (v1.0.0, план): Tauri-обёртка с автоматическим запуском Python-sidecar; Docker остаётся серверной опцией** |
 
 **Вне области v0.1.0:** автоматический merge/rebase, CI-интеграция, мобильное приложение, мультипользовательский режим.
@@ -51,9 +51,9 @@ auth (v1.0.0, §3.28). Провайдеры GitHub/GitFlic авторизуют�
 токенами (`GITHUB_TOKEN`, `GITFLIC_TOKEN`), хранятся в `.env`. LLM API key (если
 нужен) хранится в `app_settings`, маскируется в API и не экспортируется.
 
-**v1.0.0 (план):** без регистрации и RBAC. Пользователь создаётся bootstrap-ом
-из `.env`; пароль хранится только как bcrypt-hash; JWT выдаётся на ограниченный
-TTL. Подробности — §3.28 и [`TODO_V1.0.md`](../TODO_V1.0.md).
+**v1.0.0 (Sprint 47 — реализовано):** без регистрации и RBAC. Пользователь
+создаётся bootstrap-ом из `.env`; пароль хранится только как bcrypt-hash; JWT
+выдаётся на 7 дней. Подробности — §3.28 и [`TODO_V1.0.md`](../TODO_V1.0.md).
 
 ---
 
@@ -1392,11 +1392,11 @@ running, errors[]}`.
 
 ---
 
-### 3.28. Single-user authentication (v1.0.0, Sprint 47 — план)
+### 3.28. Single-user authentication (v1.0.0, Sprint 47 — реализовано)
 
-> **Статус:** план. В v0.9.0 auth нет; API доступен локально. Контракт
-> фиксируется заранее, чтобы Sprint 47 не менял SPEC задним числом.
-> См. [`TODO_V1.0.md`](../TODO_V1.0.md) и ADR-0016.
+> **Статус:** реализовано. При `AUTH_ENABLED=true` API защищён JWT; при
+> `false` остаётся локальный режим без входа. См. [`TODO_V1.0.md`](../TODO_V1.0.md)
+> и ADR-0016.
 
 Один пользователь без регистрации, ролей и мультитенантности. Auth включается
 флагом `AUTH_ENABLED`; при `true` все роуты, кроме перечисленных ниже, требуют
@@ -1420,7 +1420,8 @@ running, errors[]}`.
 ```
 
 - JWT: HS256, claims `sub` (user id), `iat`, `exp`, `jti`; секрет
-  `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (default 43200).
+  `AUTH_JWT_SECRET` (≥32 байта), TTL `AUTH_TOKEN_TTL_SECONDS` (default 604800 —
+  7 дней).
 - Cookie: `iiruchating_session=<jwt>; HttpOnly; SameSite=Lax; Path=/;
   Max-Age=<ttl>`; `Secure` — если запрос пришёл по HTTPS.
 - Middleware принимает cookie **или** `Authorization: Bearer <jwt>`.
@@ -1432,10 +1433,11 @@ running, errors[]}`.
 - Пароль хранится только как bcrypt-hash (cost ≥ 12); в ответах и логах hash
   отсутствует.
 - Bootstrap: при пустой `users` пользователь создаётся из
-  `AUTH_ADMIN_USERNAME` + `AUTH_ADMIN_PASSWORD_HASH`. При
-  `AUTH_ENABLED=true` и отсутствии hash приложение не стартует.
-- `AUTH_ENABLED` default `false` для локального `127.0.0.1`; для Docker/LAN
-  рекомендуется `true` (см. `.env.example`).
+  `ADMIN_USERNAME` (default `admin`) + `ADMIN_PASSWORD` (default `admin`);
+  пароль сразу хэшируется bcrypt. При `AUTH_ENABLED=true` и ошибке bootstrap
+  приложение не стартует.
+- `AUTH_ENABLED` default `true`; для локального `127.0.0.1` можно выключить
+  (`false`), для Docker/LAN рекомендуется `true` (см. `.env.example`).
 - Frontend: `/login`, `AuthProvider`, protected routes, редирект на `/login`
   при `401`, logout; в desktop-сборке — Bearer fallback (KI-020).
 - Read-only политика не меняется: auth только закрывает доступ, но не даёт
@@ -1445,14 +1447,14 @@ running, errors[]}`.
 
 ```
 users(
-  id, username* UNIQUE, password_hash, is_active BOOLEAN,
+  id, username* UNIQUE, hashed_password, is_active BOOLEAN,
   created_at, last_login_at NULL
 )
 ```
 
-**Переменные окружения:** `AUTH_ENABLED`, `AUTH_ADMIN_USERNAME`,
-`AUTH_ADMIN_PASSWORD_HASH`, `AUTH_JWT_SECRET`, `AUTH_TOKEN_TTL_SECONDS`,
-`AUTH_LOGIN_RATE_LIMIT`, `AUTH_LOGIN_RATE_WINDOW_SECONDS`.
+**Переменные окружения:** `AUTH_ENABLED`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`,
+`AUTH_JWT_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_LOGIN_RATE_LIMIT`,
+`AUTH_LOGIN_RATE_WINDOW_SECONDS`.
 
 ---
 
@@ -1471,8 +1473,8 @@ repositories(
   tags JSONB
 )
 
-users(                      -- v1.0.0 (план, Sprint 47)
-  id, username* UNIQUE, password_hash, is_active BOOLEAN,
+users(                      -- v1.0.0 (Sprint 47)
+  id, username* UNIQUE, hashed_password, is_active BOOLEAN,
   created_at, last_login_at NULL
 )
 
@@ -1601,7 +1603,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
-| **Auth (v1.0.0, план)** | **`AUTH_ENABLED` (default false для localhost), `AUTH_ADMIN_USERNAME`, `AUTH_ADMIN_PASSWORD_HASH` (bcrypt), `AUTH_JWT_SECRET` (≥32 байта), `AUTH_TOKEN_TTL_SECONDS` (default 43200), `AUTH_LOGIN_RATE_LIMIT` (default 5), `AUTH_LOGIN_RATE_WINDOW_SECONDS` (default 60); cookie `iiruchating_session` HttpOnly/SameSite=Lax** |
+| **Auth (v1.0.0, реализовано)** | **`AUTH_ENABLED` (default true), `ADMIN_USERNAME` (default `admin`), `ADMIN_PASSWORD` (default `admin`, хэшируется при bootstrap), `AUTH_JWT_SECRET` (≥32 байта), `AUTH_TOKEN_TTL_SECONDS` (default 604800 — 7 дней), `AUTH_LOGIN_RATE_LIMIT` (default 5), `AUTH_LOGIN_RATE_WINDOW_SECONDS` (default 60); cookie `iiruchating_session` HttpOnly/SameSite=Lax** |
 | **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
 | **RAG (v0.9.0, реализовано)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL` (default `text-embedding-3-small`), `EMBEDDING_DIMENSIONS` (default 1536), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO` (default 2000), `RAG_CHUNK_CHARS` (default 1000), `RAG_CHUNK_OVERLAP` (default 150); на SQLite — `503 rag_unavailable`** |
 

@@ -136,6 +136,22 @@ curl http://127.0.0.1:8000/api/v1/health
 # {"status":"ok","version":"0.9.0","db_ok":true,...}
 ```
 
+### Вход в приложение
+
+При `AUTH_ENABLED=true` (по умолчанию) при первом запуске создаётся пользователь
+`admin` с паролем `admin`. Смените его в `.env`:
+
+```env
+AUTH_ENABLED=true
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=<strong-password>
+AUTH_JWT_SECRET=<random-64-char-string>
+```
+
+Для локального одноразового запуска можно отключить вход: `AUTH_ENABLED=false`.
+Health и metrics остаются публичными; остальные API требуют JWT (cookie
+`iiruchating_session` или `Authorization: Bearer`).
+
 Миграции применяются автоматически при старте контейнера
 (`docker-entrypoint.sh` → `alembic upgrade head`). Вручную:
 

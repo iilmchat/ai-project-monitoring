@@ -166,6 +166,30 @@ class AppSetting(Base):
         return f"AppSetting(key={self.key!r})"
 
 
+class User(Base):
+    """Single-user authentication account (v1.0.0, Sprint 47)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"User(id={self.id!r}, username={self.username!r})"
+
+
 class DependencyCache(Base):
     """TTL cache for registry latest-version lookups (SPEC §4, S25-001)."""
 
@@ -318,5 +342,6 @@ __all__ = [
     "RepositoryStatus",
     "ScanRun",
     "SecurityCache",
+    "User",
     "WebhookEvent",
 ]

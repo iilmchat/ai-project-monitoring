@@ -10,6 +10,9 @@
 - feat(ui): на `/search` кнопка «Запустить индексацию (RAG)», статус «Индексация запущена…» и polling счётчика чанков (S45-004).
 - docs: `GETTING_STARTED.md` — раздел «Использование PostgreSQL и RAG»; `.env.example` — `POSTGRES_*` и `EMBEDDING_*`.
 - docs(planning): `TODO_V1.0.md` — roadmap v1.0.0 (single-user auth, Tauri desktop, release), контракты auth в SPEC §3.28, архитектура AuthService/Tauri в ARCHITECTURE §24–25, KI-019/KI-020.
+- feat(auth): single-user authentication — `users` (миграция `012`), bcrypt, JWT HS256 (7 дней), httpOnly cookie `iiruchating_session`, `AuthMiddleware` для всех API кроме `/health`, `/metrics`, `/auth/login`; login/me/logout, rate-limit, bootstrap `admin/admin` (S47-001..S47-004).
+- feat(ui): lazy `/login`, `useAuthStore`, protected routes, logout в шапке; auth-словарь RU/EN; E2E-моки auth.
+- docs(adr): ADR-0016 «Single-user authentication».
 
 ## [0.9.0] - 2026-11-08
 

@@ -560,6 +560,19 @@ export interface LLMTestResult {
   error: string | null
 }
 
+export interface AuthUser {
+  id: number
+  username: string
+  is_active: boolean
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_at: string
+  user: AuthUser
+}
+
 export interface UnificationAdvice {
   ecosystem: 'python' | 'node'
   package: string

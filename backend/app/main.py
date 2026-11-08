@@ -14,7 +14,7 @@ from app.config import Settings
 from app.core.system import read_git_version
 from app.db.session import build_engine, build_session_factory
 from app.logging import configure_logging
-from app.middleware import RequestLoggingMiddleware
+from app.middleware import AuthMiddleware, RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
 from app.providers.npm_client import NpmClient
@@ -23,6 +23,7 @@ from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.agent_task_service import AgentTaskService
 from app.services.ai_provider_service import AIProviderService
+from app.services.auth_service import AuthService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.code_search_service import CodeSearchService
@@ -195,6 +196,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mirror_scheduler=mirror_scheduler,
         notification_service=notification_service,
     )
+    auth_service = AuthService(session_factory, resolved)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -205,6 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scan_roots=resolved.scan_root_paths,
         )
         await settings_service.load_into_config()
+        await auth_service.bootstrap_admin()
         mirror_scheduler.start()
         try:
             yield
@@ -251,8 +254,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.action_service = action_service
     application.state.bulk_service = bulk_service
     application.state.settings_service = settings_service
+    application.state.auth_service = auth_service
     application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)
+    application.add_middleware(AuthMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[

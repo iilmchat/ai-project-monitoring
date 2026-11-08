@@ -64,6 +64,8 @@ docker compose up -d --build
 
 - Веб-интерфейс: <http://127.0.0.1:3000>
 - API (напрямую): <http://127.0.0.1:8000/api/v1/health>
+- Вход: `admin` / `admin` (задайте `ADMIN_PASSWORD` и `AUTH_JWT_SECRET` в `.env`
+  перед доступом по LAN).
 
 Backend собирается из `backend/Dockerfile` (Python 3.12, `libgit2`, `git`),
 frontend — из `frontend/Dockerfile` (Node 20 build → nginx). Docker Compose
@@ -157,10 +159,10 @@ pnpm --dir frontend exec playwright install chromium
 |------------|----------|
 | Версия | **v0.9.0** (2026-11-08) |
 | Планируется | **v1.0.0 «Secure Desktop»** — single-user auth, Tauri |
-| Спринты | 1–44 (v0.9.0 «Stability & RAG») |
-| Тесты backend | **246** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **44** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **89.99 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.0 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.7 kB) |
+| Спринты | 1–47 (v1.0.0 в разработке) |
+| Тесты backend | **254** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Тесты frontend | **45** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **89.32 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, логин 1.0 kB, AI-дайджест 0.8 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
@@ -215,9 +217,10 @@ pnpm --dir frontend exec playwright install chromium
 **v1.0.0 «Secure Desktop»** — планируется
 ([`TODO_V1.0.md`](TODO_V1.0.md)):
 
-- **Sprint 47 — Single-User Authentication:** bcrypt-пароль, JWT, httpOnly
-  cookie, middleware для защиты API при доступе по LAN; экран логина и protected
-  routes.
+- **Sprint 47 — Single-User Authentication:** ✅ реализован: bcrypt-пароль, JWT,
+  httpOnly cookie, middleware для защиты API при доступе по LAN; экран логина и
+  protected routes. По умолчанию создаётся `admin` / `admin` (смените
+  `ADMIN_PASSWORD`/`AUTH_JWT_SECRET`).
 - **Sprint 48 — Tauri Desktop App:** Windows/macOS приложение с Python-sidecar
   (PyInstaller), автоматический запуск/остановка backend, работа без Docker;
   Docker остаётся серверной опцией.

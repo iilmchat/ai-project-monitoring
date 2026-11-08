@@ -4,6 +4,7 @@ export const common = {
   'nav.dashboard': 'Дашборд',
   'nav.search': 'Поиск',
   'nav.settings': 'Настройки',
+  'common.logout': 'Выйти',
   'footer.text': 'ai-project-monitoring · мониторинг локальных Git-репозиториев (read-only)',
   'footer.hint': 'Нажмите ? для просмотра горячих клавиш · Ctrl/Cmd+K — Command Palette',
   'common.loading': 'Загрузка…',
