@@ -26,6 +26,20 @@
 
 ---
 
+## Спринт 43: Settings Audit, GigaChat & Smart Cache (v0.9.0)
+
+**Дата:** 2026-11-08 · **Статус:** ✅ Завершён
+
+### Сделано
+
+- [x] S43-001: аудит `.env` → UI: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; группы «Уведомления»/«Производительность»; сид `app_settings` из `config.py` при пустой БД; runtime-применение без перезапуска.
+- [x] S43-002: `provider_type`/`auth_type` в `ai_provider_profiles` (миграция `010`), `GigaChatProvider` с OAuth 2.0, in-memory token cache, refresh margin, single-flight, повтор после `401`; API `gigachat/auth` и `gigachat/refresh`; UI-модалка и статус токена.
+- [x] S43-003: `AICacheKeyBuilder` (`state_hash` + `prompt_version`), smart-кэш для dashboard-advice, unification-advice, CVE и commit message; `X-AI-Cache`, `refresh=true`, single-flight, метрики `ai_cache_hits/misses`, `ai_llm_calls`.
+- [x] S43-004: `test_gigachat.py`, `test_smart_cache.py`, тесты сида/новых настроек; ADR-0012, SPEC §3.12/§3.25/§3.27, CHANGELOG/RELEASES.
+- **Проверки:** backend `pytest`/`ruff`/`mypy` — 0; frontend 44 unit + 3 E2E; entry bundle 89.85 kB gzip.
+
+---
+
 ## Спринт 39: AI Provider Profiles (v0.8.0)
 
 **Дата:** 2026-11-08 · **Статус:** ✅ Завершён

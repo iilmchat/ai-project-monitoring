@@ -370,6 +370,12 @@ export interface AppSettings {
   llm_timeout_seconds: number
   llm_max_diff_chars: number
   llm_allow_remote: boolean
+  telegram_bot_token: string
+  telegram_chat_id: string
+  notifications_enabled: boolean
+  fetch_timeout: number
+  status_ttl_seconds: number
+  mirror_poll_interval_seconds: number
 }
 
 export interface SettingsUpdate {
@@ -385,6 +391,12 @@ export interface SettingsUpdate {
   llm_timeout_seconds?: number
   llm_max_diff_chars?: number
   llm_allow_remote?: boolean
+  telegram_bot_token?: string
+  telegram_chat_id?: string
+  notifications_enabled?: boolean
+  fetch_timeout?: number
+  status_ttl_seconds?: number
+  mirror_poll_interval_seconds?: number
 }
 
 export interface CommitMessageSuggestion {
@@ -397,6 +409,7 @@ export interface CommitMessageSuggestion {
   diff_chars: number
   files_changed: number
   warnings: string[]
+  cached: boolean
   generated_at: string
 }
 
@@ -445,6 +458,12 @@ export interface AIProviderProfile {
   model_name: string
   is_active: boolean
   created_at: string
+  provider_type: 'openai_compatible' | 'gigachat'
+  auth_type: 'api_key' | 'oauth'
+  client_id: string
+  has_client_secret: boolean
+  oauth_scope: string | null
+  oauth_expires_at: string | null
 }
 
 export interface AIProviderCreate {
@@ -452,6 +471,11 @@ export interface AIProviderCreate {
   base_url: string
   model_name: string
   api_key?: string
+  provider_type?: 'openai_compatible' | 'gigachat'
+  auth_type?: 'api_key' | 'oauth'
+  client_id?: string
+  client_secret?: string
+  oauth_scope?: string
 }
 
 export interface AIProviderUpdate {
@@ -459,6 +483,18 @@ export interface AIProviderUpdate {
   base_url?: string
   model_name?: string
   api_key?: string
+  provider_type?: 'openai_compatible' | 'gigachat'
+  auth_type?: 'api_key' | 'oauth'
+  client_id?: string
+  client_secret?: string
+  oauth_scope?: string
+}
+
+export interface GigaChatAuthResponse {
+  profile_id: number
+  status: 'ok'
+  expires_at: string
+  model_name: string
 }
 
 export interface DashboardAdvice {

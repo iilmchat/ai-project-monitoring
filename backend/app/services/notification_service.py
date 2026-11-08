@@ -52,6 +52,21 @@ class NotificationService:
     def telegram_configured(self) -> bool:
         return bool(self._bot_token and self._chat_id)
 
+    def configure(
+        self,
+        *,
+        enabled: bool | None = None,
+        bot_token: str | None = None,
+        chat_id: str | None = None,
+    ) -> None:
+        """Apply settings changed through the UI without a restart."""
+        if enabled is not None:
+            self._enabled = enabled
+        if bot_token is not None:
+            self._bot_token = bot_token
+        if chat_id is not None:
+            self._chat_id = chat_id
+
     def send_notification(self, title: str, message: str) -> bool:
         if not self._enabled:
             return False

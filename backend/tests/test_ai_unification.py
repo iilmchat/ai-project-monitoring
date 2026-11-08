@@ -12,6 +12,7 @@ from app.schemas.global_analytics import (
     GlobalDependencySummary,
     VersionDistribution,
 )
+from app.services.ai_cache import build_cache_key
 from app.services.global_analytics_service import (
     GlobalAnalyticsService,
     LLMUnavailableError,
@@ -123,10 +124,18 @@ async def test_advice_is_generated_and_cached(
     ]
 
     async with session_factory() as session:
-        row = await session.get(
-            AICache,
-            "unification-advice:python:fastapi:fake-model",
+        key = build_cache_key(
+            "unification-advice",
+            "python:fastapi",
+            {
+                "ecosystem": "python",
+                "package": "fastapi",
+                "versions": {"0.115.6": ["alpha"], "0.116.0": ["beta"]},
+            },
+            "fake-model",
+            "v1",
         )
+        row = await session.get(AICache, key)
         assert row is not None
         assert row.payload["advice"] == first.advice
 

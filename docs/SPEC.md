@@ -313,16 +313,26 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 | Метод | Путь | Тело / Ответ |
 |-------|------|--------------|
-| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote}` |
+| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote, telegram_bot_token, telegram_chat_id, notifications_enabled, fetch_timeout, status_ttl_seconds, mirror_poll_interval_seconds}` |
 | PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
 
-Токены, `webhook_secret` и `llm_api_key` в ответе **маскируются**
-(`ghp_****1234`, `sk-****1234`). Разрешённые ключи: `scan_roots`,
+Токены, `webhook_secret`, `llm_api_key` и `telegram_bot_token` в ответе
+**маскируются** (`ghp_****1234`, `sk-****1234`). Разрешённые ключи: `scan_roots`,
 `github_token`, `gitflic_token`, `webhook_secret`, `default_canonical_provider`,
 `llm_enabled`, `llm_base_url`, `llm_model`, `llm_api_key`,
-`llm_timeout_seconds`, `llm_max_diff_chars`, `llm_allow_remote`. Значения
+`llm_timeout_seconds`, `llm_max_diff_chars`, `llm_allow_remote`,
+`telegram_bot_token`, `telegram_chat_id`, `notifications_enabled`,
+`fetch_timeout`, `status_ttl_seconds`, `mirror_poll_interval_seconds`. Значения
 хранятся в `app_settings`; при старте подхватываются в конфиг
-(fallback — `config.py`).
+(fallback — `config.py`). Если таблица `app_settings` пуста, при старте она
+**сидируется** значениями из `.env`/`config.py` (S43-001), поэтому все
+параметры видны и редактируются в UI без ручного PATCH.
+
+**Группы UI:** «Уведомления» (`telegram_bot_token`, `telegram_chat_id`,
+`notifications_enabled`) и «Производительность» (`fetch_timeout`,
+`status_ttl_seconds`, `mirror_poll_interval_seconds`). Изменения применяются к
+`NotificationService`, `RemoteService`, `StatusService` и `MirrorScheduler`
+без перезапуска.
 
 **LLM-настройки (v0.7.0, Sprint 32 — реализовано):**
 
@@ -1190,9 +1200,14 @@ OpenAI-совместимые профили провайдеров. Актив�
 | PATCH | `/settings/ai-providers/{id}` | обновить профиль |
 | DELETE | `/settings/ai-providers/{id}` | удалить профиль |
 | POST | `/settings/ai-providers/{id}/activate` | сделать профиль активным |
+| POST | `/settings/ai-providers/gigachat/auth` | OAuth-авторизация GigaChat (§3.27) |
+| POST | `/settings/ai-providers/{id}/gigachat/refresh` | обновить токен GigaChat |
 
-`AIProviderRead`: `{id, name, base_url, api_key, model_name, is_active, created_at}`.
-`api_key` всегда маскируется (`sk-a****1234`); пустой ключ не отдаётся.
+`AIProviderRead`: `{id, name, base_url, api_key, model_name, is_active,
+created_at, provider_type, auth_type, client_id, has_client_secret,
+oauth_scope, oauth_expires_at}`.
+`api_key` всегда маскируется (`sk-a****1234`); `client_secret` и
+`access_token` **никогда** не возвращаются; пустой ключ не отдаётся.
 
 **Инварианты:**
 
@@ -1205,12 +1220,14 @@ OpenAI-совместимые профили провайдеров. Актив�
   (изменения применяются без перезапуска).
 - Если активного профиля нет — fallback на `LLM_ENABLED`, `LLM_BASE_URL`,
   `LLM_MODEL`, `LLM_API_KEY`.
-- Remote endpoint по-прежнему требует `LLM_ALLOW_REMOTE=true`.
+- Remote endpoint по-прежнему требует `LLM_ALLOW_REMOTE=true` (для GigaChat
+  OAuth проверка remote не применяется — это штатный облачный провайдер).
 - Удаление профиля не удаляет историю `ai_cache`; активный профиль может
   отсутствовать.
-- **v0.9.0 (план):** добавляется `kind` (`openai_compatible` | `gigachat`) и
-  `auth_type` (`api_key` | `oauth`); для GigaChat — поля OAuth (§3.27).
-  Существующие профили считаются `openai_compatible`/`api_key`.
+- **v0.9.0 (реализовано, S43):** добавлены `provider_type`
+  (`openai_compatible` | `gigachat`) и `auth_type` (`api_key` | `oauth`); для
+  GigaChat — поля OAuth (§3.27). Существующие профили считаются
+  `openai_compatible`/`api_key`.
 
 ---
 
@@ -1294,10 +1311,10 @@ running, errors[]}`.
 
 ---
 
-### 3.27. GigaChat OAuth (v0.9.0, Sprint 43 — план)
+### 3.27. GigaChat OAuth (v0.9.0, Sprint 43 — реализовано)
 
-> **Статус:** план. В v0.8.0 GigaChat подключается как OpenAI-совместимый
-> профиль с готовым токеном; нативного OAuth-флоу нет.
+> **Статус:** реализовано. Профиль `provider_type="gigachat"` использует
+> OAuth 2.0; OpenAI-совместимые профили работают без изменений.
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
@@ -1320,8 +1337,8 @@ running, errors[]}`.
 - `scope`: `GIGACHAT_API_PERS` (default) | `GIGACHAT_API_B2B` |
   `GIGACHAT_API_CORP`;
 - `profile_name` уникально; при совпадении профиль обновляется, а не дублируется;
-- `client_secret` обязателен при первой авторизации; при повторной может быть
-  опущен — используется сохранённый;
+- `client_secret` обязателен для `gigachat/auth`; повторное обновление без
+  секрета — через `POST /settings/ai-providers/{id}/gigachat/refresh`;
 - `activate=true` делает профиль активным (сбрасывает `is_active` у остальных).
 
 **`GigaChatAuthResponse`:**
@@ -1329,8 +1346,7 @@ running, errors[]}`.
 ```json
 {
   "profile_id": 7,
-  "status": "authorized",
-  "token_type": "Bearer",
+  "status": "ok",
   "expires_at": "2026-11-08T12:30:00Z",
   "model_name": "GigaChat"
 }
@@ -1354,8 +1370,8 @@ running, errors[]}`.
   `provider_unavailable`, `timeout`, `http_<code>`.
 - TLS-сертификат НУЦ Минцифры — через `GIGACHAT_CA_BUNDLE`; отключение
   проверки сертификата запрещено.
-- `LLMService.resolve()` выбирает `GigaChatProvider` по `kind="gigachat"`;
-  OpenAI-совместимые профили работают без изменений.
+- `LLMService.resolve()` выбирает `GigaChatProvider` по
+  `provider_type="gigachat"`; OpenAI-совместимые профили работают без изменений.
 - Токен живёт ~30 минут (KI-018); UI показывает `expires_at` и предлагает
   повторную авторизацию, не спамя запросами.
 
@@ -1435,21 +1451,20 @@ security_cache(             -- v0.6.0 (Sprint 28)
   checked_at
 )
 
-ai_cache(                   -- v0.7.0 (Sprint 33)
-  key* TEXT PRIMARY KEY,    -- "cve-explain:CVE-2026-1234:qwen2.5-coder-7b-instruct"
-                            -- v0.9.0 (план): key включает state_hash и prompt_version
-  kind TEXT,                -- cve_explain | recommendations | dashboard_advice | ...
+ai_cache(                   -- v0.7.0 (Sprint 33), smart hash v0.9.0 (Sprint 43)
+  key* TEXT PRIMARY KEY,    -- "<feature>:<scope>:<state_hash>:<model>:<prompt_version>"
+  kind TEXT,                -- cve_explain | commit_message | dashboard_advice | ...
   model TEXT NULL,
-  payload JSONB,            -- {explanation, references, ...}
+  payload JSONB,            -- {explanation|advice|message, ...}
   checked_at
 )
 
-ai_provider_profiles(       -- v0.8.0 (Sprint 39)
+ai_provider_profiles(       -- v0.8.0 (Sprint 39), GigaChat v0.9.0 (Sprint 43)
   id, name* UNIQUE, base_url, api_key NULL, model_name,
   is_active BOOLEAN, created_at,
-  -- v0.9.0 (план, миграция 010):
-  kind TEXT DEFAULT 'openai_compatible',  -- openai_compatible | gigachat
-  auth_type TEXT DEFAULT 'api_key',       -- api_key | oauth
+  -- v0.9.0 (реализовано, миграция 010):
+  provider_type TEXT DEFAULT 'openai_compatible', -- openai_compatible | gigachat
+  auth_type TEXT DEFAULT 'api_key',              -- api_key | oauth
   client_id TEXT NULL, client_secret TEXT NULL,
   oauth_scope TEXT NULL, oauth_expires_at, access_token TEXT NULL
 )
@@ -1499,9 +1514,10 @@ code_chunks(                -- v0.9.0 (план, Sprint 44; PostgreSQL + pgvecto
 | **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
 | **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 3600), `GLOBAL_ANALYTICS_LIMIT` (default 50), `GLOBAL_ANALYTICS_CONCURRENCY` (default 4); агрегация через `DependencyService` + `dependency_cache`, `refresh=true` обходит кэш** |
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default 10000); только `confirm=true` + чистый worktree (`git status --porcelain`) + `action_log`** |
-| **E2E и bundle (v0.9.0, план)** | **Playwright (`@playwright/test`, dev-only), `E2E_BASE_URL`/`E2E_API_URL`, отдельная БД и tmp-репозитории; entry bundle < 90 kB gzip, budget-check без новой runtime-зависимости** |
-| **GigaChat OAuth (v0.9.0, план)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
-| **Smart AI cache (v0.9.0, план)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
+| **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
+| **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
+| **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
+| **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
 | **RAG (v0.9.0, план)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_MODEL` (default `nomic-embed-text-v1.5`), `EMBEDDING_DIMENSIONS` (default 768), `EMBEDDING_ALLOW_REMOTE` (default false), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO`, `RAG_BATCH_SIZE` (default 32), `RAG_CONCURRENCY` (default 2), `RAG_CHUNK_TOKENS` (default 512), `RAG_CHUNK_OVERLAP` (default 64); на SQLite — `503 rag_unavailable`** |
 
 ---
@@ -1625,10 +1641,10 @@ code_chunks(                -- v0.9.0 (план, Sprint 44; PostgreSQL + pgvecto
       AI-коммит с мок-LLM) на изолированных tmp-репозиториях; 0 flaky.
 - [ ] Bundle: entry **< 90 kB gzip**; словари `settings`/`repository` — в
       lazy-чанках; budget-check падает при превышении.
-- [ ] GigaChat: `POST /api/v1/settings/ai-providers/gigachat/auth` выполняет
+- [x] GigaChat: `POST /api/v1/settings/ai-providers/gigachat/auth` выполняет
       OAuth 2.0, не возвращает токен/секрет; refresh автоматический,
       `401` обрабатывается; KI-018.
-- [ ] Smart cache: повторный запрос при неизменном состоянии → `cached=true`,
+- [x] Smart cache: повторный запрос при неизменном состоянии → `cached=true`,
       LLM не вызывается; изменение состояния/`refresh=true` → вызов;
       ошибки не кэшируются.
 - [ ] RAG: `POST /api/v1/search/code` ищет по README/docs/src всех tracked

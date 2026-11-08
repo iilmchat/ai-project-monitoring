@@ -189,6 +189,7 @@ function RepositoryDetailsContent() {
   const [cveLoading, setCveLoading] = useState(false)
   const [cveTitle, setCveTitle] = useState('')
   const [cveText, setCveText] = useState('')
+  const [cveCached, setCveCached] = useState(false)
   const [cveError, setCveError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
@@ -571,7 +572,9 @@ function RepositoryDetailsContent() {
     try {
       const suggestion = await generateCommitMessage(repositoryId)
       setCommitMessage(suggestion.message)
-      if (suggestion.truncated) {
+      if (suggestion.cached) {
+        setCommitNotice(t('repo.commit.cached'))
+      } else if (suggestion.truncated) {
         setCommitNotice(t('repo.commit.truncated'))
       }
     } catch {
@@ -622,6 +625,7 @@ function RepositoryDetailsContent() {
     setCveOpen(true)
     setCveTitle(cveId)
     setCveText('')
+    setCveCached(false)
     setCveError(null)
     setCveLoading(true)
     try {
@@ -631,6 +635,7 @@ function RepositoryDetailsContent() {
         item.summary ?? `${item.package} ${item.version}`,
       )
       setCveText(result.explanation)
+      setCveCached(result.cached)
     } catch {
       setCveError(t('repo.errors.llmUnavailable'))
     } finally {
@@ -2177,9 +2182,16 @@ function RepositoryDetailsContent() {
                   {cveError}
                 </p>
               ) : (
-                <p className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
-                  {cveText}
-                </p>
+                <>
+                  {cveCached && (
+                    <span className="mb-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      {t('repo.cve.cached')}
+                    </span>
+                  )}
+                  <p className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
+                    {cveText}
+                  </p>
+                </>
               )}
             </div>
             <div className="mt-5 flex justify-end">

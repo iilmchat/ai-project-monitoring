@@ -230,6 +230,12 @@ const appSettings: AppSettings = {
   llm_timeout_seconds: 30,
   llm_max_diff_chars: 10000,
   llm_allow_remote: false,
+  telegram_bot_token: '',
+  telegram_chat_id: '',
+  notifications_enabled: true,
+  fetch_timeout: 30,
+  status_ttl_seconds: 60,
+  mirror_poll_interval_seconds: 300,
 }
 
 function renderDetails() {
@@ -308,6 +314,7 @@ describe('RepositoryDetails actions', () => {
       diff_chars: 42,
       files_changed: 1,
       warnings: [],
+      cached: false,
       generated_at: '2026-11-06T10:00:00Z',
     })
     vi.mocked(explainCve).mockResolvedValue({

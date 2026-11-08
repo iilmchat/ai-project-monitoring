@@ -210,7 +210,7 @@ class SecurityCache(Base):
 
 
 class AIProviderProfile(Base):
-    """OpenAI-compatible AI provider profile (S39-001)."""
+    """AI provider profile (S39-001, GigaChat OAuth in S43-002)."""
 
     __tablename__ = "ai_provider_profiles"
 
@@ -219,6 +219,19 @@ class AIProviderProfile(Base):
     base_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     api_key: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_type: Mapped[str] = mapped_column(
+        String(32), default="openai_compatible", nullable=False
+    )
+    auth_type: Mapped[str] = mapped_column(
+        String(16), default="api_key", nullable=False
+    )
+    client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_secret: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    oauth_scope: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    oauth_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=False, index=True, nullable=False
     )

@@ -176,4 +176,10 @@
 
 **Workaround:** повторить запрос вручную после обновления токена; проверить `expires_at` в профиле; при массовых ошибках — временно переключиться на OpenAI-совместимый профиль; не запускать параллельные AI-запросы с одним профилем.
 
-**План (Sprint 43):** `GigaChatProvider` кэширует токен по `profile_id`, обновляет его за `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60) до истечения, refresh под mutex (single-flight), при `401` — один refresh + retry; `expires_at` показывается в UI; ошибки `invalid_client`/`unsupported_scope`/`provider_unavailable` различимы. Тесты — с mock HTTP, без реальных ключей. Токен и `client_secret` не логируются и не возвращаются API.
+**План (Sprint 43):** реализовано. `GigaChatProvider` кэширует токен по
+`profile_id`, обновляет его за `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS`
+(default 60) до истечения, refresh под mutex (single-flight), при `401` — один
+refresh + retry; `expires_at` показывается в UI; ошибки
+`invalid_client`/`unsupported_scope`/`provider_unavailable` различимы. Тесты —
+с mock HTTP, без реальных ключей. Токен и `client_secret` не логируются и не
+возвращаются API.

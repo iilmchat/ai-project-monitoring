@@ -20,6 +20,7 @@ class CommitMessageSuggestion(BaseModel):
     diff_chars: int = Field(default=0, ge=0)
     files_changed: int = Field(default=0, ge=0)
     warnings: list[str] = Field(default_factory=list)
+    cached: bool = False
     generated_at: datetime
 
 

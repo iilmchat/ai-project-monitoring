@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hashlib
 import io
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.db.session import get_session
 from app.git.command_backend import get_conflicts, get_worktree_diff
@@ -79,6 +80,7 @@ from app.services.agent_task_service import (
     AgentTaskService,
     AgentTaskUnavailableError,
 )
+from app.services.ai_cache import build_cache_key, cache_is_fresh, cache_lock
 from app.services.bulk_service import BulkService
 from app.services.ci_service import aggregate_ci
 from app.services.compare_cache import CompareCache
@@ -383,6 +385,7 @@ def _count_diff_files(diff: str) -> int:
 async def generate_commit_message(
     repository_id: int,
     request: Request,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CommitMessageSuggestion:
     repository = await _get_repository(session, repository_id)
@@ -417,14 +420,90 @@ async def generate_commit_message(
     if truncated:
         prepared = f"{original[:max_chars]}\n[diff truncated]"
         warnings.append("diff_truncated")
+    files_changed = _count_diff_files(original)
 
-    message = await service.generate_commit_message(prepared)
-    if message is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM недоступна. Проверьте настройки.",
+    try:
+        local = await asyncio.to_thread(read_local_status, repository.path)
+        branch = local.branch
+    except GitStatusError:
+        branch = None
+    state = {
+        "diff_sha": hashlib.sha256(prepared.encode("utf-8")).hexdigest(),
+        "branch": branch,
+    }
+    prompt_version = request.app.state.settings.ai_prompt_version
+    cache_key = build_cache_key(
+        "commit-message",
+        str(repository_id),
+        state,
+        config.model,
+        prompt_version,
+    )
+    ttl = int(request.app.state.settings.ai_cache_ttl_seconds)
+    row = await session.get(AICache, cache_key)
+    if row is not None and cache_is_fresh(row.checked_at, ttl):
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        cached_message = payload.get("message")
+        if isinstance(cached_message, str) and cached_message:
+            observe_ai_cache("commit_message", hit=True)
+            response.headers["X-AI-Cache"] = "hit"
+            return _cached_commit_suggestion(
+                repository_id,
+                cached_message,
+                payload,
+                config.provider,
+                row.model or config.model,
+            )
+
+    lock = cache_lock(cache_key)
+    async with lock:
+        row = await session.get(AICache, cache_key)
+        if row is not None and cache_is_fresh(row.checked_at, ttl):
+            payload = row.payload if isinstance(row.payload, dict) else {}
+            cached_message = payload.get("message")
+            if isinstance(cached_message, str) and cached_message:
+                observe_ai_cache("commit_message", hit=True)
+                response.headers["X-AI-Cache"] = "hit"
+                return _cached_commit_suggestion(
+                    repository_id,
+                    cached_message,
+                    payload,
+                    config.provider,
+                    row.model or config.model,
+                )
+
+        observe_ai_cache("commit_message", hit=False)
+        message = await service.generate_commit_message(prepared)
+        observe_llm_call(
+            "commit_message",
+            config.provider,
+            "ok" if message is not None else "error",
         )
+        if message is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLM недоступна. Проверьте настройки.",
+            )
 
+        payload = {
+            "message": message,
+            "truncated": truncated,
+            "diff_chars": len(original),
+            "files_changed": files_changed,
+            "warnings": warnings,
+        }
+        if row is None:
+            row = AICache(
+                key=cache_key,
+                kind="commit_message",
+                model=config.model,
+            )
+            session.add(row)
+        row.payload = payload
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
     return CommitMessageSuggestion(
         repository_id=repository_id,
         message=message,
@@ -432,18 +511,46 @@ async def generate_commit_message(
         model=config.model,
         truncated=truncated,
         diff_chars=len(original),
-        files_changed=_count_diff_files(original),
+        files_changed=files_changed,
         warnings=warnings,
+        cached=False,
         generated_at=utcnow(),
     )
 
 
-def _cache_is_fresh(checked_at: object, ttl_seconds: int) -> bool:
-    if not isinstance(checked_at, datetime) or ttl_seconds <= 0:
-        return False
-    if checked_at.tzinfo is None:
-        checked_at = checked_at.replace(tzinfo=UTC)
-    return 0 <= (utcnow() - checked_at).total_seconds() < ttl_seconds
+def _cached_commit_suggestion(
+    repository_id: int,
+    message: str,
+    payload: dict[str, object],
+    provider: str,
+    model: str,
+) -> CommitMessageSuggestion:
+    warnings = payload.get("warnings")
+    return CommitMessageSuggestion(
+        repository_id=repository_id,
+        message=message,
+        provider=provider,
+        model=model,
+        truncated=bool(payload.get("truncated", False)),
+        diff_chars=_payload_int(payload.get("diff_chars")),
+        files_changed=_payload_int(payload.get("files_changed")),
+        warnings=[str(item) for item in warnings] if isinstance(warnings, list) else [],
+        cached=True,
+        generated_at=utcnow(),
+    )
+
+
+def _payload_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int | float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
 
 
 @router.post(
@@ -454,6 +561,7 @@ async def explain_repository_cve(
     repository_id: int,
     payload: CveExplainRequest,
     request: Request,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CveExplanation:
     await _get_repository(session, repository_id)
@@ -466,16 +574,26 @@ async def explain_repository_cve(
         )
     config = await service.resolve()
 
-    cache_key = f"cve-explain:{payload.cve_id.strip()}:{config.model}"
-    row = await session.get(AICache, cache_key)
+    cve_id = payload.cve_id.strip()
+    state = {"cve_id": cve_id, "summary": payload.summary}
+    cache_key = build_cache_key(
+        "cve-explain",
+        cve_id,
+        state,
+        config.model,
+        request.app.state.settings.ai_prompt_version,
+    )
     ttl = int(request.app.state.settings.ai_cache_ttl_seconds)
-    if row is not None and _cache_is_fresh(row.checked_at, ttl):
+    row = await session.get(AICache, cache_key)
+    if row is not None and cache_is_fresh(row.checked_at, ttl):
         explanation = (
             row.payload.get("explanation")
             if isinstance(row.payload, dict)
             else None
         )
         if isinstance(explanation, str) and explanation:
+            observe_ai_cache("cve_explain", hit=True)
+            response.headers["X-AI-Cache"] = "hit"
             return CveExplanation(
                 explanation=explanation,
                 cached=True,
@@ -483,23 +601,50 @@ async def explain_repository_cve(
                 generated_at=utcnow(),
             )
 
-    explanation = await service.explain_cve(payload.cve_id, payload.summary)
-    if explanation is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM недоступна. Проверьте настройки.",
-        )
+    lock = cache_lock(cache_key)
+    async with lock:
+        row = await session.get(AICache, cache_key)
+        if row is not None and cache_is_fresh(row.checked_at, ttl):
+            explanation = (
+                row.payload.get("explanation")
+                if isinstance(row.payload, dict)
+                else None
+            )
+            if isinstance(explanation, str) and explanation:
+                observe_ai_cache("cve_explain", hit=True)
+                response.headers["X-AI-Cache"] = "hit"
+                return CveExplanation(
+                    explanation=explanation,
+                    cached=True,
+                    model=row.model,
+                    generated_at=utcnow(),
+                )
 
-    if row is None:
-        row = AICache(
-            key=cache_key,
-            kind="cve_explain",
-            model=config.model,
+        observe_ai_cache("cve_explain", hit=False)
+        explanation = await service.explain_cve(payload.cve_id, payload.summary)
+        observe_llm_call(
+            "cve_explain",
+            config.provider,
+            "ok" if explanation is not None else "error",
         )
-        session.add(row)
-    row.payload = {"explanation": explanation}
-    row.checked_at = utcnow()
-    await session.commit()
+        if explanation is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLM недоступна. Проверьте настройки.",
+            )
+
+        if row is None:
+            row = AICache(
+                key=cache_key,
+                kind="cve_explain",
+                model=config.model,
+            )
+            session.add(row)
+        row.payload = {"explanation": explanation}
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
     return CveExplanation(
         explanation=explanation,
         cached=False,

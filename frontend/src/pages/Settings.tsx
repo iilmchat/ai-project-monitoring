@@ -6,6 +6,7 @@ import {
   deleteAIProvider,
   getAIProviders,
   getSettings,
+  refreshGigaChatToken,
   testLlm,
   updateSettings,
 } from '../api/client'
@@ -38,17 +39,24 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { t } = useI18n()
+  const { t, formatDate } = useI18n()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [scanRoots, setScanRoots] = useState('')
   const [githubToken, setGithubToken] = useState('')
   const [gitflicToken, setGitflicToken] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
+  const [telegramToken, setTelegramToken] = useState('')
+  const [telegramChatId, setTelegramChatId] = useState('')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [fetchTimeout, setFetchTimeout] = useState(30)
+  const [statusTtl, setStatusTtl] = useState(60)
+  const [mirrorPoll, setMirrorPoll] = useState(300)
   const [provider, setProvider] = useState<'github' | 'gitflic'>('github')
   const [providers, setProviders] = useState<AIProviderProfile[]>([])
   const [providersLoading, setProvidersLoading] = useState(true)
   const [providerModal, setProviderModal] = useState<{
     profile: AIProviderProfile | null
+    initialProviderType?: 'openai_compatible' | 'gigachat'
   } | null>(null)
   const [llmTesting, setLlmTesting] = useState(false)
   const [llmTest, setLlmTest] = useState<LLMTestResult | null>(null)
@@ -71,6 +79,11 @@ function SettingsContent() {
         setSettings(data)
         setScanRoots(data.scan_roots)
         setProvider(data.default_canonical_provider === 'gitflic' ? 'gitflic' : 'github')
+        setTelegramChatId(data.telegram_chat_id ?? '')
+        setNotificationsEnabled(data.notifications_enabled ?? true)
+        setFetchTimeout(data.fetch_timeout ?? 30)
+        setStatusTtl(data.status_ttl_seconds ?? 60)
+        setMirrorPoll(data.mirror_poll_interval_seconds ?? 300)
         setProviders(providerData)
       })
       .catch(() => {
@@ -103,16 +116,23 @@ function SettingsContent() {
       const payload: Record<string, unknown> = {
         scan_roots: scanRoots,
         default_canonical_provider: provider,
+        telegram_chat_id: telegramChatId,
+        notifications_enabled: notificationsEnabled,
+        fetch_timeout: fetchTimeout,
+        status_ttl_seconds: statusTtl,
+        mirror_poll_interval_seconds: mirrorPoll,
       }
       if (githubToken.trim()) payload.github_token = githubToken.trim()
       if (gitflicToken.trim()) payload.gitflic_token = gitflicToken.trim()
       if (webhookSecret.trim()) payload.webhook_secret = webhookSecret.trim()
+      if (telegramToken.trim()) payload.telegram_bot_token = telegramToken.trim()
 
       const updated = await updateSettings(payload)
       setSettings(updated)
       setGithubToken('')
       setGitflicToken('')
       setWebhookSecret('')
+      setTelegramToken('')
       setMessage(t('settings.saved'))
       setError(null)
     } catch {
@@ -162,6 +182,17 @@ function SettingsContent() {
   function handleProviderSaved() {
     void reloadProviders()
     setLlmTest(null)
+  }
+
+  async function handleRefreshGigaChat(item: AIProviderProfile) {
+    try {
+      await refreshGigaChatToken(item.id)
+      await reloadProviders()
+      setMessage(t('settings.gigachatRefreshed'))
+      setError(null)
+    } catch {
+      setError(t('settings.gigachatAuthError'))
+    }
   }
 
   function handleExportWorkspace() {
@@ -286,6 +317,90 @@ function SettingsContent() {
             {t('settings.tokenHint')}
           </p>
 
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {t('settings.notificationsSection')}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.notificationsHint')}
+            </p>
+            <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={notificationsEnabled}
+                onChange={(event) => setNotificationsEnabled(event.target.checked)}
+              />
+              {t('settings.notificationsEnabled')}
+            </label>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.telegramToken')}
+                <input
+                  type="password"
+                  value={telegramToken}
+                  onChange={(event) => setTelegramToken(event.target.value)}
+                  placeholder={settings?.telegram_bot_token || t('common.notSet')}
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.telegramChatId')}
+                <input
+                  value={telegramChatId}
+                  onChange={(event) => setTelegramChatId(event.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {t('settings.performanceSection')}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.performanceHint')}
+            </p>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.fetchTimeout')}
+                <input
+                  type="number"
+                  min={1}
+                  value={fetchTimeout}
+                  onChange={(event) =>
+                    setFetchTimeout(Number(event.target.value) || 1)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.statusTtl')}
+                <input
+                  type="number"
+                  min={1}
+                  value={statusTtl}
+                  onChange={(event) =>
+                    setStatusTtl(Number(event.target.value) || 1)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.mirrorPollInterval')}
+                <input
+                  type="number"
+                  min={1}
+                  value={mirrorPoll}
+                  onChange={(event) =>
+                    setMirrorPoll(Number(event.target.value) || 1)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <button
               type="submit"
@@ -319,7 +434,24 @@ function SettingsContent() {
             </button>
             <button
               type="button"
-              onClick={() => setProviderModal({ profile: null })}
+              onClick={() =>
+                setProviderModal({
+                  profile: null,
+                  initialProviderType: 'gigachat',
+                })
+              }
+              className="rounded-md border border-sky-300 px-3 py-1 text-sm font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-900/20"
+            >
+              {t('settings.gigachatAuth')}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setProviderModal({
+                  profile: null,
+                  initialProviderType: 'openai_compatible',
+                })
+              }
               className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-white hover:bg-primary-container"
             >
               {t('settings.addProvider')}
@@ -381,6 +513,11 @@ function SettingsContent() {
                             ? t('settings.providerActive')
                             : t('settings.providerInactive')}
                         </span>
+                        {item.provider_type === 'gigachat' && (
+                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+                            {t('settings.gigachatBadge')}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
                         {item.model_name}
@@ -388,8 +525,25 @@ function SettingsContent() {
                       <p className="truncate font-mono text-xs text-slate-400 dark:text-slate-500">
                         {item.base_url}
                       </p>
+                      {item.provider_type === 'gigachat' &&
+                        item.oauth_expires_at && (
+                          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                            {t('settings.gigachatTokenUntil', {
+                              date: formatDate(item.oauth_expires_at),
+                            })}
+                          </p>
+                        )}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {item.provider_type === 'gigachat' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleRefreshGigaChat(item)}
+                          className="rounded-md border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-900/20"
+                        >
+                          {t('settings.gigachatRefresh')}
+                        </button>
+                      )}
                       {!item.is_active && (
                         <button
                           type="button"
@@ -461,6 +615,7 @@ function SettingsContent() {
         <Suspense fallback={null}>
           <AIProviderModal
             profile={providerModal.profile}
+            initialProviderType={providerModal.initialProviderType}
             onClose={() => setProviderModal(null)}
             onSaved={handleProviderSaved}
           />

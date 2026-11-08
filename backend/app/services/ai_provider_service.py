@@ -1,6 +1,8 @@
-"""CRUD and activation for AI provider profiles (S39-001)."""
+"""CRUD and activation for AI provider profiles (S39-001, S43-002)."""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +20,7 @@ class AIProviderConflictError(Exception):
 
 
 class AIProviderService:
-    """Store OpenAI-compatible provider profiles in SQLite."""
+    """Store AI provider profiles (OpenAI-compatible and GigaChat) in SQLite."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
@@ -60,6 +62,13 @@ class AIProviderService:
         base_url: str,
         model_name: str,
         api_key: str | None = None,
+        provider_type: str = "openai_compatible",
+        auth_type: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        oauth_scope: str | None = None,
+        oauth_expires_at: datetime | None = None,
+        access_token: str | None = None,
     ) -> AIProviderProfile:
         async with self._session_factory() as session:
             has_any = await session.scalar(
@@ -70,6 +79,17 @@ class AIProviderService:
                 base_url=base_url.strip(),
                 model_name=model_name.strip(),
                 api_key=(api_key or "").strip() or None,
+                provider_type=provider_type,
+                auth_type=(
+                    "oauth"
+                    if provider_type == "gigachat"
+                    else (auth_type or "api_key")
+                ),
+                client_id=(client_id or "").strip() or None,
+                client_secret=(client_secret or "").strip() or None,
+                oauth_scope=oauth_scope,
+                oauth_expires_at=oauth_expires_at,
+                access_token=access_token,
                 is_active=has_any is None,
             )
             session.add(profile)
@@ -91,6 +111,11 @@ class AIProviderService:
         base_url: str | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
+        provider_type: str | None = None,
+        auth_type: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        oauth_scope: str | None = None,
     ) -> AIProviderProfile:
         async with self._session_factory() as session:
             profile = await session.get(AIProviderProfile, profile_id)
@@ -106,6 +131,18 @@ class AIProviderService:
                 profile.model_name = model_name.strip()
             if api_key is not None and api_key.strip():
                 profile.api_key = api_key.strip()
+            if provider_type is not None:
+                profile.provider_type = provider_type
+                if provider_type == "gigachat":
+                    profile.auth_type = "oauth"
+            if auth_type is not None:
+                profile.auth_type = auth_type
+            if client_id is not None and client_id.strip():
+                profile.client_id = client_id.strip()
+            if client_secret is not None and client_secret.strip():
+                profile.client_secret = client_secret.strip()
+            if oauth_scope is not None:
+                profile.oauth_scope = oauth_scope
             try:
                 await session.commit()
             except IntegrityError as exc:
@@ -113,6 +150,68 @@ class AIProviderService:
                 raise AIProviderConflictError(
                     f"provider name already exists: {name}"
                 ) from exc
+            await session.refresh(profile)
+            return profile
+
+    async def upsert_gigachat(
+        self,
+        *,
+        name: str,
+        base_url: str,
+        model_name: str,
+        client_id: str,
+        client_secret: str,
+        scope: str,
+        expires_at: datetime,
+        access_token: str,
+        activate: bool,
+    ) -> AIProviderProfile:
+        """Create or re-authorise a GigaChat profile without duplicating it."""
+        async with self._session_factory() as session:
+            profile = await session.scalar(
+                select(AIProviderProfile).where(
+                    AIProviderProfile.name == name.strip()
+                )
+            )
+            if profile is None:
+                has_any = await session.scalar(
+                    select(AIProviderProfile.id).limit(1)
+                )
+                profile = AIProviderProfile(
+                    name=name.strip(),
+                    base_url=base_url.strip(),
+                    model_name=model_name.strip(),
+                    api_key=None,
+                    provider_type="gigachat",
+                    auth_type="oauth",
+                    client_id=client_id.strip(),
+                    client_secret=client_secret.strip(),
+                    oauth_scope=scope,
+                    oauth_expires_at=expires_at,
+                    access_token=access_token,
+                    is_active=has_any is None or activate,
+                )
+                session.add(profile)
+            else:
+                profile.provider_type = "gigachat"
+                profile.auth_type = "oauth"
+                profile.base_url = base_url.strip()
+                profile.model_name = model_name.strip()
+                profile.client_id = client_id.strip()
+                profile.client_secret = client_secret.strip()
+                profile.oauth_scope = scope
+                profile.oauth_expires_at = expires_at
+                profile.access_token = access_token
+                if activate:
+                    profile.is_active = True
+            if activate:
+                await session.flush()
+                await session.execute(
+                    update(AIProviderProfile)
+                    .where(AIProviderProfile.id != profile.id)
+                    .values(is_active=False)
+                )
+            await session.commit()
             await session.refresh(profile)
             return profile
 

@@ -30,6 +30,7 @@ from app.services.dashboard_advice_service import DashboardAdviceService
 from app.services.dependency_service import DependencyService
 from app.services.dependency_update_service import DependencyUpdateService
 from app.services.docker_service import DockerService
+from app.services.gigachat_provider import GigaChatProvider
 from app.services.global_analytics_service import GlobalAnalyticsService
 from app.services.identity_service import IdentityService
 from app.services.insights_service import InsightsService
@@ -133,7 +134,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hotspots_days=resolved.insights_hotspots_days,
     )
     ai_provider_service = AIProviderService(session_factory)
-    llm_service = LLMService(resolved, session_factory=session_factory)
+    gigachat_provider = GigaChatProvider(resolved, session_factory=session_factory)
+    llm_service = LLMService(
+        resolved,
+        session_factory=session_factory,
+        gigachat=gigachat_provider,
+    )
     global_analytics_service = GlobalAnalyticsService(
         session_factory,
         dependency_service,
@@ -142,6 +148,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         concurrency=resolved.global_analytics_concurrency,
         llm_service=llm_service,
         ai_cache_ttl_seconds=resolved.ai_cache_ttl_seconds,
+        prompt_version=resolved.ai_prompt_version,
     )
     identity_service = IdentityService(session_factory)
     dashboard_advice_service = DashboardAdviceService(
@@ -149,6 +156,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependency_service,
         security_service,
         llm_service,
+        prompt_version=resolved.ai_prompt_version,
     )
     agent_task_service = AgentTaskService(llm_service)
     dependency_update_service = DependencyUpdateService(
@@ -174,6 +182,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resolved,
         github_client=github_client,
         gitflic_client=gitflic_client,
+        remote_service=remote_service,
+        status_cache=status_cache,
+        status_service=status_service,
+        mirror_scheduler=mirror_scheduler,
+        notification_service=notification_service,
     )
 
     @asynccontextmanager
@@ -184,8 +197,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             database_url=resolved.database_url,
             scan_roots=resolved.scan_root_paths,
         )
-        mirror_scheduler.start()
         await settings_service.load_into_config()
+        mirror_scheduler.start()
         try:
             yield
         finally:
@@ -219,6 +232,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.security_service = security_service
     application.state.insights_service = insights_service
     application.state.llm_service = llm_service
+    application.state.gigachat_provider = gigachat_provider
     application.state.global_analytics_service = global_analytics_service
     application.state.identity_service = identity_service
     application.state.dashboard_advice_service = dashboard_advice_service

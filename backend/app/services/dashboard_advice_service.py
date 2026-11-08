@@ -1,17 +1,22 @@
-"""AI dashboard digest built from aggregated repository statistics (S38-001)."""
+"""AI dashboard digest built from aggregated repository statistics (S38-001).
+
+S43-003 adds a state-hash cache: the digest is reused only while the aggregate
+statistics (and therefore the effective repository state) stay unchanged.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
+from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.models.entities import AICache, Repository
 from app.schemas.ai import DashboardAdvice
+from app.services.ai_cache import build_cache_key, cache_is_fresh, cache_lock
 from app.services.dependency_service import DependencyService
 from app.services.llm_service import LLMService
 from app.services.security_service import SecurityService
@@ -36,6 +41,7 @@ class DashboardAdviceService:
         *,
         cache_ttl_seconds: int = DASHBOARD_ADVICE_TTL_SECONDS,
         concurrency: int = CONCURRENCY,
+        prompt_version: str = "v1",
     ) -> None:
         self._session_factory = session_factory
         self._dependency_service = dependency_service
@@ -43,47 +49,51 @@ class DashboardAdviceService:
         self._llm = llm_service
         self._ttl = max(cache_ttl_seconds, 0)
         self._concurrency = max(concurrency, 1)
+        self._prompt_version = prompt_version
 
-    async def get_advice(self, language: str = "ru") -> DashboardAdvice:
+    async def get_advice(
+        self, language: str = "ru", *, refresh: bool = False
+    ) -> DashboardAdvice:
         config = await self._llm.resolve()
         if not config.enabled or not self._llm.allows_remote(config):
             raise DashboardAdviceUnavailableError("llm_unavailable")
 
-        cache_key = f"dashboard-advice:{language}:{config.model}"
-        async with self._session_factory() as session:
-            row = await session.get(AICache, cache_key)
-            if row is not None and _cache_is_fresh(row.checked_at, self._ttl):
-                payload = row.payload if isinstance(row.payload, dict) else {}
-                advice = payload.get("advice")
-                if isinstance(advice, str) and advice:
-                    return DashboardAdvice(
-                        advice=advice,
-                        cached=True,
-                        model=row.model,
-                        generated_at=utcnow(),
-                        stats=_stats_from_payload(payload),
-                    )
-
         stats = await self._collect_stats()
-        advice = await self._llm.generate_dashboard_advice(
+        cache_key = build_cache_key(
+            "dashboard-advice",
+            language,
             stats,
-            language=language,
+            config.model,
+            self._prompt_version,
         )
-        if advice is None:
-            raise DashboardAdviceUnavailableError("llm_unavailable")
 
-        async with self._session_factory() as session:
-            row = await session.get(AICache, cache_key)
-            if row is None:
-                row = AICache(
-                    key=cache_key,
-                    kind="dashboard_advice",
-                    model=config.model,
-                )
-                session.add(row)
-            row.payload = {"advice": advice, "stats": stats}
-            row.checked_at = utcnow()
-            await session.commit()
+        if not refresh:
+            cached = await self._read_cached(cache_key, stats)
+            if cached is not None:
+                observe_ai_cache("dashboard_advice", hit=True)
+                return cached
+
+        lock = cache_lock(cache_key)
+        async with lock:
+            if not refresh:
+                cached = await self._read_cached(cache_key, stats)
+                if cached is not None:
+                    observe_ai_cache("dashboard_advice", hit=True)
+                    return cached
+
+            observe_ai_cache("dashboard_advice", hit=False)
+            advice = await self._llm.generate_dashboard_advice(
+                stats,
+                language=language,
+            )
+            observe_llm_call(
+                "dashboard_advice",
+                config.provider,
+                "ok" if advice is not None else "error",
+            )
+            if advice is None:
+                raise DashboardAdviceUnavailableError("llm_unavailable")
+            await self._write_cached(cache_key, config.model, advice, stats)
 
         return DashboardAdvice(
             advice=advice,
@@ -92,6 +102,45 @@ class DashboardAdviceService:
             generated_at=utcnow(),
             stats=stats,
         )
+
+    async def _read_cached(
+        self, cache_key: str, stats: dict[str, int]
+    ) -> DashboardAdvice | None:
+        async with self._session_factory() as session:
+            row = await session.get(AICache, cache_key)
+            if row is None or not cache_is_fresh(row.checked_at, self._ttl):
+                return None
+            payload = row.payload if isinstance(row.payload, dict) else {}
+            advice = payload.get("advice")
+            if not isinstance(advice, str) or not advice:
+                return None
+            return DashboardAdvice(
+                advice=advice,
+                cached=True,
+                model=row.model,
+                generated_at=utcnow(),
+                stats=stats,
+            )
+
+    async def _write_cached(
+        self,
+        cache_key: str,
+        model: str,
+        advice: str,
+        stats: dict[str, int],
+    ) -> None:
+        async with self._session_factory() as session:
+            row = await session.get(AICache, cache_key)
+            if row is None:
+                row = AICache(
+                    key=cache_key,
+                    kind="dashboard_advice",
+                    model=model,
+                )
+                session.add(row)
+            row.payload = {"advice": advice, "stats": stats}
+            row.checked_at = utcnow()
+            await session.commit()
 
     async def _collect_stats(self) -> dict[str, int]:
         async with self._session_factory() as session:
@@ -158,26 +207,6 @@ class DashboardAdviceService:
         stats["outdated_packages"] = sum(outdated_counts)
         stats["high_critical_cves"] = sum(cve_counts)
         return stats
-
-
-def _stats_from_payload(payload: dict[str, object]) -> dict[str, int]:
-    stats = payload.get("stats")
-    if not isinstance(stats, dict):
-        return {}
-    return {
-        key: int(value)
-        for key, value in stats.items()
-        if isinstance(key, str) and isinstance(value, int | float)
-    }
-
-
-def _cache_is_fresh(checked_at: datetime, ttl_seconds: int) -> bool:
-    if ttl_seconds <= 0:
-        return False
-    value = checked_at
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return 0 <= (utcnow() - value).total_seconds() < ttl_seconds
 
 
 __all__ = ["DashboardAdviceService", "DashboardAdviceUnavailableError"]

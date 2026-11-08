@@ -145,6 +145,10 @@ Vite dev-сервера (`http://localhost:5173`), без backend, БД и ло�
 **Цель:** добавить нативный GigaChat OAuth 2.0 и перестать вызывать LLM, когда
 состояние репозитория не изменилось.
 
+**Статус:** ✅ реализовано 2026-11-08 (S43-001..S43-004). Поля провайдера
+называются `provider_type`/`auth_type`; smart-кэш покрывает dashboard-advice,
+unification-advice, CVE и commit message.
+
 #### S43-001. GigaChat OAuth adapter
 
 - [ ] Расширить `ai_provider_profiles` (миграция `010`):
@@ -229,16 +233,16 @@ Vite dev-сервера (`http://localhost:5173`), без backend, БД и ло�
 
 **DoD спринта 43:**
 
-- [ ] GigaChat-профиль создаётся и авторизуется через UI/API; токен
+- [x] GigaChat-профиль создаётся и авторизуется через UI/API; токен
       обновляется автоматически; после истечения запрос не падает без
       объяснения.
-- [ ] `POST /settings/ai-providers/gigachat/auth` не возвращает секреты;
+- [x] `POST /settings/ai-providers/gigachat/auth` не возвращает секреты;
       повторный вызов обновляет профиль, а не плодит дубликаты.
-- [ ] Повторный AI-запрос при неизменном состоянии не вызывает LLM
+- [x] Повторный AI-запрос при неизменном состоянии не вызывает LLM
       (`X-AI-Cache: hit`), состояние изменилось — вызывает.
-- [ ] `refresh=true` работает; ошибки LLM не кэшируются.
-- [ ] Метрики cache hit/miss и LLM calls доступны в `/metrics`.
-- [ ] `ruff`, `mypy --strict`, `pytest -q` — 0 (кроме явно
+- [x] `refresh=true` работает; ошибки LLM не кэшируются.
+- [x] Метрики cache hit/miss и LLM calls доступны в `/metrics`.
+- [x] `ruff`, `mypy --strict`, `pytest -q` — 0 (кроме явно
       задокументированных skip для внешней сети).
 
 ---

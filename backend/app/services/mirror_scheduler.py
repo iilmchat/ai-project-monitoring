@@ -38,6 +38,9 @@ class MirrorScheduler:
     def interval_seconds(self) -> float:
         return self._interval
 
+    def set_interval(self, interval_seconds: float) -> None:
+        self._interval = max(float(interval_seconds), 1.0)
+
     def start(self) -> asyncio.Task[None]:
         self._task = asyncio.create_task(self._run(), name="mirror-scheduler")
         return self._task

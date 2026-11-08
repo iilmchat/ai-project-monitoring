@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from app.models.entities import AICache
+from app.services.ai_cache import build_cache_key
 from app.services.dashboard_advice_service import DashboardAdviceService
 from app.services.llm_service import LLMConfig
 from fastapi import FastAPI
@@ -90,7 +91,14 @@ async def test_dashboard_advice_is_cached(
     assert llm.calls == [({"repositories": 2, "dirty": 1, "outdated_packages": 2}, "ru")]
 
     async with session_factory() as session:
-        row = await session.get(AICache, "dashboard-advice:ru:fake-model")
+        key = build_cache_key(
+            "dashboard-advice",
+            "ru",
+            {"repositories": 2, "dirty": 1, "outdated_packages": 2},
+            "fake-model",
+            "v1",
+        )
+        row = await session.get(AICache, key)
         assert row is not None
         assert row.payload["advice"] == first.advice
 

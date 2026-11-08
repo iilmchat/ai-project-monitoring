@@ -1,4 +1,4 @@
-"""Settings schemas (S15-001)."""
+"""Settings schemas (S15-001, S43-001)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,12 @@ class SettingsResponse(BaseModel):
     llm_timeout_seconds: int = 30
     llm_max_diff_chars: int = 10000
     llm_allow_remote: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    notifications_enabled: bool = True
+    fetch_timeout: int = 30
+    status_ttl_seconds: int = 60
+    mirror_poll_interval_seconds: int = 300
 
 
 class SettingsUpdate(BaseModel):
@@ -33,3 +39,12 @@ class SettingsUpdate(BaseModel):
     llm_timeout_seconds: int | None = None
     llm_max_diff_chars: int | None = None
     llm_allow_remote: bool | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    notifications_enabled: bool | None = None
+    fetch_timeout: int | None = None
+    status_ttl_seconds: int | None = None
+    mirror_poll_interval_seconds: int | None = None
+
+
+__all__ = ["SettingsResponse", "SettingsUpdate"]

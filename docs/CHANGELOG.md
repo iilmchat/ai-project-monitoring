@@ -8,6 +8,10 @@
 - perf(bundle): словари i18n `settings`, `repository` и `components` вынесены в ленивые чанки через динамический `import()`; entry bundle уменьшен с 99.0 до 89.9 kB gzip (S42-002).
 - build(bundle): `rollup-plugin-visualizer` в режиме `build:analyze` (`dist/stats.html`) и бюджет-проверка `check:bundle` через `node:zlib` с порогом 90 kB gzip.
 - docs(adr): ADR-0013 «E2E-тестирование через Playwright с моками API», ADR-0014 «Анализ бандла и бюджет entry chunk».
+- feat(settings): в `app_settings`/UI добавлены `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; пустая БД сидируется значениями из `.env`/`config.py` (S43-001).
+- feat(ai): `provider_type`/`auth_type` в `ai_provider_profiles`, `GigaChatProvider` (OAuth 2.0, in-memory token cache, single-flight refresh, повтор после `401`) и эндпоинты `/settings/ai-providers/gigachat/auth` + `.../{id}/gigachat/refresh` (S43-002).
+- feat(ai): smart-кэш по `state_hash` (`<feature>:<scope>:<hash>:<model>:<prompt_version>`) для dashboard-advice, unification-advice, CVE и commit message; `X-AI-Cache: hit|miss`, `refresh=true`, single-flight и метрики hit/miss/LLM calls (S43-003).
+- docs(adr): ADR-0012 «Мультипровайдерные AI-профили и GigaChat OAuth».
 
 ### Изменено
 

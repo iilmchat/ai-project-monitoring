@@ -31,6 +31,14 @@ def _response(values: dict[str, str | None]) -> SettingsResponse:
         llm_timeout_seconds=_as_int(values.get("llm_timeout_seconds"), 30),
         llm_max_diff_chars=_as_int(values.get("llm_max_diff_chars"), 10000),
         llm_allow_remote=_as_bool(values.get("llm_allow_remote")),
+        telegram_bot_token=mask_secret(values.get("telegram_bot_token")),
+        telegram_chat_id=values.get("telegram_chat_id") or "",
+        notifications_enabled=_as_bool(values.get("notifications_enabled")),
+        fetch_timeout=_as_int(values.get("fetch_timeout"), 30),
+        status_ttl_seconds=_as_int(values.get("status_ttl_seconds"), 60),
+        mirror_poll_interval_seconds=_as_int(
+            values.get("mirror_poll_interval_seconds"), 300
+        ),
     )
 
 

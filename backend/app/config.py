@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     llm_max_diff_chars: int = 10000
     llm_allow_remote: bool = False
     ai_cache_ttl_seconds: int = 604800
+    ai_prompt_version: str = "v1"
+    gigachat_oauth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    gigachat_api_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
+    gigachat_scope: str = "GIGACHAT_API_PERS"
+    gigachat_ca_bundle: str = ""
+    gigachat_token_refresh_margin_seconds: int = 60
+    gigachat_timeout_seconds: float = 30.0
     global_analytics_cache_ttl_seconds: int = 3600
     global_analytics_limit: int = 50
     global_analytics_concurrency: int = 4

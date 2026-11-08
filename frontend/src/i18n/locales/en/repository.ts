@@ -159,6 +159,7 @@ export const repository = {
   'repo.commit.generating': 'Generating message…',
   'repo.commit.truncated':
     'The diff was truncated — review the message carefully.',
+  'repo.commit.cached': 'Message served from cache: the diff state did not change.',
   'repo.commit.confirm':
     'I understand this action will create a commit in the repository.',
   'repo.commit.stagedHint': 'Only staged changes (`git add`) are committed.',
@@ -170,6 +171,7 @@ export const repository = {
     'You are about to update dependencies ({ecosystem}). This may change `requirements.txt` / `package.json` and lock files. Continue?',
   'repo.cve.title': 'Explanation of {id}',
   'repo.cve.loading': 'The LLM is explaining the vulnerability…',
+  'repo.cve.cached': 'from cache',
   'repo.ci.open': 'Open CI →',
   'repo.severity.major': 'major',
   'repo.severity.minor': 'minor',

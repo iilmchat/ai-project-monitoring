@@ -34,6 +34,7 @@ import type {
   ScanStatus,
   SecurityReport,
   SettingsUpdate,
+  GigaChatAuthResponse,
 } from './types'
 
 const API_BASE = '/api/v1'
@@ -318,6 +319,34 @@ export async function generateAgentTask(
 
 export async function getAIProviders(): Promise<AIProviderProfile[]> {
   return request<AIProviderProfile[]>('/settings/ai-providers')
+}
+
+export interface GigaChatAuthPayload {
+  client_id: string
+  client_secret: string
+  scope: string
+  model_name: string
+  profile_name: string
+  base_url?: string
+  activate?: boolean
+}
+
+export async function authorizeGigaChat(
+  payload: GigaChatAuthPayload,
+): Promise<GigaChatAuthResponse> {
+  return request<GigaChatAuthResponse>('/settings/ai-providers/gigachat/auth', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function refreshGigaChatToken(
+  profileId: number,
+): Promise<GigaChatAuthResponse> {
+  return request<GigaChatAuthResponse>(
+    `/settings/ai-providers/${profileId}/gigachat/refresh`,
+    { method: 'POST' },
+  )
 }
 
 export async function createAIProvider(

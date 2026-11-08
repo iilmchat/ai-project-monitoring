@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from prometheus_client import Gauge, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 FETCH_DURATION = Histogram(
     "iiruchating_fetch_duration_seconds",
@@ -41,6 +41,37 @@ MIRROR_CHECK_DURATION = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
 )
 
+AI_CACHE_HITS = Counter(
+    "iiruchating_ai_cache_hits_total",
+    "AI cache hits by feature",
+    labelnames=("feature",),
+)
+
+AI_CACHE_MISSES = Counter(
+    "iiruchating_ai_cache_misses_total",
+    "AI cache misses by feature",
+    labelnames=("feature",),
+)
+
+AI_LLM_CALLS = Counter(
+    "iiruchating_ai_llm_calls_total",
+    "LLM calls by feature, provider and status",
+    labelnames=("feature", "provider", "status"),
+)
+
+
+def observe_ai_cache(feature: str, *, hit: bool) -> None:
+    counter = AI_CACHE_HITS if hit else AI_CACHE_MISSES
+    counter.labels(feature=feature).inc()
+
+
+def observe_llm_call(feature: str, provider: str, status: str) -> None:
+    AI_LLM_CALLS.labels(
+        feature=feature,
+        provider=provider,
+        status=status,
+    ).inc()
+
 
 def observe_fetch_duration(seconds: float) -> None:
     FETCH_DURATION.observe(max(seconds, 0.0))
@@ -73,13 +104,18 @@ def set_mirror_status_counts(counts: Mapping[str, int]) -> None:
 
 
 __all__ = [
+    "AI_CACHE_HITS",
+    "AI_CACHE_MISSES",
+    "AI_LLM_CALLS",
     "FETCH_DURATION",
     "MIRROR_CHECK_DURATION",
     "MIRROR_STATUS_TOTAL",
     "REPOSITORIES_TOTAL",
     "SCAN_DURATION",
     "STATUS_DURATION",
+    "observe_ai_cache",
     "observe_fetch_duration",
+    "observe_llm_call",
     "observe_mirror_check_duration",
     "observe_scan_duration",
     "observe_status_duration",

@@ -263,6 +263,12 @@ export async function installApiMocks(
         llm_timeout_seconds: 30,
         llm_max_diff_chars: 10000,
         llm_allow_remote: false,
+        telegram_bot_token: '',
+        telegram_chat_id: '',
+        notifications_enabled: true,
+        fetch_timeout: 30,
+        status_ttl_seconds: 60,
+        mirror_poll_interval_seconds: 300,
       })
       return
     }
@@ -286,6 +292,7 @@ export async function installApiMocks(
         diff_chars: 42,
         files_changed: 1,
         warnings: [],
+        cached: false,
         generated_at: NOW,
       })
       return

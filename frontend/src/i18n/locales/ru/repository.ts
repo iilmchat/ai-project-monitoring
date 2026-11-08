@@ -157,6 +157,7 @@ export const repository = {
     'Проверьте и отредактируйте сообщение перед коммитом. Автоматически ничего не коммитится.',
   'repo.commit.generating': 'Генерация сообщения…',
   'repo.commit.truncated': 'Diff был обрезан — проверьте сообщение внимательно.',
+  'repo.commit.cached': 'Сообщение взято из кэша: состояние diff не изменилось.',
   'repo.commit.confirm':
     'Я понимаю, что действие создаст коммит в репозитории.',
   'repo.commit.stagedHint':
@@ -169,6 +170,7 @@ export const repository = {
     'Вы собираетесь обновить зависимости ({ecosystem}). Это может изменить `requirements.txt` / `package.json` и lock-файлы. Продолжить?',
   'repo.cve.title': 'Объяснение {id}',
   'repo.cve.loading': 'LLM объясняет уязвимость…',
+  'repo.cve.cached': 'из кэша',
   'repo.ci.open': 'Открыть CI →',
   'repo.severity.major': 'major',
   'repo.severity.minor': 'minor',

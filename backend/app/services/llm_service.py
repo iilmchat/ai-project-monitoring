@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.models.entities import AIProviderProfile
+from app.services.gigachat_provider import GigaChatError, GigaChatProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -57,6 +58,8 @@ class LLMConfig:
     api_key: str
     timeout: float
     allow_remote: bool
+    provider_type: str = "openai_compatible"
+    profile_id: int | None = None
 
 
 class LLMService:
@@ -68,10 +71,12 @@ class LLMService:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
+        gigachat: GigaChatProvider | None = None,
     ) -> None:
         self._settings = settings
         self._transport = transport
         self._session_factory = session_factory
+        self._gigachat = gigachat
 
     async def resolve(self) -> LLMConfig:
         """Return the active DB profile, or the config fallback."""
@@ -84,14 +89,22 @@ class LLMService:
                     .limit(1)
                 )
             if profile is not None:
+                provider_type = profile.provider_type or "openai_compatible"
+                is_gigachat = provider_type == "gigachat"
                 return LLMConfig(
                     enabled=True,
-                    provider=_provider_from_url(profile.base_url),
+                    provider=(
+                        "gigachat"
+                        if is_gigachat
+                        else _provider_from_url(profile.base_url)
+                    ),
                     base_url=profile.base_url.strip().rstrip("/"),
                     model=profile.model_name,
                     api_key=profile.api_key or "",
                     timeout=self._settings.llm_timeout_seconds,
                     allow_remote=self._settings.llm_allow_remote,
+                    provider_type=provider_type,
+                    profile_id=profile.id,
                 )
         return LLMConfig(
             enabled=bool(self._settings.llm_enabled),
@@ -108,11 +121,15 @@ class LLMService:
         config = await self.resolve()
         if not config.enabled:
             return False, "llm_disabled"
-        if not _is_remote_allowed(config.base_url, config.allow_remote):
+        if config.provider_type != "gigachat" and not _is_remote_allowed(
+            config.base_url, config.allow_remote
+        ):
             return False, "llm_remote_not_allowed"
         return True, None
 
     def allows_remote(self, config: LLMConfig) -> bool:
+        if config.provider_type == "gigachat":
+            return True
         return _is_remote_allowed(config.base_url, config.allow_remote)
 
     @property
@@ -255,7 +272,9 @@ class LLMService:
         config = await self.resolve()
         if not config.enabled:
             return False, 0.0, "llm_disabled"
-        if not _is_remote_allowed(config.base_url, config.allow_remote):
+        if config.provider_type != "gigachat" and not _is_remote_allowed(
+            config.base_url, config.allow_remote
+        ):
             return False, 0.0, "llm_remote_not_allowed"
 
         payload = {
@@ -265,6 +284,8 @@ class LLMService:
             "max_tokens": 8,
             "stream": False,
         }
+        if config.provider_type == "gigachat":
+            return await self._test_gigachat(config, payload)
         headers = {"Accept": "application/json"}
         if config.api_key:
             headers["Authorization"] = f"Bearer {config.api_key}"
@@ -307,7 +328,9 @@ class LLMService:
         config = await self.resolve()
         if not config.enabled:
             return None
-        if not _is_remote_allowed(config.base_url, config.allow_remote):
+        if config.provider_type != "gigachat" and not _is_remote_allowed(
+            config.base_url, config.allow_remote
+        ):
             return None
 
         payload = {
@@ -323,6 +346,20 @@ class LLMService:
         headers = {"Accept": "application/json"}
         if config.api_key:
             headers["Authorization"] = f"Bearer {config.api_key}"
+
+        if config.provider_type == "gigachat":
+            body, error = await self._gigachat_body(config, payload)
+            if body is None:
+                logger.warning(
+                    "llm_request_failed",
+                    provider=config.provider,
+                    reason=error or "provider_unavailable",
+                )
+                return None
+            message = _extract_message(body)
+            if message is None:
+                return None
+            return message[:max_chars]
 
         try:
             async with httpx.AsyncClient(
@@ -371,6 +408,37 @@ class LLMService:
         if message is None:
             return None
         return message[:max_chars]
+
+    async def _test_gigachat(
+        self, config: LLMConfig, payload: dict[str, object]
+    ) -> tuple[bool, float, str | None]:
+        started = time.perf_counter()
+        body, error = await self._gigachat_body(config, payload)
+        latency = _elapsed_ms(started)
+        if body is None:
+            return False, latency, error or "provider_unavailable"
+        if _extract_message(body) is None:
+            return False, latency, "invalid_response"
+        return True, latency, None
+
+    async def _gigachat_body(
+        self, config: LLMConfig, payload: dict[str, object]
+    ) -> tuple[dict[str, object] | None, str | None]:
+        if (
+            self._gigachat is None
+            or self._session_factory is None
+            or config.profile_id is None
+        ):
+            return None, "provider_unavailable"
+        async with self._session_factory() as session:
+            profile = await session.get(AIProviderProfile, config.profile_id)
+        if profile is None:
+            return None, "provider_unauthorized"
+        try:
+            body = await self._gigachat.complete(profile, payload)
+        except GigaChatError as exc:
+            return None, exc.code
+        return body, None
 
     def _endpoint(self, base_url: str | None = None) -> str:
         base = (base_url or self.base_url).strip().rstrip("/")

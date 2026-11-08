@@ -256,13 +256,15 @@ Webhook **не заменяет** polling: если webhook не настрое�
 | **`webhook_events`** | **события от GitHub/GitFlic (R9) — v0.2.0** |
 | **`dependency_cache`** | **TTL-кэш latest-версий PyPI/npm (24 ч) — v0.5.0** |
 | **`security_cache`** | **TTL-кэш ответов OSV.dev по `package@version` (6 ч) — v0.6.0** |
-| **`ai_cache`** | **кэш CVE-объяснений по `cve_id + model` (7 дней) — v0.7.0** |
+| **`ai_cache`** | **state-hash кэш AI-ответов (`feature:scope:hash:model:prompt_version`, 7 дней) — v0.7.0, S43** |
 
 Кэш локального статуса: `STATUS_TTL_SECONDS=60`. Кэш mirror-статуса: `MIRROR_STATUS_TTL_SECONDS=300`.
 Кэш Docker: `DOCKER_STATUS_TTL_SECONDS=30`. Кэш зависимостей: `DEPENDENCY_CACHE_TTL_SECONDS=86400`.
 Кэш security (OSV): `SECURITY_CACHE_TTL_SECONDS=21600`; secret-scan — in-memory 300 с.
 Кэш insights: in-memory `INSIGHTS_CACHE_TTL_SECONDS=300`.
 Кэш AI-объяснений: `AI_CACHE_TTL_SECONDS=604800`; global analytics — in-memory 3600 с.
+Ключ smart-кэша: `<feature>:<scope>:<state_hash>:<model>:<prompt_version>`, где
+`state_hash` — SHA-256 канонического JSON; `refresh=true` обходит кэш.
 
 ---
 
@@ -942,10 +944,12 @@ POST /repositories/{id}/ai/cve-explain
 - Промпт: «Ты — эксперт по безопасности… в чем опасность уязвимости
   {cve_id}… Как её исправить? Ответь кратко, 2-3 предложения.»
 - `ai_cache(key*, kind, model, payload, checked_at)`, TTL 7 дней; ключ
-  `cve-explain:<cve_id>:<model>`; `cached=true` при попадании.
-- **v0.9.0 (план):** ключ расширяется до
+  `cve-explain:<cve_id>:<state_hash>:<model>:<prompt_version>`; `cached=true`
+  при попадании.
+- **v0.9.0 (реализовано, S43):** ключ
   `<feature>:<scope>:<state_hash>:<model>:<prompt_version>`; при неизменном
   состоянии LLM не вызывается (`X-AI-Cache: hit`), `refresh=true` обходит кэш.
+  Состояние CVE — `cve_id` + hash `summary`.
 - `llm_enabled=false` / remote без opt-in → `409`; LLM timeout/5xx → `503`,
   fallback-текст не подставляется.
 - В `ai_cache` хранится только текст объяснения и модель, не diff и не секреты.
@@ -957,7 +961,8 @@ POST /repositories/{id}/ai/cve-explain
   (state-счётчики, outdated-пакеты через `DependencyService`, high/critical CVE
   через `SecurityService`), отправляет в LLM только числа и просит 2–3
   приоритетные рекомендации. Ответ кэшируется в `ai_cache` на 1 час
-  (`dashboard-advice:<language>:<model>`); `cached=true` при попадании.
+  (`dashboard-advice:<language>:<state_hash>:<model>:<prompt_version>`);
+  `cached=true` при попадании. `refresh=true` обходит кэш.
 - `POST /repositories/{id}/ai/agent-task`: `AgentTaskService` собирает state,
   dirty-счётчики, upstream, конфликтные файлы и темы последних 8 коммитов,
   затем просит LLM написать Markdown-задачу для DSH/OpenCode. Код, diff и
@@ -993,10 +998,11 @@ POST /repositories/{id}/ai/cve-explain
 Миграция `009` создаёт таблицу и переносит текущие `llm_*` из `app_settings` в
 первый профиль (активен, если `llm_enabled` был true).
 
-**v0.9.0 (план):** добавляются `kind` (`openai_compatible` | `gigachat`) и
-`auth_type` (`api_key` | `oauth`). Для `kind="gigachat"` `LLMService` делегирует
-в `GigaChatProvider` (§22); остальные профили работают по текущему пути.
-Smart cache (§15.4) применяется ко всем AI-фичам, кроме `/settings/llm/test`.
+**v0.9.0 (реализовано, S43):** добавлены `provider_type`
+(`openai_compatible` | `gigachat`) и `auth_type` (`api_key` | `oauth`). Для
+`provider_type="gigachat"` `LLMService` делегирует в `GigaChatProvider` (§22);
+остальные профили работают по текущему пути. Smart cache (§15.4) применяется ко
+всем AI-фичам, кроме `/settings/llm/test`.
 
 ---
 
@@ -1051,9 +1057,11 @@ GET /dashboard/global-dependencies?refresh=false
 `LLMService.advise_unification` только имя пакета и распределение
 `версия → проекты`. Промпт не содержит кода, diff или секретов. Ответ
 кэшируется в `ai_cache` (ключ
-`unification-advice:<ecosystem>:<package>:<model>`, TTL `AI_CACHE_TTL_SECONDS`,
-default 7 дней). LLM off/remote-guard/ошибка → `503`; пакет без расхождений →
-`400`; отсутствующий пакет → `404`. Ответ ограничен 2000 символами.
+`unification-advice:<ecosystem>:<package>:<state_hash>:<model>:<prompt_version>`,
+TTL `AI_CACHE_TTL_SECONDS`, default 7 дней). `state_hash` считается по
+распределению версий/проектов; изменение состояния инвалидирует запись. LLM
+off/remote-guard/ошибка → `503`; пакет без расхождений → `400`; отсутствующий
+пакет → `404`. Ответ ограничен 2000 символами.
 
 ---
 
@@ -1244,10 +1252,10 @@ POST /api/v1/search/code {query, repository_ids?, limit?, min_score?, language?}
 
 ---
 
-## 22. GigaChatProvider — OAuth 2.0 adapter (v0.9.0, Sprint 43 — план)
+## 22. GigaChatProvider — OAuth 2.0 adapter (v0.9.0, Sprint 43 — реализовано)
 
-> **Статус:** план. В v0.8.0 GigaChat подключается как OpenAI-совместимый
-> профиль с готовым токеном; нативного OAuth нет.
+> **Статус:** реализовано. Профиль `provider_type="gigachat"` использует OAuth
+> 2.0; OpenAI-совместимые профили работают без изменений.
 
 **Задача.** Авторизоваться в GigaChat по OAuth 2.0, автоматически обновлять
 короткоживущий токен и использовать GigaChat как обычный AI-провайдер, не
@@ -1267,9 +1275,9 @@ UI (модалка профиля)
       │    Authorization: Basic base64(client_id:client_secret)
       │    body: scope=GIGACHAT_API_PERS
       ├─ response {access_token, expires_at (ms epoch)}
-      ├─ upsert profile: kind=gigachat, auth_type=oauth,
+      ├─ upsert profile: provider_type=gigachat, auth_type=oauth,
       │    oauth_scope, oauth_expires_at, access_token (server-only)
-      └─ response {profile_id, status, token_type, expires_at, model_name}
+      └─ response {profile_id, status="ok", expires_at, model_name}
 ```
 
 Ответ **никогда** не содержит `access_token`/`client_secret`; в API — только
@@ -1278,7 +1286,7 @@ UI (модалка профиля)
 
 ### 22.2. Использование и refresh
 
-`LLMService.resolve()` смотрит `kind`:
+`LLMService.resolve()` смотрит `provider_type`:
 
 - `openai_compatible` — текущий путь (`/chat/completions` + `api_key`);
 - `gigachat` — `GigaChatProvider.chat()`:
@@ -1297,7 +1305,7 @@ UI (модалка профиля)
 
 `ai_provider_profiles` (миграция `010`):
 
-- `kind` default `openai_compatible`;
+- `provider_type` default `openai_compatible`;
 - `auth_type` default `api_key`;
 - `client_id`, `client_secret`, `oauth_scope`, `oauth_expires_at`,
   `access_token` — NULL для обычных профилей.
@@ -1314,8 +1322,9 @@ UI (модалка профиля)
   ADR-0012.
 - TLS-сертификат НУЦ Минцифры — через `GIGACHAT_CA_BUNDLE`; `verify=False`
   запрещён.
-- Remote endpoint GigaChat разрешён только при `LLM_ALLOW_REMOTE=true`
-  (исключение — явно документированный локальный прокси).
+- Remote endpoint GigaChat — штатный облачный провайдер, поэтому
+  `LLM_ALLOW_REMOTE` для него не требуется; OpenAI-совместимые remote-endpoint'ы
+  по-прежнему требуют `LLM_ALLOW_REMOTE=true`.
 - Ошибки: `invalid_client`, `unsupported_scope`, `provider_unavailable`,
   `timeout`, `provider_unauthorized`, `http_<code>`.
 

@@ -150,8 +150,8 @@ pnpm --dir frontend exec playwright install chromium
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.8.0** (2026-11-08) |
-| Спринты | 1–42 (v0.9.0 в разработке) |
-| Тесты backend | **228** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Спринты | 1–43 (v0.9.0 в разработке) |
+| Тесты backend | **239** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **44** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **89.9 kB gzip** (+ lazy charts 100.9 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.2 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |

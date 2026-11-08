@@ -101,6 +101,9 @@ class StatusCache:
     def ttl_seconds(self) -> int:
         return self._ttl
 
+    def set_ttl(self, ttl_seconds: int) -> None:
+        self._ttl = max(int(ttl_seconds), 0)
+
     def get(self, repository_id: int) -> StatusSnapshot | None:
         entry = self._items.get(repository_id)
         if entry is None:
@@ -136,6 +139,14 @@ class StatusService:
         self._ttl = max(ttl_seconds, 0)
         self._remote_service = remote_service
         self._notifications = notifications
+
+    @property
+    def ttl_seconds(self) -> int:
+        return self._ttl
+
+    def set_ttl(self, ttl_seconds: int) -> None:
+        self._ttl = max(int(ttl_seconds), 0)
+        self._cache.set_ttl(self._ttl)
 
     async def get_status(
         self,

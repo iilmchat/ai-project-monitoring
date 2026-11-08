@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -166,13 +166,20 @@ async def get_global_dependencies(
 @router.post("/ai/dashboard-advice", response_model=DashboardAdvice)
 async def get_dashboard_advice(
     request: Request,
+    response: Response,
     payload: DashboardAdviceRequest | None = None,
+    refresh: Annotated[bool, Query()] = False,
 ) -> DashboardAdvice:
     service: DashboardAdviceService = request.app.state.dashboard_advice_service
     try:
-        return await service.get_advice(payload.language if payload else "ru")
+        result = await service.get_advice(
+            payload.language if payload else "ru",
+            refresh=refresh,
+        )
     except DashboardAdviceUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response.headers["X-AI-Cache"] = "hit" if result.cached else "miss"
+    return result
 
 
 @router.get("/dashboard/duplicates", response_model=DuplicatesResponse)
@@ -205,12 +212,15 @@ async def get_remote_duplicates(
 async def get_unification_advice(
     payload: UnificationAdviceRequest,
     request: Request,
+    response: Response,
+    refresh: Annotated[bool, Query()] = False,
 ) -> UnificationAdvice:
     service: GlobalAnalyticsService = request.app.state.global_analytics_service
     try:
-        return await service.get_ai_unification_advice(
+        result = await service.get_ai_unification_advice(
             payload.ecosystem,
             payload.package,
+            refresh=refresh,
         )
     except PackageNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -218,3 +228,5 @@ async def get_unification_advice(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response.headers["X-AI-Cache"] = "hit" if result.cached else "miss"
+    return result

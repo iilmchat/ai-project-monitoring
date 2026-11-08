@@ -6,13 +6,13 @@ import asyncio
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.models.entities import AICache, Repository
 from app.schemas.dependency import DependencyReport
@@ -23,6 +23,7 @@ from app.schemas.global_analytics import (
     UnificationAdvice,
     VersionDistribution,
 )
+from app.services.ai_cache import build_cache_key, cache_is_fresh, cache_lock
 from app.services.dependency_service import DependencyService
 from app.services.llm_service import LLMService
 
@@ -64,6 +65,7 @@ class GlobalAnalyticsService:
         concurrency: int = 4,
         llm_service: LLMService | None = None,
         ai_cache_ttl_seconds: int = 604800,
+        prompt_version: str = "v1",
     ) -> None:
         self._session_factory = session_factory
         self._dependency_service = dependency_service
@@ -72,6 +74,7 @@ class GlobalAnalyticsService:
         self._concurrency = max(concurrency, 1)
         self._llm_service = llm_service
         self._ai_ttl = max(ai_cache_ttl_seconds, 0)
+        self._prompt_version = prompt_version
         self._cache: tuple[float, GlobalDependencyReport] | None = None
 
     async def get_global_dependencies(
@@ -173,6 +176,8 @@ class GlobalAnalyticsService:
         self,
         ecosystem: Literal["python", "node"],
         package_name: str,
+        *,
+        refresh: bool = False,
     ) -> UnificationAdvice:
         """Return cached or generated LLM advice for one package."""
         report = await self.get_global_dependencies()
@@ -200,43 +205,47 @@ class GlobalAnalyticsService:
         if not config.enabled or not llm.allows_remote(config):
             raise LLMUnavailableError("llm_unavailable")
 
-        cache_key = f"unification-advice:{ecosystem}:{package.name}:{config.model}"
-        async with self._session_factory() as session:
-            row = await session.get(AICache, cache_key)
-            if row is not None and _cache_is_fresh(row.checked_at, self._ai_ttl):
-                advice = (
-                    row.payload.get("advice")
-                    if isinstance(row.payload, dict)
-                    else None
-                )
-                if isinstance(advice, str) and advice:
-                    return UnificationAdvice(
-                        ecosystem=ecosystem,
-                        package=package.name,
-                        advice=advice,
-                        cached=True,
-                        model=row.model,
-                        generated_at=utcnow(),
-                    )
+        versions = {
+            distribution.version: list(distribution.projects)
+            for distribution in package.distribution
+        }
+        state = {
+            "ecosystem": ecosystem,
+            "package": package.name,
+            "versions": versions,
+        }
+        cache_key = build_cache_key(
+            "unification-advice",
+            f"{ecosystem}:{package.name}",
+            state,
+            config.model,
+            self._prompt_version,
+        )
 
-            versions = {
-                distribution.version: list(distribution.projects)
-                for distribution in package.distribution
-            }
+        if not refresh:
+            cached = await self._read_cached(cache_key)
+            if cached is not None:
+                observe_ai_cache("unification_advice", hit=True)
+                return cached
+
+        lock = cache_lock(cache_key)
+        async with lock:
+            if not refresh:
+                cached = await self._read_cached(cache_key)
+                if cached is not None:
+                    observe_ai_cache("unification_advice", hit=True)
+                    return cached
+
+            observe_ai_cache("unification_advice", hit=False)
             advice = await llm.advise_unification(package.name, versions)
+            observe_llm_call(
+                "unification_advice",
+                config.provider,
+                "ok" if advice is not None else "error",
+            )
             if advice is None:
                 raise LLMUnavailableError("llm_unavailable")
-
-            if row is None:
-                row = AICache(
-                    key=cache_key,
-                    kind="unification_advice",
-                    model=config.model,
-                )
-                session.add(row)
-            row.payload = {"advice": advice}
-            row.checked_at = utcnow()
-            await session.commit()
+            await self._write_cached(cache_key, config.model, advice)
 
         return UnificationAdvice(
             ecosystem=ecosystem,
@@ -246,6 +255,41 @@ class GlobalAnalyticsService:
             model=config.model,
             generated_at=utcnow(),
         )
+
+    async def _read_cached(self, cache_key: str) -> UnificationAdvice | None:
+        async with self._session_factory() as session:
+            row = await session.get(AICache, cache_key)
+            if row is None or not cache_is_fresh(row.checked_at, self._ai_ttl):
+                return None
+            payload = row.payload if isinstance(row.payload, dict) else {}
+            advice = payload.get("advice")
+            if not isinstance(advice, str) or not advice:
+                return None
+            ecosystem, package = _split_scope(cache_key)
+            return UnificationAdvice(
+                ecosystem=ecosystem,
+                package=package,
+                advice=advice,
+                cached=True,
+                model=row.model,
+                generated_at=utcnow(),
+            )
+
+    async def _write_cached(
+        self, cache_key: str, model: str, advice: str
+    ) -> None:
+        async with self._session_factory() as session:
+            row = await session.get(AICache, cache_key)
+            if row is None:
+                row = AICache(
+                    key=cache_key,
+                    kind="unification_advice",
+                    model=model,
+                )
+                session.add(row)
+            row.payload = {"advice": advice}
+            row.checked_at = utcnow()
+            await session.commit()
 
     def _packages(
         self, bucket: dict[str, _Aggregate]
@@ -288,14 +332,14 @@ def _version_key(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split("."))
 
 
-def _cache_is_fresh(checked_at: datetime, ttl_seconds: int) -> bool:
-    if ttl_seconds <= 0:
-        return False
-    value = checked_at
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    age = (utcnow() - value).total_seconds()
-    return 0 <= age < ttl_seconds
+def _split_scope(cache_key: str) -> tuple[Literal["python", "node"], str]:
+    parts = cache_key.split(":")
+    if len(parts) >= 3 and parts[0] == "unification-advice":
+        ecosystem: Literal["python", "node"] = (
+            "python" if parts[1] == "python" else "node"
+        )
+        return ecosystem, parts[2]
+    return "python", ""
 
 
 __all__ = [

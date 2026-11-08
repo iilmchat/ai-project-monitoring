@@ -38,6 +38,9 @@ class RemoteService:
     def timeout_seconds(self) -> float:
         return self._timeout
 
+    def set_timeout(self, seconds: float) -> None:
+        self._timeout = max(float(seconds), 1.0)
+
     async def fetch(self, repository_path: str | Path) -> RemoteFetchResult:
         result = await asyncio.to_thread(fetch_all, repository_path, self._timeout)
         observe_fetch_duration(result.duration_ms / 1000)
