@@ -7,19 +7,39 @@ import './index.css'
 import { LanguageProvider } from './i18n'
 import { ThemeProvider } from './theme/ThemeContext'
 
-const container = document.getElementById('root')
-if (container === null) {
+const rootElement = document.getElementById('root')
+if (rootElement === null) {
   throw new Error('Root element #root not found')
 }
+const container: HTMLElement = rootElement
 
-createRoot(container).render(
-  <StrictMode>
-    <ThemeProvider>
-      <LanguageProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </LanguageProvider>
-    </ThemeProvider>
-  </StrictMode>,
-)
+function renderApp(): void {
+  createRoot(container).render(
+    <StrictMode>
+      <ThemeProvider>
+        <LanguageProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </LanguageProvider>
+      </ThemeProvider>
+    </StrictMode>,
+  )
+}
+
+async function bootstrap(): Promise<void> {
+  if ('__TAURI_INTERNALS__' in window) {
+    try {
+      const { startDesktop } = await import('./desktop/bootstrap')
+      if (!(await startDesktop(container))) {
+        return
+      }
+    } catch {
+      container.textContent = 'Could not start the local backend.'
+      return
+    }
+  }
+  renderApp()
+}
+
+void bootstrap()

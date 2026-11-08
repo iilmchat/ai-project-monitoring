@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -105,6 +109,8 @@ class Settings(BaseSettings):
     )
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    tauri_mode: bool = False
+    tauri_data_dir: str = ""
     debug: bool = False
     app_version: str = "0.9.0"
 
@@ -122,6 +128,36 @@ class Settings(BaseSettings):
     def notify_on_names(self) -> list[str]:
         """NOTIFY_ON as a list of mirror statuses."""
         return _split_csv(self.notify_on)
+
+    @model_validator(mode="after")
+    def _apply_tauri_defaults(self) -> Settings:
+        """Desktop mode always uses SQLite in the per-user app-data directory."""
+        if not self.tauri_mode:
+            return self
+        data_dir = (
+            Path(self.tauri_data_dir).expanduser()
+            if self.tauri_data_dir
+            else _default_tauri_data_dir()
+        )
+        data_dir.mkdir(parents=True, exist_ok=True)
+        self.tauri_data_dir = str(data_dir)
+        self.database_url = (
+            f"sqlite+aiosqlite:///{(data_dir / 'iiruchating.db').as_posix()}"
+        )
+        if self.scan_roots.strip() in {"", "/projects"}:
+            projects = Path.home() / "Projects"
+            self.scan_roots = str(projects if projects.exists() else Path.home())
+        return self
+
+
+def _default_tauri_data_dir() -> Path:
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path.home() / ".local" / "share"
+    return base / "IIRuchating"
 
 
 def _split_csv(raw: str) -> list[str]:

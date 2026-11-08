@@ -35,6 +35,7 @@
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
 - **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
+- **Desktop-приложение (v1.0.0)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker.
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -95,6 +96,37 @@ pnpm --dir frontend dev
 ```
 
 Подробно — [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+
+### Сборка десктопного приложения (Tauri)
+
+Требования: Rust toolchain (`rustup`), WebView2 (Windows), Python venv с
+`backend/requirements-desktop.txt`.
+
+```bash
+# 1. Зависимости frontend + Tauri CLI
+pnpm --dir frontend install
+
+# 2. Python-sidecar (PyInstaller, один .exe без консоли)
+cd backend
+.\venv\Scripts\Activate.ps1
+pip install -r requirements-desktop.txt
+python build_sidecar.py
+cd ..
+
+# 3. Tauri build (Windows: .msi + NSIS .exe)
+pnpm --dir frontend desktop:build
+```
+
+Артефакты:
+
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_0.9.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_0.9.0_x64-setup.exe`
+
+Sidecar запускается на свободном `127.0.0.1:<port>`; данные и логи —
+в `%APPDATA%/IIRuchating` (`backend.log`). Desktop по умолчанию использует
+SQLite; RAG доступен только при внешнем PostgreSQL + `pgvector`. Вход по
+умолчанию `admin` / `admin` (смените `ADMIN_PASSWORD`/`AUTH_JWT_SECRET`).
+Для разработки: `pnpm --dir frontend desktop:dev`.
 
 ---
 
@@ -159,10 +191,10 @@ pnpm --dir frontend exec playwright install chromium
 |------------|----------|
 | Версия | **v0.9.0** (2026-11-08) |
 | Планируется | **v1.0.0 «Secure Desktop»** — single-user auth, Tauri |
-| Спринты | 1–47 (v1.0.0 в разработке) |
+| Спринты | 1–48 (v1.0.0 в разработке) |
 | Тесты backend | **254** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **45** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **89.32 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, логин 1.0 kB, AI-дайджест 0.8 kB) |
+| Entry bundle | **89.62 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, логин 1.0 kB, AI-дайджест 0.8 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 

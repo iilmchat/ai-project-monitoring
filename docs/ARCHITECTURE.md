@@ -1412,9 +1412,10 @@ POST /api/v1/auth/login {username,password}
 
 ---
 
-## 25. Tauri desktop app (v1.0.0, Sprint 48 — план)
+## 25. Tauri desktop app (v1.0.0, Sprint 48 — реализовано)
 
-> **Статус:** план. Docker остаётся серверным вариантом; desktop не требует
+> **Статус:** Windows-сборка реализована (`.msi` + NSIS `.exe`); macOS
+> запланирована на S49. Docker остаётся серверным вариантом; desktop не требует
 > Docker/Python/Node у пользователя.
 
 ### 25.1. Упаковка
@@ -1432,11 +1433,13 @@ Tauri shell (Rust)
 ```
 
 - `bundle.externalBin` указывает на sidecar; сборка — CI-матрица Windows/macOS.
-- Порт выбирается свободный; при конфликте — повтор. Логи — в app data.
-- SQLite по умолчанию; RAG — только при внешнем PostgreSQL + pgvector
-  (`DATABASE_URL`). Встроенный PostgreSQL — v1.1 (KI-019).
+- Порт выбирается свободный; при конфликте — повтор. Логи — в app data
+  (`backend.log`).
+- SQLite по умолчанию (`TAURI_MODE=true` → app-data); RAG — только при внешнем
+  PostgreSQL + pgvector (`DATABASE_URL`). Встроенный PostgreSQL — v1.1 (KI-019).
 - Auth: webview cookie или Bearer из OS keychain (KI-020).
-- CSP: только `http://127.0.0.1:<port>`, без remote-origin; single-instance lock.
+- CSP: только `http://127.0.0.1:<port>`, без remote-origin; single-instance lock
+  (в текущей сборке — базовая защита процессами).
 
 ### 25.2. Lifecycle и надёжность
 
@@ -1452,3 +1455,5 @@ Tauri shell (Rust)
 - Docker-образ и desktop-сборка используют один backend SHA.
 - Тесты: sidecar start/stop, health, port conflict, crash recovery, smoke
   установки на чистую машину.
+- Проверено: Windows `.msi` и NSIS `.exe` собраны; при закрытии приложения
+  sidecar завершается без orphan-процессов.

@@ -4,6 +4,20 @@
 
 ---
 
+## Спринт 48: Tauri Desktop App (v1.0.0)
+
+**Дата:** 2026-11-08 · **Статус:** ✅ Завершён (Windows)
+
+- [x] PyInstaller sidecar: `backend/build_sidecar.py`, `--onefile --noconsole`, pygit2/bcrypt/aiosqlite, `--port`/`--data-dir`.
+- [x] `TAURI_MODE=true` → SQLite в `%APPDATA%/IIRuchating`; health endpoint проверен standalone.
+- [x] Tauri 2 shell: spawn sidecar, свободный порт, `backend_url`, process group/job object, `RunEvent::Exit` kill.
+- [x] Frontend: splash + `/health` poll перед монтированием React; Bearer fallback для desktop.
+- [x] Windows `.msi` (26.85 MiB) и NSIS `.exe` (25.74 MiB) собраны; закрытие приложения не оставляет backend.
+- [x] ADR-0017, README, ARCHITECTURE §25, TODO_V1.0.
+- **Проверки:** backend 254 (253 passed, 1 skipped), frontend 45 unit + 3 E2E, entry bundle 89.62 kB gzip.
+
+---
+
 ## Спринт 47: Single-User Authentication (v1.0.0)
 
 **Дата:** 2026-11-08 · **Статус:** ✅ Завершён

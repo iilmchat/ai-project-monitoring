@@ -43,7 +43,31 @@ import type {
   GigaChatAuthResponse,
 } from './types'
 
-const API_BASE = '/api/v1'
+const DEFAULT_API_BASE = '/api/v1'
+
+declare global {
+  interface Window {
+    __IIRUCHATING_API_BASE__?: string
+  }
+}
+
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null): void {
+  authToken = token
+}
+
+export function getAuthToken(): string | null {
+  return authToken
+}
+
+function apiBase(): string {
+  const base = window.__IIRUCHATING_API_BASE__
+  if (!base) {
+    return DEFAULT_API_BASE
+  }
+  return `${base.replace(/\/+$/, '')}/api/v1`
+}
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
@@ -52,17 +76,25 @@ interface RequestOptions {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`, window.location.origin)
+  const url = new URL(`${apiBase()}${path}`, window.location.origin)
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined) {
       url.searchParams.set(key, String(value))
     }
   }
 
+  const headers: Record<string, string> = {}
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`
+  }
+
   const response = await fetch(url, {
     method: options.method ?? 'GET',
     credentials: 'include',
-    headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   })
 

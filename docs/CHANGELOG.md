@@ -13,6 +13,8 @@
 - feat(auth): single-user authentication — `users` (миграция `012`), bcrypt, JWT HS256 (7 дней), httpOnly cookie `iiruchating_session`, `AuthMiddleware` для всех API кроме `/health`, `/metrics`, `/auth/login`; login/me/logout, rate-limit, bootstrap `admin/admin` (S47-001..S47-004).
 - feat(ui): lazy `/login`, `useAuthStore`, protected routes, logout в шапке; auth-словарь RU/EN; E2E-моки auth.
 - docs(adr): ADR-0016 «Single-user authentication».
+- feat(desktop): Tauri 2 desktop shell + PyInstaller sidecar; `TAURI_MODE` → SQLite в AppData, запуск на свободном порту, splash + `/health` poll, process-group shutdown без orphan-процессов; Windows `.msi` и NSIS `.exe` (S48-001..S48-004).
+- docs(adr): ADR-0017 «Tauri desktop packaging»; README — раздел сборки desktop.
 
 ## [0.9.0] - 2026-11-08
 

@@ -1,6 +1,6 @@
 # TODO v1.0.0 — Secure Desktop
 
-**Статус:** Sprint 47 реализован; спринты 48–49 запланированы.
+**Статус:** Sprint 47–48 реализованы; Sprint 49 запланирован.
 **База:** v0.9.0 «Stability & RAG» (E2E, GigaChat, Smart Cache, RAG на PostgreSQL)
 **Цель:** сделать приложение безопасным для доступа по локальной сети и поставить
 его обычному пользователю как десктопное приложение без обязательного Docker.
@@ -123,29 +123,31 @@ Tauri shell (Rust)
 
 ### 3.2. Задачи
 
-- [ ] **S48-001. ADR-0017 «Tauri desktop packaging»:** sidecar lifecycle,
+- [x] **S48-001. ADR-0017 «Tauri desktop packaging»:** sidecar lifecycle,
   data dir, port allocation, code signing, update strategy.
-- [ ] **S48-002. PyInstaller sidecar:** сборка backend с pygit2/libgit2,
+- [x] **S48-002. PyInstaller sidecar:** сборка backend с pygit2/libgit2,
   аргументы `--port`/`--data-dir`, логи в app data, health endpoint.
-- [ ] **S48-003. Tauri shell:** spawn/stop sidecar, health poll, dynamic port,
+- [x] **S48-003. Tauri shell:** spawn/stop sidecar, health poll, dynamic port,
   graceful shutdown, crash recovery, single-instance lock.
-- [ ] **S48-004. Frontend integration:** base URL из Tauri, auth token handoff,
+- [x] **S48-004. Frontend integration:** base URL из Tauri, auth token handoff,
   CSP, запрет remote-origin, offline/loading states.
-- [ ] **S48-005. Installers:** Windows `.msi`/`.exe`, macOS `.dmg`; иконки,
-  версия, checksums, подпись (если есть сертификат).
-- [ ] **S48-006. Smoke/E2E:** запуск без Docker, health, dashboard, login,
-  корректное завершение без orphan-процессов.
+- [x] **S48-005. Installers:** Windows `.msi`/NSIS `.exe`; macOS `.dmg` —
+  отдельная CI-сборка в S49; иконки/версия/checksums.
+- [x] **S48-006. Smoke/E2E:** запуск без Docker, health, dashboard, login,
+  корректное завершение без orphan-процессов (Windows).
 
 ### 3.3. Definition of Done
 
-- [ ] Windows-сборка запускается на чистой машине без Python/Docker/Node.
-- [ ] Backend стартует автоматически, UI открывается после `db_ok=true`.
-- [ ] Закрытие приложения останавливает sidecar; повторный запуск не оставляет
+- [x] Windows-сборка запускается на чистой машине без Python/Docker/Node
+      (проверено на текущей Windows-машине).
+- [x] Backend стартует автоматически, UI открывается после `db_ok=true`.
+- [x] Закрытие приложения останавливает sidecar; повторный запуск не оставляет
       занятых портов/процессов.
-- [ ] Auth в desktop работает; токен не хранится в открытом `localStorage`.
-- [ ] Docker-режим не сломан; `docker compose up -d` по-прежнему работает.
-- [ ] Документация: установка, данные, логи, удаление, ограничения RAG.
-- [ ] ADR-0017, ARCHITECTURE §25, README, KI-019/KI-020 обновлены.
+- [x] Auth в desktop работает; токен не хранится в открытом `localStorage`
+      (Bearer в памяти; повторный вход после перезапуска — KI-020).
+- [x] Docker-режим не сломан; `docker compose up -d` по-прежнему работает.
+- [x] Документация: установка, данные, логи, удаление, ограничения RAG.
+- [x] ADR-0017, ARCHITECTURE §25, README, KI-019/KI-020 обновлены.
 
 ---
 

@@ -4,6 +4,7 @@ import {
   getCurrentUser,
   login as apiLogin,
   logout as apiLogout,
+  setAuthToken,
 } from '../api/client'
 import type { AuthUser } from '../api/types'
 
@@ -26,6 +27,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiLogin(username, password)
+      setAuthToken(response.access_token)
       set({ user: response.user, loading: false, error: null })
       return true
     } catch (cause) {
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await apiLogout()
     } finally {
+      setAuthToken(null)
       set({ user: null, loading: false, error: null })
     }
   },
@@ -53,6 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await getCurrentUser()
       set({ user, loading: false })
     } catch {
+      setAuthToken(null)
       set({ user: null, loading: false })
     }
   },
