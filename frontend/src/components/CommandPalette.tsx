@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { bulkFetchAll, getDashboard, migrateToGitflic, scan } from '../api/client'
 import type { DashboardRepository } from '../api/types'
-import { useI18n } from '../i18n'
+import { useI18n, useI18nNamespace } from '../i18n'
 
 type CommandGroup = string
 
@@ -29,6 +29,17 @@ function displayName(repository: DashboardRepository): string {
 }
 
 export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const { t } = useI18n()
+  const dictionaryReady = useI18nNamespace('components')
+
+  if (!dictionaryReady) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
+  }
+
+  return <CommandPaletteContent open={open} onClose={onClose} />
+}
+
+function CommandPaletteContent({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate()
   const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)

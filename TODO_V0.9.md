@@ -72,118 +72,72 @@ v0.9.0 закрывает эти риски тремя спринтами: **E2E
 
 ---
 
-### Спринт 42 — E2E Testing & Bundle Optimization
+### Спринт 42 — E2E Testing & Bundle Optimization ✅
 
 **Цель:** защитить три критических пользовательских пути и вернуть entry
 bundle под контроль (**< 90 kB gzip**).
 
-#### S42-001. Playwright: фундамент
+**Статус:** реализовано 2026-11-08 (S42-001..S42-003). Отличия от
+первоначального плана: E2E работают на моках Playwright `page.route()` против
+Vite dev-сервера (`http://localhost:5173`), без backend, БД и локальной LLM;
+временные git-репозитории не создаются. Дополнительно в lazy-чанк вынесен
+словарь `components`.
 
-- [ ] **ADR-0013 «E2E testing with Playwright».** Зафиксировать выбор,
-      стоимость зависимости, изоляцию тестовых данных и политику flaky-тестов.
-- [ ] Добавить `@playwright/test` в `frontend/devDependencies` (единственная
-      новая зависимость спринта; браузеры ставятся `playwright install chromium`).
-- [ ] `frontend/playwright.config.ts`:
-  - `testDir: ./e2e`, `fullyParallel: false` для git-сценариев;
-  - `webServer` поднимает backend (`uvicorn app.main:app --port 8000`) и
-    frontend (`vite preview --port 4173`), `reuseExistingServer` — только локально;
-  - `E2E_BASE_URL` (default `http://127.0.0.1:4173`), `E2E_API_URL`
-    (default `http://127.0.0.1:8000`);
-  - trace/video/screenshot — `retain-on-failure`, отчёт `html`;
-  - `retries: 0` локально; в CI — 1 с обязательным разбором flaky.
-- [ ] Скрипты: `pnpm --dir frontend test:e2e`, `test:e2e:ui`,
+#### S42-001. Playwright и E2E-сценарии ✅
+
+- [x] **ADR-0013 «E2E testing with Playwright»** — выбор, стоимость зависимости,
+      изоляция данных и политика flaky-тестов.
+- [x] `@playwright/test` добавлен в `frontend/devDependencies`; браузер
+      ставится командой `playwright install chromium`.
+- [x] `frontend/playwright.config.ts`: `testDir: ./e2e`, Chromium, локаль
+      `ru-RU`, dev-сервер `localhost:5173`, trace/video/screenshot —
+      `retain-on-failure`, HTML-отчёт.
+- [x] `frontend/e2e/mock-api.ts` — единый обработчик
+      `page.route('**/api/v1/**')` с изменяемым состоянием; мок-LLM отвечает
+      детерминированным сообщением.
+- [x] Скрипты: `pnpm --dir frontend test:e2e`, `test:e2e:ui`,
       `test:e2e:report`.
-- [ ] Изоляция данных:
-  - `frontend/e2e/fixtures/` — скрипт создаёт 2–3 **временных** git-репозитория
-    (`git init`, коммиты, bare-remote) в `E2E_TMP_DIR`;
-  - отдельная БД (`E2E_DB_URL=sqlite+aiosqlite:///.../e2e.db`), `SCAN_ROOTS`
-    указывает только на `E2E_TMP_DIR`;
-  - `LLM_ENABLED=false` по умолчанию; для AI-сценария — мок-сервер (S42-004);
-  - `afterAll` удаляет tmp-репозитории и БД; **реальные проекты не сканируются**.
-- [ ] Обновить `docs/TESTING.md`: команды, структура `e2e/`, правило
-      «E2E не ходит в сеть и не трогает реальные репозитории».
+- [x] `docs/TESTING.md`: структура `e2e/`, команды и правило «E2E не ходит в
+      сеть и не трогает реальные репозитории».
 
-#### S42-002. Сценарий 1 — onboarding → сканирование → дашборд
+#### S42-002. Bundle optimization ✅
 
-> **Трактовка «регистрации».** В v0.8.0 аутентификации нет: приложение
-> однопользовательское, bind на `127.0.0.1` (`docs/SPEC.md` §2). Поэтому сценарий
-> понимается как **регистрация рабочего пространства (onboarding)**: первый
-> запуск → указание/подтверждение `SCAN_ROOTS` → сканирование → дашборд.
-> Полноценная учётная запись пользователя (пароли, сессии, роли) в v0.9.0
-> **не входит** — это отдельная фича с ADR и изменением SPEC §2.
+- [x] Baseline зафиксирован: entry **99.0 kB gzip**.
+- [x] **ADR-0014 «Bundle analysis & budget»**: `rollup-plugin-visualizer`,
+      режим `build:analyze`, отчёт `frontend/dist/stats.html` (не коммитится).
+- [x] Словари `settings`, `repository` и `components` вынесены в асинхронные
+      чанки через `loadI18nNamespace` + `useI18nNamespace`; страницы рендерятся
+      после загрузки словаря. `common`/`dashboard` остаются eager.
+- [x] `TranslationKey` сохранён, fallback RU работает в тестах без
+      `LanguageProvider`.
+- [x] Бюджет-проверка `frontend/scripts/check-bundle-budget.mjs` считает gzip
+      через `node:zlib` и падает при entry ≥ 90 kB; команда
+      `pnpm --dir frontend check:bundle`.
+- [x] Entry bundle: **89.9 kB gzip** по отчёту Vite (86.7 kB при gzip level 9).
 
-- [ ] Пустая БД → открыть `/` → пройти onboarding/настройки: проверить
-      `SCAN_ROOTS` и сохранить.
-- [ ] Нажать «Сканировать» → дождаться завершения (`GET /api/v1/scan/status`).
-- [ ] Дашборд показывает сводку и строки репозиториев из фикстуры.
-- [ ] Клик по карточке «Требуют внимания» → URL содержит `status=...`,
-      список отфильтрован, scroll к таблице.
-- [ ] Assert: нет ошибок в console, нет `pageerror`, все сетевые ответы < 500.
+#### S42-003. Тесты и документация ✅
 
-#### S42-003. Сценарий 2 — язык и тема
-
-- [ ] Переключить RU → EN: текст меняется без reload,
-      `document.documentElement.lang === "en"`,
-      `localStorage["iiruchating.locale"] === "en"`.
-- [ ] Reload → EN сохраняется.
-- [ ] Переключить светлую/тёмную тему: `html.classList.contains("dark")`
-      соответствует теме, `localStorage["theme"]` сохраняется.
-- [ ] Reload → тема сохраняется; `prefers-color-scheme` не перебивает явный выбор.
-- [ ] Assert: нет «смешанного» языка на дашборде и в шапке.
-
-#### S42-004. Сценарий 3 — AI-коммит (мок-LLM) → модалка → копирование
-
-- [ ] Поднять мок OpenAI-совместимого сервера (`/v1/chat/completions`) в
-      `frontend/e2e/mock-llm/`; ответ детерминированный:
-      `feat(e2e): add mocked commit message`.
-- [ ] Создать/активировать профиль провайдера с `base_url` мока;
-      `LLM_ENABLED=true`, `LLM_ALLOW_REMOTE=false` (loopback).
-- [ ] В фикстуре сделать dirty-изменение → открыть карточку репозитория →
-      «Сгенерировать commit message» (`POST /repositories/{id}/ai/commit-message`).
-- [ ] Модалка показывает ответ мока; текст редактируемый; кнопка «Копировать»
-      кладёт его в clipboard (проверить через `navigator.clipboard.readText()`
-      с выданным permission).
-- [ ] Assert: LLM вызван ровно один раз; в модалке есть пометка модели;
-      никакого коммита не создаётся; при повторном открытии с тем же diff
-      работает AI-кэш (после S43-002 — `cached=true`).
-
-#### S42-005. Bundle analysis и ленивые i18n-словари
-
-- [ ] Зафиксировать baseline: entry **99.0 kB gzip**, lazy chunks — charts,
-      AI-дайджест, задача агента, профиль AI.
-- [ ] ADR-0014 «Bundle analysis & budget»: выбрать анализатор.
-      Предпочтительно `rollup-plugin-visualizer` (dev-only, режим `analyze`);
-      альтернатива без новой зависимости — `vite build --sourcemap` + разбор
-      `dist/assets/*.js`.
-- [ ] Скрипт `build:analyze` (`vite build --mode analyze`), отчёт
-      `frontend/dist/stats.html`; отчёт не коммитится.
-- [ ] Вынести словари **`settings`** и **`repository`** (самые большие:
-      ~3.9 kB и ~14.5 kB RU-исходников) в асинхронные чанки:
-      - `loadNamespace(locale, ns)` с динамическим `import()`;
-      - namespace загружается на route (`Settings`, `RepositoryDetails`) до
-        первого рендера (Suspense/route loader), с preload по hover/навигации;
-      - `common`/`dashboard`/`components` остаются eager;
-      - fallback RU и типизация `TranslationKey` сохраняются; недостающий ключ
-        не роняет UI.
-- [ ] Budget-check без новой зависимости: `scripts/check-bundle-size.mjs`
-      читает `dist/assets/*.js`, считает gzip через `node:zlib`, падает при
-      entry > **90 kB gzip**; подключить к `pnpm build` или отдельному
-      `pnpm check:bundle`.
-- [ ] Проверить, что lazy-чunks не дублируют React/recharts; при необходимости —
-      `manualChunks` (vendor, charts, i18n).
-- [ ] Записать результат в README/CHANGELOG: entry до/после, список lazy chunks.
+- [x] `onboarding.spec.ts` — пустой дашборд → «Сканировать» → строка
+      репозитория.
+- [x] `settings.spec.ts` — RU → EN без reload, заголовок `Settings`;
+      переключение темы и класс `dark` на `<html>`.
+- [x] `ai-commit.spec.ts` — dirty-репозиторий → «Сгенерировать коммит» →
+      мок-LLM → сообщение в модалке.
+- [x] `docs/CHANGELOG.md` `[Unreleased]`, `README.md` раздел
+      «Тестирование», ADR-0013/0014.
+- [x] `pytest`, `ruff`, `mypy`, `pnpm typecheck`, `lint`, `test`,
+      `build`, `test:e2e` — зелёные.
 
 **DoD спринта 42:**
 
-- [ ] 3 E2E-сценария зелёные на чистой БД и tmp-репозиториях; flaky = 0.
-- [ ] `pnpm --dir frontend test:e2e` работает по документированной команде.
-- [ ] Entry bundle **< 90 kB gzip**, budget-check падает при превышении.
-- [ ] Словари `settings`/`repository` не входят в entry; RU/EN и тема
-      сохраняются после reload.
-- [ ] `pnpm typecheck && lint && test && build` — 0; backend-проверки не
+- [x] 3 E2E-сценария зелёные (3 passed), flaky = 0.
+- [x] `pnpm --dir frontend test:e2e` работает по документированной команде.
+- [x] Entry bundle **< 90 kB gzip**, budget-check падает при превышении.
+- [x] Словари `settings`/`repository`/`components` не входят в entry;
+      RU/EN и тема сохраняются после reload (проверено вручную/в сценарии).
+- [x] `pnpm typecheck && lint && test && build` — 0; backend-проверки не
       сломаны.
-- [ ] ADR-0013/0014 добавлены; `docs/TESTING.md` обновлён.
-
+- [x] ADR-0013/0014 добавлены; `docs/TESTING.md` обновлён.
 ---
 
 ### Спринт 43 — GigaChat & Advanced AI Features

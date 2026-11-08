@@ -1,5 +1,20 @@
 # CHANGELOG — История версий
 
+## [Unreleased]
+
+### Добавлено
+
+- test(e2e): Playwright и три сценария — onboarding/сканирование, RU/EN + тема, AI-коммит; API и LLM замоканы через `page.route()`, реальный backend не требуется (S42-001..S42-003).
+- perf(bundle): словари i18n `settings`, `repository` и `components` вынесены в ленивые чанки через динамический `import()`; entry bundle уменьшен с 99.0 до 89.9 kB gzip (S42-002).
+- build(bundle): `rollup-plugin-visualizer` в режиме `build:analyze` (`dist/stats.html`) и бюджет-проверка `check:bundle` через `node:zlib` с порогом 90 kB gzip.
+- docs(adr): ADR-0013 «E2E-тестирование через Playwright с моками API», ADR-0014 «Анализ бандла и бюджет entry chunk».
+
+### Изменено
+
+- perf(i18n): `loadI18nNamespace`/`useI18nNamespace` загружают словарь до первого рендера страницы; `TranslationKey` сохранён, fallback RU работает в тестах без `LanguageProvider`.
+- perf(build): отключён `modulePreload` polyfill для целевых ES2023-браузеров; `KeyboardShortcutsModal` и `CommandPalette` грузятся по требованию.
+- docs: README — раздел «Тестирование»; `docs/TESTING.md` — структура `frontend/e2e/` и правило «E2E не ходит в сеть и не трогает реальные репозитории».
+
 ## [0.8.0] - 2026-11-08
 
 AI Workspace: мультиязычный интерфейс RU/EN, удалённые дубликаты, AI-анализ

@@ -100,6 +100,36 @@ pnpm --dir frontend dev
 
 ---
 
+## Тестирование
+
+```bash
+# backend
+cd backend
+pytest -q
+ruff check app tests
+mypy app
+
+# frontend: unit-тесты (Vitest + Testing Library)
+pnpm --dir frontend test
+
+# frontend: E2E (Playwright, Chromium)
+pnpm --dir frontend test:e2e
+pnpm --dir frontend test:e2e:ui      # интерактивный режим
+pnpm --dir frontend test:e2e:report  # открыть HTML-отчёт
+```
+
+E2E-сценарии лежат в `frontend/e2e/` и перехватывают запросы через Playwright
+`page.route()`: backend, БД и локальная LLM **не нужны**, реальные репозитории не
+сканируются. Первый запуск требует установки браузера:
+
+```bash
+pnpm --dir frontend exec playwright install chromium
+```
+
+Подробности — [docs/TESTING.md](docs/TESTING.md).
+
+---
+
 ## Документация
 
 | Документ | Назначение |
@@ -120,10 +150,10 @@ pnpm --dir frontend dev
 | Показатель | Значение |
 |------------|----------|
 | Версия | **v0.8.0** (2026-11-08) |
-| Спринты | 1–40 (v0.8.0 «AI Workspace») |
+| Спринты | 1–42 (v0.9.0 в разработке) |
 | Тесты backend | **228** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **44** (Vitest + Testing Library) |
-| Entry bundle | 99.0 kB gzip (+ lazy charts 100.9 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.2 kB) |
+| Тесты frontend | **44** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **89.9 kB gzip** (+ lazy charts 100.9 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.2 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 

@@ -53,7 +53,7 @@ import type {
 import MirrorBadge from '../components/MirrorBadge'
 import ReadmeModal from '../components/ReadmeModal'
 import StatusBadge from '../components/StatusBadge'
-import { type TranslationKey, useI18n } from '../i18n'
+import { type TranslationKey, useI18n, useI18nNamespace } from '../i18n'
 import { isStatusStale } from '../utils/stale'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -123,6 +123,18 @@ function repositoryLabel(repository: Repository): string {
 }
 
 export default function RepositoryDetails() {
+  const { t } = useI18n()
+  const repositoryReady = useI18nNamespace('repository')
+  const componentsReady = useI18nNamespace('components')
+
+  if (!repositoryReady || !componentsReady) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
+  }
+
+  return <RepositoryDetailsContent />
+}
+
+function RepositoryDetailsContent() {
   const { t, formatDate } = useI18n()
   const { id } = useParams<{ id: string }>()
   const repositoryId = Number(id)

@@ -3,10 +3,10 @@ import { Link, Outlet } from 'react-router-dom'
 
 import { useI18n } from '../i18n'
 import LanguageToggle from './LanguageToggle'
-import KeyboardShortcutsModal from './KeyboardShortcutsModal'
 import ThemeToggle from './ThemeToggle'
 
 const CommandPalette = lazy(() => import('./CommandPalette'))
+const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'))
 
 export default function AppLayout() {
   const { t } = useI18n()
@@ -89,10 +89,14 @@ export default function AppLayout() {
           <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         </Suspense>
       )}
-      <KeyboardShortcutsModal
-        open={shortcutsOpen}
-        onClose={() => setShortcutsOpen(false)}
-      />
+      {shortcutsOpen && (
+        <Suspense fallback={null}>
+          <KeyboardShortcutsModal
+            open={shortcutsOpen}
+            onClose={() => setShortcutsOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

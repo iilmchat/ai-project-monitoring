@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { useI18n } from '../i18n'
+import { useI18n, useI18nNamespace } from '../i18n'
 
 interface KeyboardShortcutsModalProps {
   open: boolean
@@ -8,6 +8,20 @@ interface KeyboardShortcutsModalProps {
 }
 
 export default function KeyboardShortcutsModal({
+  open,
+  onClose,
+}: KeyboardShortcutsModalProps) {
+  const { t } = useI18n()
+  const dictionaryReady = useI18nNamespace('components')
+
+  if (!dictionaryReady) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
+  }
+
+  return <KeyboardShortcutsModalContent open={open} onClose={onClose} />
+}
+
+function KeyboardShortcutsModalContent({
   open,
   onClose,
 }: KeyboardShortcutsModalProps) {

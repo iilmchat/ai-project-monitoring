@@ -19,7 +19,7 @@ import GlobalDependencies from '../components/GlobalDependencies'
 import Heatmap from '../components/Heatmap'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
-import { ciLabel, mirrorLabel, statusLabel, useI18n } from '../i18n'
+import { ciLabel, mirrorLabel, statusLabel, useI18n, useI18nNamespace } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -81,6 +81,17 @@ interface ContextState {
 }
 
 export default function Dashboard() {
+  const { t } = useI18n()
+  const dictionaryReady = useI18nNamespace('components')
+
+  if (!dictionaryReady) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
+  }
+
+  return <DashboardContent />
+}
+
+function DashboardContent() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()

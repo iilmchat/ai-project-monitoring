@@ -14,7 +14,7 @@ import type {
   AppSettings,
   LLMTestResult,
 } from '../api/types'
-import { useI18n } from '../i18n'
+import { useI18n, useI18nNamespace } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
 import {
@@ -27,6 +27,17 @@ import {
 const AIProviderModal = lazy(() => import('../components/AIProviderModal'))
 
 export default function SettingsPage() {
+  const { t } = useI18n()
+  const dictionaryReady = useI18nNamespace('settings')
+
+  if (!dictionaryReady) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
+  }
+
+  return <SettingsContent />
+}
+
+function SettingsContent() {
   const { t } = useI18n()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [scanRoots, setScanRoots] = useState('')
