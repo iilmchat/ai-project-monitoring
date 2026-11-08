@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     debug: bool = False
-    app_version: str = "0.7.0"
+    app_version: str = "0.8.0"
 
     @property
     def scan_root_paths(self) -> list[str]:

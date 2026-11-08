@@ -1,9 +1,9 @@
 # TODO v0.8.0 — Actionable UX, Correct Dependencies & AI Everywhere
 
 **Версия:** v0.8.0 «Actionable Dashboard»
-**Статус:** 🚧 Sprint 35–39 завершены; следующий — Sprint 40 (release v0.8.0)
+**Статус:** ✅ v0.8.0 выпущен 2026-11-08 (спринты 35–40 завершены)
 **Предыдущий этап:** v0.7.0 — [`TODO_V0.7.md`](TODO_V0.7.md)
-**Последнее обновление:** 2026-11-07
+**Последнее обновление:** 2026-11-08
 
 ---
 
@@ -214,14 +214,14 @@ AI-провайдеры.
 
 ---
 
-### Спринт 40 — Release v0.8.0
+### Спринт 40 — Release v0.8.0 — ✅ Завершён (2026-11-08)
 
-- [ ] Версии `0.8.0`, CHANGELOG, RELEASES, README, SPEC, ARCHITECTURE.
-- [ ] Docs-consistency audit, KI-обновления (AI-провайдеры, дубли, i18n).
-- [ ] Полные проверки: `ruff`, `mypy --strict`, `pytest -q`,
+- [x] Версии `0.8.0`, CHANGELOG, RELEASES, README, SPEC, ARCHITECTURE.
+- [x] Docs-consistency audit, KI-обновления (AI-провайдеры, дубли, i18n).
+- [x] Полные проверки: `ruff`, `mypy --strict`, `pytest -q`,
       `pnpm typecheck && lint && test && build`.
-- [ ] Тег `v0.8.0`, GitHub Release, зеркало GitFlic, `SHA(main)` совпадает.
-- [ ] Demo-сценарий: 25 репозиториев, вложенные зависимости, README-модалка,
+- [x] Тег `v0.8.0`, GitHub Release, зеркало GitFlic, `SHA(main)` совпадает.
+- [x] Demo-сценарий: 25 репозиториев, вложенные зависимости, README-модалка,
       AI-рекомендации, задача для агента, RU/EN.
 
 ---
@@ -232,10 +232,10 @@ AI-провайдеры.
 |----------|-----------------|
 | `README`/`docs` endpoints, лимиты и безопасность | `docs/SPEC.md` §3.21 |
 | `manifests[]`/`manifest_path` в DependencyReport | `docs/SPEC.md` §3.15 |
-| `GET /repositories/relations` | `docs/SPEC.md` §3.22 |
-| `POST /repositories/{id}/ai/recommendations` | `docs/SPEC.md` §3.18.3 |
-| `POST /repositories/{id}/agent-task` | `docs/SPEC.md` §3.23 |
-| `llm_profiles`, выбор провайдера | `docs/SPEC.md` §3.12; ADR-0012 |
+| `GET /dashboard/duplicates` | `docs/SPEC.md` §3.22 |
+| `POST /dashboard/global-dependencies/ai-advice` | `docs/SPEC.md` §3.23 |
+| `POST /ai/dashboard-advice`, `/repositories/{id}/ai/agent-task`, `/settings/llm/test` | `docs/SPEC.md` §3.24 |
+| `ai_provider_profiles`, выбор провайдера | `docs/SPEC.md` §3.25; `docs/ARCHITECTURE.md` §15.7 |
 | Nested manifest discovery | `docs/ARCHITECTURE.md` §18 |
 | Repository identity/duplicates | `docs/ARCHITECTURE.md` §19 |
 | i18n RU/EN | `docs/ARCHITECTURE.md` §20 |

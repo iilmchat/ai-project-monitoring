@@ -6,7 +6,7 @@ Security §3.16 — в Sprint 28; Insights §3.17 — в Sprint 29.
 AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33), global
 analytics §3.19 и dependency updates §3.20 — реализованы в Sprint 32–34.
 
-**Версия:** v0.7.0 «AI & Global Analytics» · **Обновлено:** 2026-11-06
+**Версия:** v0.8.0 «AI Workspace» · **Обновлено:** 2026-11-08
 
 ---
 

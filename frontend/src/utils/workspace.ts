@@ -10,7 +10,7 @@ import type {
 } from '../store/useViewsStore'
 
 export const WORKSPACE_VERSION = 1
-export const WORKSPACE_APP_VERSION = '0.7.0'
+export const WORKSPACE_APP_VERSION = '0.8.0'
 export const WORKSPACE_FILENAME = 'iiruchating_workspace.json'
 
 export const COLUMN_KEYS: ColumnKey[] = [

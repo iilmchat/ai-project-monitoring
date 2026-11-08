@@ -4,7 +4,9 @@
 реализован в Sprint 24; §11 (Python/Node dependencies) — в Sprint 25–26;
 §12 (security) — в Sprint 28; §13 (insights) — в Sprint 29;
 §14 (collaboration export) — в Sprint 30; §15 (LLM) — в Sprint 32–33;
-§16 (global analytics) — в Sprint 33; §17 (dependency updates) — в Sprint 34.
+§16 (global analytics) — в Sprint 33; §17 (dependency updates) — в Sprint 34;
+§18 (manifest discovery/README) — в Sprint 35; §19 (identity/duplicates) —
+в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 — дальнейшее.
 
 ---
 
