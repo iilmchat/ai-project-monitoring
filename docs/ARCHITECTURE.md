@@ -6,7 +6,8 @@
 §14 (collaboration export) — в Sprint 30; §15 (LLM) — в Sprint 32–33;
 §16 (global analytics) — в Sprint 33; §17 (dependency updates) — в Sprint 34;
 §18 (manifest discovery/README) — в Sprint 35; §19 (identity/duplicates) —
-в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 — дальнейшее.
+в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 (`CodeSearchService`) и
+§22 (`GigaChatProvider`) — **план v0.9.0** (Sprints 43–44); §23 — дальнейшее.
 
 ---
 
@@ -26,6 +27,8 @@ FastAPI (backend)
   ├─ /api/v1/mirror          — candidates, poll
   ├─ /api/v1/webhooks        — GitHub / GitFlic (HMAC)
   ├─ /api/v1/dashboard       — агрегированная сводка, global-dependencies (v0.7.0)
+  ├─ /api/v1/settings        — настройки, AI-провайдеры (v0.8.0), GigaChat OAuth (v0.9.0, план)
+  ├─ /api/v1/search          — code search/RAG (v0.9.0, план)
   └─ /api/v1/health
   │
   ├─ Discovery Service          — рекурсивный поиск .git/, исключения, глубина
@@ -40,11 +43,15 @@ FastAPI (backend)
   ├─ Security Service (v0.6.0)  — OSV.dev CVE + regex secret scan (read-only)
   ├─ Insights Service (v0.6.0)  — git log: hotspots, commit frequency (DORA-lite)
   ├─ LLM Service (v0.7.0)       — local OpenAI-compatible LLM: commit draft, CVE explain
+  ├─ AI Provider Service (v0.8.0) — профили провайдеров; GigaChatProvider (v0.9.0, план)
   ├─ Global Analytics (v0.7.0)  — версии пакетов по всем tracked-репозиториям
   ├─ Dependency Update (v0.7.0) — pip/pnpm/npm update с preflight и audit
-  └─ SQLite (или PostgreSQL)    — repositories, repository_status, repository_mirror_status,
+  ├─ Code Search Service (v0.9.0, план) — chunking, embeddings, pgvector, поиск
+  └─ SQLite / PostgreSQL + pgvector (v0.9.0, план)
+                                  repositories, repository_status, repository_mirror_status,
                                   scan_runs, webhook_events, dependency_cache,
-                                  security_cache, ai_cache
+                                  security_cache, ai_cache, ai_provider_profiles,
+                                  code_chunks (v0.9.0, план)
 ```
 
 ---
@@ -308,10 +315,16 @@ stores/
 
 - Таблица: мемоизированные селекторы, сортировка/фильтрация в store, виртуализация —
   при > 500 строк (v0.4.1).
-- Тяжёлые виджеты (recharts, heatmap) — `React.lazy`; бюджет entry bundle — 100 kB gzip.
-- Экспорт CSV/JSON — на клиенте из текущего среза, без новых серверных отчётов.
+- Тяжёлые виджеты (recharts, heatmap) — `React.lazy`; бюджет entry bundle —
+  **< 90 kB gzip (v0.9.0, план)**; текущий baseline — 99.0 kB.
 - Docker- и dependency-блоки (v0.5.0) — lazy, загружаются при раскрытии карточки/
   деталей; dashboard не делает N запросов к Docker/PyPI/npm при первом рендере.
+- **v0.9.0 (план):** i18n-словари `settings` и `repository` — отдельные
+  lazy-чанки, загружаются на route до первого рендера; `common`/`dashboard`/
+  `components` остаются eager. Budget-check (`scripts/check-bundle-size.mjs`)
+  падает при entry > 90 kB gzip. E2E (Playwright) проверяет onboarding→scan→
+  dashboard, RU/EN + тему и AI-коммит с мок-LLM.
+- Экспорт CSV/JSON — на клиенте из текущего среза, без новых серверных отчётов.
 
 ### 9.4. A11y и stale-состояние
 
@@ -930,6 +943,9 @@ POST /repositories/{id}/ai/cve-explain
   {cve_id}… Как её исправить? Ответь кратко, 2-3 предложения.»
 - `ai_cache(key*, kind, model, payload, checked_at)`, TTL 7 дней; ключ
   `cve-explain:<cve_id>:<model>`; `cached=true` при попадании.
+- **v0.9.0 (план):** ключ расширяется до
+  `<feature>:<scope>:<state_hash>:<model>:<prompt_version>`; при неизменном
+  состоянии LLM не вызывается (`X-AI-Cache: hit`), `refresh=true` обходит кэш.
 - `llm_enabled=false` / remote без opt-in → `409`; LLM timeout/5xx → `503`,
   fallback-текст не подставляется.
 - В `ai_cache` хранится только текст объяснения и модель, не diff и не секреты.
@@ -976,6 +992,11 @@ POST /repositories/{id}/ai/cve-explain
 не логируется; remote endpoint разрешён только при `LLM_ALLOW_REMOTE=true`.
 Миграция `009` создаёт таблицу и переносит текущие `llm_*` из `app_settings` в
 первый профиль (активен, если `llm_enabled` был true).
+
+**v0.9.0 (план):** добавляются `kind` (`openai_compatible` | `gigachat`) и
+`auth_type` (`api_key` | `oauth`). Для `kind="gigachat"` `LLMService` делегирует
+в `GigaChatProvider` (§22); остальные профили работают по текущему пути.
+Smart cache (§15.4) применяется ко всем AI-фичам, кроме `/settings/llm/test`.
 
 ---
 
@@ -1141,8 +1162,177 @@ status codes) не переводятся; RU-значения сохраняю�
 
 ---
 
-## 21. Что ещё не сделано (v0.8+)
+## 21. CodeSearchService — RAG по коду (v0.9.0, Sprint 44 — план)
 
+> **Статус:** план. В v0.8.0 сервиса, таблицы `code_chunks` и эндпоинтов
+> `/search/code*` нет. Раздел фиксирует устройство до реализации.
+
+**Задача.** Находить по смыслу фрагменты README, `docs/` и исходного кода всех
+tracked-репозиториев (в текущем демо — 34 проекта), не изменяя ни один
+репозиторий.
+
+### 21.1. Поток индексации
+
+```
+POST /api/v1/search/code/index {repository_ids?, force?}
+  → CodeSearchService.index()
+      ├─ tracked repositories (PostgreSQL; на SQLite — 503 rag_unavailable)
+      ├─ FileWalker: README*, docs/**/*.md, src/**/*.{py,ts,tsx,js,jsx,...}
+      │    ignore: .git, node_modules, .venv, dist, build, target, vendor,
+      │            .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
+      ├─ Chunker: Markdown — заголовки + окно; код — функции/классы + окно
+      │    RAG_CHUNK_TOKENS (512), RAG_CHUNK_OVERLAP (64), start/end line
+      ├─ content_hash = sha256(нормализованный чанк)
+      ├─ Incremental: file hash (sha256+size/mtime) → неизменённые файлы skip;
+      │    изменившиеся чанки переэмбеддируются, старые удаляются
+      ├─ Embeddings: LM Studio/Ollama POST /v1/embeddings
+      │    batch ≤ RAG_BATCH_SIZE (32), concurrency ≤ 2, timeout 30 с,
+      │    retry 3 с backoff; remote — только EMBEDDING_ALLOW_REMOTE=true
+      └─ UPSERT code_chunks + HNSW/IVFFlat (vector_cosine_ops)
+```
+
+### 21.2. Хранение
+
+`code_chunks` (PostgreSQL + `pgvector`):
+
+- `id`, `repository_id` (FK), `path`, `chunk_index`, `start_line`, `end_line`;
+- `language` — по расширению (не угадывается по содержимому);
+- `content`, `content_hash` (sha256), `embedding vector(768)`,
+  `embedding_model`, `indexed_at`;
+- `UNIQUE(repository_id, path, chunk_index, content_hash)` — защита от дублей;
+- индексы: `(repository_id)`, `(content_hash)`, HNSW по embedding.
+
+Размерность — `EMBEDDING_DIMENSIONS` (default 768, `nomic-embed-text-v1.5`).
+Смена модели/размерности требует миграции и полной переиндексации; при старте
+сервис сверяет `embedding_model` и предупреждает о несовпадении.
+
+### 21.3. Поиск
+
+```
+POST /api/v1/search/code {query, repository_ids?, limit?, min_score?, language?}
+  → embed(query) → SELECT ... ORDER BY embedding <=> :q LIMIT :limit
+  → score = 1 - cosine_distance; фильтры repository/language/min_score
+  → snippet ≤ 400 символов + path/start_line/end_line/repository_name
+```
+
+- `limit` 1–50 (default 10), `min_score` 0–1 (default 0.2).
+- `stale=true`, если индекс старше последнего сканирования/HEAD; переиндексация
+  только по явному действию.
+- Ошибки: `400` — валидация; `503 rag_unavailable` — нет pgvector/LM Studio;
+  `504 embedding_timeout`.
+- Запросы, фрагменты и эмбеддинги не логируются; сниппеты с секретами
+  маскируются, `.env`/ключи не индексируются.
+
+### 21.4. Инкрементальность и память
+
+- Файлы читаются потоково; в памяти держится только текущий батч чанков.
+- `RAG_MAX_CHUNKS_PER_REPO` ограничивает один проект; при превышении —
+  `truncated=true` и предупреждение, а не OOM (KI-017).
+- HNSW-индекс строится после массовой вставки; параметры
+  `maintenance_work_mem`/`ef_construction` документируются в ADR-0015.
+- Индексация — фоновая задача с отменой; повторный запуск не создаёт дубли.
+
+### 21.5. Read-only и деградация
+
+- Сервис только читает рабочую директорию; `git`, индекс и `.git` не меняются.
+- SQLite (dev/CI без PostgreSQL) — `503 rag_unavailable`, остальные функции
+  работают.
+- Недоступная модель эмбеддингов не ломает дашборд: поиск возвращает
+  `503`, статус индексации показывает `errors[]`.
+- Интеграционные тесты pgvector — `@pytest.mark.postgres` (skip с причиной,
+  если `POSTGRES_TEST_URL` не задан); unit-тесты chunker/ranker — без БД.
+
+---
+
+## 22. GigaChatProvider — OAuth 2.0 adapter (v0.9.0, Sprint 43 — план)
+
+> **Статус:** план. В v0.8.0 GigaChat подключается как OpenAI-совместимый
+> профиль с готовым токеном; нативного OAuth нет.
+
+**Задача.** Авторизоваться в GigaChat по OAuth 2.0, автоматически обновлять
+короткоживущий токен и использовать GigaChat как обычный AI-провайдер, не
+раскрывая `client_secret`/`access_token`.
+
+### 22.1. Поток авторизации
+
+```
+UI (модалка профиля)
+  → POST /api/v1/settings/ai-providers/gigachat/auth
+      {client_id, client_secret, scope, model_name, profile_name, activate}
+  → GigaChatProvider.authorize()
+      ├─ POST https://ngw.devices.sberbank.ru:9443/api/v2/oauth
+      │    Content-Type: application/x-www-form-urlencoded
+      │    Accept: application/json
+      │    RqUID: <uuid4>
+      │    Authorization: Basic base64(client_id:client_secret)
+      │    body: scope=GIGACHAT_API_PERS
+      ├─ response {access_token, expires_at (ms epoch)}
+      ├─ upsert profile: kind=gigachat, auth_type=oauth,
+      │    oauth_scope, oauth_expires_at, access_token (server-only)
+      └─ response {profile_id, status, token_type, expires_at, model_name}
+```
+
+Ответ **никогда** не содержит `access_token`/`client_secret`; в API — только
+маска. Повторная авторизация обновляет существующий профиль по `name`, а не
+создаёт дубликат.
+
+### 22.2. Использование и refresh
+
+`LLMService.resolve()` смотрит `kind`:
+
+- `openai_compatible` — текущий путь (`/chat/completions` + `api_key`);
+- `gigachat` — `GigaChatProvider.chat()`:
+  - токен из in-memory cache по `profile_id`;
+  - если до истечения меньше `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (60) —
+    refresh;
+  - refresh под mutex (single-flight): параллельные запросы не спамят OAuth;
+  - `401` → один принудительный refresh + повтор; повторный `401` →
+    `provider_unauthorized`;
+  - `429`/`5xx` → backoff, затем `provider_unavailable`/`http_<code>`.
+
+Токен живёт ~30 минут (KI-018). UI показывает `expires_at` и предлагает
+повторную авторизацию; фонового спама запросов нет.
+
+### 22.3. Схема и совместимость
+
+`ai_provider_profiles` (миграция `010`):
+
+- `kind` default `openai_compatible`;
+- `auth_type` default `api_key`;
+- `client_id`, `client_secret`, `oauth_scope`, `oauth_expires_at`,
+  `access_token` — NULL для обычных профилей.
+
+Существующие профили после миграции остаются `openai_compatible`/`api_key`;
+`LLM_ENABLED`/`LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY` — fallback, как в §15.7.
+
+### 22.4. Безопасность и TLS
+
+- `client_secret` и `access_token` не логируются, не попадают в `action_log`,
+  `ai_cache` и ответы API; в БД хранятся server-only.
+- Шифрование at rest (Fernet/KMS) в v0.9.0 не вводится — кандидат v0.9.1;
+  доступ к локальной БД считается доверенным. Это ограничение фиксируется в
+  ADR-0012.
+- TLS-сертификат НУЦ Минцифры — через `GIGACHAT_CA_BUNDLE`; `verify=False`
+  запрещён.
+- Remote endpoint GigaChat разрешён только при `LLM_ALLOW_REMOTE=true`
+  (исключение — явно документированный локальный прокси).
+- Ошибки: `invalid_client`, `unsupported_scope`, `provider_unavailable`,
+  `timeout`, `provider_unauthorized`, `http_<code>`.
+
+### 22.5. Тесты
+
+- Mock HTTP (без реальных ключей): успешный OAuth, истечение токена → refresh,
+  `401` → refresh + retry, повторный `401`, `429`/`5xx`, TLS/connection error.
+- Проверка, что токен/секрет отсутствуют в ответах, логах и `ai_cache`.
+- Миграция: старые профили получают `openai_compatible`/`api_key`.
+
+---
+
+## 23. Что ещё не сделано (v0.9+)
+
+- Полноценная аутентификация/регистрация пользователей (SPEC §2: один
+  пользователь; отдельная фича с ADR).
+- RAG на SQLite (v0.9.0 — только PostgreSQL + pgvector).
 - Синхронизация saved views в БД между устройствами (v0.8.0; в v0.6.0–v0.7.0 —
   только файловый export/import).
 - История статусов (trend: как часто репозиторий был `dirty`; как часто `behind_gitflic`).

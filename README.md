@@ -159,7 +159,21 @@ pnpm --dir frontend dev
 - **Sprint 38:** AI-дайджест дашборда, задачи для DSH/OpenCode, проверка LLM.
 - **Sprint 39:** профили AI-провайдеров (LM Studio, DeepSeek, OpenRouter, Yandex и др.).
 
-**v0.9.0+:** синхронизация Saved Views в БД, история статусов и тренды, GigaChat OAuth adapter, расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
+**v0.9.0 «Search & Reliability»** — планируется
+([`TODO_V0.9.md`](TODO_V0.9.md)):
+
+- **Sprint 42 — E2E & Bundle:** Playwright-сценарии (onboarding → сканирование →
+  дашборд; RU/EN + тема; AI-коммит с мок-LLM) и entry bundle **< 90 kB gzip**
+  за счёт ленивых i18n-словарей `Settings`/`RepositoryDetails`.
+- **Sprint 43 — GigaChat & Smart Cache:** нативный GigaChat OAuth 2.0 adapter
+  с автообновлением токена и smart-кэш AI-ответов по хэшу состояния
+  репозитория (без повторного вызова LLM).
+- **Sprint 44 — RAG & Release:** индексация README/`docs/`/`src/` всех
+  tracked-проектов в PostgreSQL + `pgvector`, семантический поиск
+  `POST /api/v1/search/code` («где у меня настроен Redis?») и релиз `v0.9.0`.
+
+**v0.9.0+:** синхронизация Saved Views в БД, история статусов и тренды,
+расширенные интеграции CI/уведомлений и reverse-proxy для webhook.
 
 ---
 
