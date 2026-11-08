@@ -14,6 +14,8 @@ from pathlib import Path
 
 import structlog
 
+from app.core.subprocess_flags import WINDOWS_CREATION_FLAGS
+
 logger = structlog.get_logger(__name__)
 
 FAST_STATUS_TIMEOUT = 2.0
@@ -68,6 +70,7 @@ def run_git(
             stderr=subprocess.PIPE,
             text=True,
             env=_git_env(),
+            creationflags=WINDOWS_CREATION_FLAGS,
         )
     except OSError as exc:
         return CommandResult(

@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+from app.core.subprocess_flags import WINDOWS_CREATION_FLAGS
 from app.db.base import utcnow
 from app.schemas.insights import (
     CommitFrequencyPoint,
@@ -95,6 +96,7 @@ async def run_git(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,
+            creationflags=WINDOWS_CREATION_FLAGS,
         )
     except OSError as exc:
         return GitCommandResult(returncode=-1, stderr=str(exc))

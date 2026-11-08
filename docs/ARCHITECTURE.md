@@ -1440,6 +1440,9 @@ Tauri shell (Rust)
 - Auth: webview cookie или Bearer из OS keychain (KI-020).
 - CSP: только `http://127.0.0.1:<port>`, без remote-origin; single-instance lock
   (в текущей сборке — базовая защита процессами).
+- Windows: `CREATE_NO_WINDOW` применяется к sidecar (через
+  `tauri-plugin-shell`) и ко всем дочерним процессам backend (`git`, `pip`,
+  `pnpm`) — консольное окно не появляется при запуске и обновлении данных.
 
 ### 25.2. Lifecycle и надёжность
 

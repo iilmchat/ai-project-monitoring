@@ -16,6 +16,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.subprocess_flags import WINDOWS_CREATION_FLAGS
 from app.db.base import utcnow
 from app.models.entities import ActionLog, Repository
 
@@ -60,6 +61,7 @@ async def run_command(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,
+            creationflags=WINDOWS_CREATION_FLAGS,
         )
     except OSError as exc:
         return CommandResult(ok=False, exit_code=-1, error=str(exc))

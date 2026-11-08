@@ -1,5 +1,11 @@
 # CHANGELOG — История версий
 
+## [Unreleased]
+
+### Исправлено
+
+- fix(desktop): на Windows скрыто консольное окно Python-sidecar и всех дочерних процессов (`git`, `pip`, `pnpm`): `CREATE_NO_WINDOW` для `subprocess`/`asyncio.create_subprocess_exec`; sidecar Tauri уже использует флаг из `tauri-plugin-shell`.
+
 ## [1.0.0] - 2026-11-08
 
 Secure Desktop: single-user authentication, Tauri desktop app с Python-sidecar,

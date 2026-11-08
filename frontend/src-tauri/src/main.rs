@@ -36,6 +36,9 @@ fn main() {
             let port_text = port.to_string();
             let data_text = data_dir.to_string_lossy().to_string();
 
+            // tauri-plugin-shell applies CREATE_NO_WINDOW to the sidecar on
+            // Windows; backend child processes (git/pip/pnpm) use the same
+            // flag via app.core.subprocess_flags.
             let sidecar = app
                 .shell()
                 .sidecar("iiruchating-backend")?

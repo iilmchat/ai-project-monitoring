@@ -208,6 +208,8 @@ pnpm --dir frontend desktop:build
   потребоваться повторный вход (KI-020). Для стабильных сессий задайте
   `AUTH_JWT_SECRET`.
 - **SmartScreen:** установщики не подписаны (KI-021).
+- **Консоль:** sidecar и дочерние процессы (`git`, `pip`, `pnpm`) запускаются
+  без консольного окна на Windows (`CREATE_NO_WINDOW`).
 - Docker остаётся серверным вариантом с PostgreSQL/RAG.
 
 ---

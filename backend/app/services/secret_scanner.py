@@ -13,6 +13,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.subprocess_flags import WINDOWS_CREATION_FLAGS
 from app.schemas.security import (
     SecretConfidence,
     SecretFinding,
@@ -217,6 +218,7 @@ def _git_listed_files(root: Path) -> list[Path] | None:
             check=False,
             capture_output=True,
             timeout=5,
+            creationflags=WINDOWS_CREATION_FLAGS,
         )
     except (OSError, subprocess.SubprocessError):
         return None
