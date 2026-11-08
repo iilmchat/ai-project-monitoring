@@ -4,6 +4,7 @@ export const components = {
   'palette.actions': 'Actions',
   'palette.dashboard': 'Dashboard',
   'palette.settings': 'Settings',
+  'palette.searchCode': 'Find code…',
   'palette.scan': 'Scan repositories',
   'palette.fetchAll': 'Fetch All',
   'palette.fetchAllSubtitle': 'git fetch for all tracked repositories',

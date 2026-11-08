@@ -252,6 +252,10 @@ unification-advice, CVE и commit message.
 **Цель:** семантический поиск по README, `docs/` и коду всех tracked-проектов
 (в текущем демо — 34 проекта) на PostgreSQL + `pgvector`, затем релиз v0.9.0.
 
+**Статус:** ✅ реализовано 2026-11-08 (S44-001..S44-004). RAG работает только
+на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
+Интеграционный прогон на реальном PostgreSQL требует `POSTGRES_TEST_URL`.
+
 #### S44-001. Инфраструктура pgvector и индексация
 
 - [ ] ADR-0015 «RAG on pgvector»: PostgreSQL-only, выбор модели эмбеддингов,

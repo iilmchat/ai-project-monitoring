@@ -15,6 +15,7 @@ import { common as ruCommon } from './locales/ru/common'
 import { dashboard as ruDashboard } from './locales/ru/dashboard'
 import type { components as ruComponentsType } from './locales/ru/components'
 import type { repository as ruRepositoryType } from './locales/ru/repository'
+import type { search as ruSearchType } from './locales/ru/search'
 import type { settings as ruSettingsType } from './locales/ru/settings'
 
 export type Locale = 'ru' | 'en'
@@ -24,7 +25,7 @@ export type Locale = 'ru' | 'en'
  * heavy dictionaries out of the entry chunk is what makes the initial bundle
  * small; everything else (header, dashboard, shared buttons) stays eager.
  */
-export type I18nNamespace = 'settings' | 'repository' | 'components'
+export type I18nNamespace = 'settings' | 'repository' | 'components' | 'search'
 
 type Dictionary = Record<string, string>
 
@@ -42,6 +43,7 @@ export type TranslationKey =
   | keyof typeof ruCommon
   | keyof typeof ruDashboard
   | keyof typeof ruComponentsType
+  | keyof typeof ruSearchType
   | keyof typeof ruSettingsType
   | keyof typeof ruRepositoryType
 
@@ -61,12 +63,14 @@ const namespaceDictionaries: Record<I18nNamespace, Record<Locale, Dictionary>> =
   settings: { ru: {}, en: {} },
   repository: { ru: {}, en: {} },
   components: { ru: {}, en: {} },
+  search: { ru: {}, en: {} },
 }
 
 const namespaceReady: Record<I18nNamespace, boolean> = {
   settings: false,
   repository: false,
   components: false,
+  search: false,
 }
 
 const namespaceRequests: Partial<Record<I18nNamespace, Promise<void>>> = {}
@@ -76,6 +80,9 @@ const namespaceListeners = new Set<() => void>()
 function namespaceForKey(key: string): I18nNamespace | null {
   if (key.startsWith('settings.')) {
     return 'settings'
+  }
+  if (key.startsWith('search.')) {
+    return 'search'
   }
   if (key.startsWith('repo.') || key.startsWith('OSV.')) {
     return 'repository'
@@ -120,13 +127,20 @@ function loadI18nNamespace(namespace: I18nNamespace): Promise<void> {
       ])
       namespaceDictionaries.repository.ru = ruModule.repository
       namespaceDictionaries.repository.en = enModule.repository
-    } else {
+    } else if (namespace === 'components') {
       const [ruModule, enModule] = await Promise.all([
         import('./locales/ru/components'),
         import('./locales/en/components'),
       ])
       namespaceDictionaries.components.ru = ruModule.components
       namespaceDictionaries.components.en = enModule.components
+    } else {
+      const [ruModule, enModule] = await Promise.all([
+        import('./locales/ru/search'),
+        import('./locales/en/search'),
+      ])
+      namespaceDictionaries.search.ru = ruModule.search
+      namespaceDictionaries.search.en = enModule.search
     }
     namespaceReady[namespace] = true
     for (const listener of namespaceListeners) {

@@ -4,6 +4,7 @@ export const components = {
   'palette.actions': 'Действия',
   'palette.dashboard': 'Дашборд',
   'palette.settings': 'Настройки',
+  'palette.searchCode': 'Найти код…',
   'palette.scan': 'Сканировать репозитории',
   'palette.fetchAll': 'Fetch All',
   'palette.fetchAllSubtitle': 'git fetch для всех tracked репозиториев',

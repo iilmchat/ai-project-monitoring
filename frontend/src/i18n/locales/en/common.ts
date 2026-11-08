@@ -2,6 +2,7 @@ export const common = {
   'app.title': 'ai-project-monitoring',
   'app.subtitle': 'local project monitoring and analysis',
   'nav.dashboard': 'Dashboard',
+  'nav.search': 'Search',
   'nav.settings': 'Settings',
   'footer.text': 'ai-project-monitoring · local Git repository monitoring (read-only)',
   'footer.hint': 'Press ? for keyboard shortcuts · Ctrl/Cmd+K — Command Palette',

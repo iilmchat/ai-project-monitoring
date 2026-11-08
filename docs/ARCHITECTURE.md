@@ -1170,10 +1170,10 @@ status codes) не переводятся; RU-значения сохраняю�
 
 ---
 
-## 21. CodeSearchService — RAG по коду (v0.9.0, Sprint 44 — план)
+## 21. CodeSearchService — RAG по коду (v0.9.0, Sprint 44 — реализовано)
 
-> **Статус:** план. В v0.8.0 сервиса, таблицы `code_chunks` и эндпоинтов
-> `/search/code*` нет. Раздел фиксирует устройство до реализации.
+> **Статус:** реализовано для PostgreSQL + `pgvector`. На SQLite сервис
+> возвращает `503 rag_unavailable`, остальное приложение работает.
 
 **Задача.** Находить по смыслу фрагменты README, `docs/` и исходного кода всех
 tracked-репозиториев (в текущем демо — 34 проекта), не изменяя ни один
@@ -1189,7 +1189,7 @@ POST /api/v1/search/code/index {repository_ids?, force?}
       │    ignore: .git, node_modules, .venv, dist, build, target, vendor,
       │            .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
       ├─ Chunker: Markdown — заголовки + окно; код — функции/классы + окно
-      │    RAG_CHUNK_TOKENS (512), RAG_CHUNK_OVERLAP (64), start/end line
+      │    RAG_CHUNK_CHARS (1000), RAG_CHUNK_OVERLAP (150), start/end line
       ├─ content_hash = sha256(нормализованный чанк)
       ├─ Incremental: file hash (sha256+size/mtime) → неизменённые файлы skip;
       │    изменившиеся чанки переэмбеддируются, старые удаляются
@@ -1205,14 +1205,15 @@ POST /api/v1/search/code/index {repository_ids?, force?}
 
 - `id`, `repository_id` (FK), `path`, `chunk_index`, `start_line`, `end_line`;
 - `language` — по расширению (не угадывается по содержимому);
-- `content`, `content_hash` (sha256), `embedding vector(768)`,
+- `content`, `content_hash` (sha256), `embedding vector(1536)`,
   `embedding_model`, `indexed_at`;
 - `UNIQUE(repository_id, path, chunk_index, content_hash)` — защита от дублей;
 - индексы: `(repository_id)`, `(content_hash)`, HNSW по embedding.
 
-Размерность — `EMBEDDING_DIMENSIONS` (default 768, `nomic-embed-text-v1.5`).
-Смена модели/размерности требует миграции и полной переиндексации; при старте
-сервис сверяет `embedding_model` и предупреждает о несовпадении.
+Размерность — `EMBEDDING_DIMENSIONS` (default 1536,
+`text-embedding-3-small`; локальная модель настраивается). Смена
+модели/размерности требует миграции и полной переиндексации; при старте
+сервис сверяет длину вектора и возвращает `embedding_dimension_mismatch`.
 
 ### 21.3. Поиск
 
@@ -1223,7 +1224,7 @@ POST /api/v1/search/code {query, repository_ids?, limit?, min_score?, language?}
   → snippet ≤ 400 символов + path/start_line/end_line/repository_name
 ```
 
-- `limit` 1–50 (default 10), `min_score` 0–1 (default 0.2).
+- `limit` 1–50 (default 5), `min_score` 0–1 (default 0.2).
 - `stale=true`, если индекс старше последнего сканирования/HEAD; переиндексация
   только по явному действию.
 - Ошибки: `400` — валидация; `503 rag_unavailable` — нет pgvector/LM Studio;

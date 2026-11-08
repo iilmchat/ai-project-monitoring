@@ -31,7 +31,10 @@
 - **README и документация** — название и версия проекта из README, модальный просмотр Markdown с переходами по внутренним ссылкам и историей «Назад» (read-only).
 - **Действенный дашборд** — кликабельные карточки сводки («9 требуют внимания» → отфильтрованный список), сворачиваемые фильтры/аналитика и человеческие подписи состояний.
 - **Мультиязычный интерфейс (RU/EN)** — переключатель языка рядом с темой, выбор сохраняется; даты и числа локализованы через `Intl`.
-- **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter) с активацией без перезапуска.
+- **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter, GigaChat OAuth) с активацией без перезапуска.
+- **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
+- **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
+- **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -149,11 +152,11 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v0.8.0** (2026-11-08) |
-| Спринты | 1–43 (v0.9.0 в разработке) |
-| Тесты backend | **239** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
+| Версия | **v0.9.0** (2026-11-08) |
+| Спринты | 1–44 (v0.9.0 «Stability & RAG») |
+| Тесты backend | **246** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
 | Тесты frontend | **44** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **89.9 kB gzip** (+ lazy charts 100.9 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.2 kB) |
+| Entry bundle | **89.99 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.0 kB, AI-дайджест 0.8 kB, задача агента 1.1 kB, профиль AI 1.7 kB) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
@@ -189,7 +192,7 @@ pnpm --dir frontend exec playwright install chromium
 - **Sprint 38:** AI-дайджест дашборда, задачи для DSH/OpenCode, проверка LLM.
 - **Sprint 39:** профили AI-провайдеров (LM Studio, DeepSeek, OpenRouter, Yandex и др.).
 
-**v0.9.0 «Search & Reliability»** — планируется
+**v0.9.0 «Stability & RAG»** — выпущен 2026-11-08
 ([`TODO_V0.9.md`](TODO_V0.9.md)):
 
 - **Sprint 42 — E2E & Bundle:** Playwright-сценарии (onboarding → сканирование →

@@ -511,6 +511,49 @@ export interface AgentTask {
   generated_at: string
 }
 
+export interface CodeSearchResult {
+  repository_id: number
+  repository_name: string
+  path: string
+  start_line: number
+  end_line: number
+  language: string
+  snippet: string
+  score: number
+  url: string | null
+}
+
+export interface CodeSearchResponse {
+  query: string
+  model: string
+  took_ms: number
+  indexed_repositories: number
+  stale: boolean
+  results: CodeSearchResult[]
+}
+
+export interface CodeSearchRequest {
+  query: string
+  repository_ids?: number[]
+  limit?: number
+  min_score?: number
+  language?: string
+}
+
+export interface CodeIndexStatus {
+  indexed_repositories: number
+  indexed_chunks: number
+  last_indexed_at: string | null
+  running: boolean
+  errors: string[]
+}
+
+export interface CodeIndexJob {
+  status: 'started' | 'running' | 'completed' | 'failed'
+  message: string | null
+  started_at: string
+}
+
 export interface LLMTestResult {
   status: 'ok' | 'error'
   latency_ms: number

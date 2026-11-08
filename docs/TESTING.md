@@ -61,3 +61,13 @@ frontend/
   `src/api/client.ts`.
 - Команды: `pnpm --dir frontend test:e2e`, `test:e2e:ui`, `test:e2e:report`.
   Первый запуск: `pnpm --dir frontend exec playwright install chromium`.
+
+## 6. RAG (code search)
+
+- Unit-тесты (`backend/tests/test_code_search.py`) проверяют file walker,
+  ignore-лист, чанкинг с перекрытием, hash, маскирование секретов и деградацию
+  на SQLite (`503 rag_unavailable`).
+- Реальный pgvector-поиск требует PostgreSQL с расширением `vector` и
+  `POSTGRES_TEST_URL`; без него интеграционные проверки пропускаются.
+- Индексация только читает файлы: `.git`, индекс Git и рабочие файлы не
+  меняются. `.env`, ключи и lock-файлы не индексируются.

@@ -1231,10 +1231,10 @@ oauth_scope, oauth_expires_at}`.
 
 ---
 
-### 3.26. Code search / RAG (v0.9.0, Sprint 44 — план)
+### 3.26. Code search / RAG (v0.9.0, Sprint 44 — реализовано)
 
-> **Статус:** план. В v0.8.0 эндпоинта и таблицы нет. Контракт фиксируется
-> заранее, чтобы S44 не менял SPEC задним числом.
+> **Статус:** реализовано. RAG доступен только на PostgreSQL + `pgvector`;
+> на SQLite эндпоинты отвечают `503 rag_unavailable`.
 
 Семантический поиск по README, `docs/` и исходному коду tracked-репозиториев.
 Индексация **read-only**: файлы читаются, рабочая директория, индекс Git и
@@ -1260,7 +1260,7 @@ oauth_scope, oauth_expires_at}`.
 
 - `query` — 3–500 символов, обязателен;
 - `repository_ids` — опционально, только tracked-репозитории;
-- `limit` — 1–50 (default 10);
+- `limit` — 1–50 (default 5);
 - `min_score` — 0–1 (default 0.2), порог косинусной близости;
 - `language` — опционально (`python`, `typescript`, `markdown`, …).
 
@@ -1269,7 +1269,7 @@ oauth_scope, oauth_expires_at}`.
 ```json
 {
   "query": "где у меня настроен Redis?",
-  "model": "nomic-embed-text-v1.5",
+  "model": "text-embedding-3-small",
   "took_ms": 42,
   "indexed_repositories": 34,
   "stale": false,
@@ -1282,7 +1282,8 @@ oauth_scope, oauth_expires_at}`.
       "end_line": 42,
       "language": "python",
       "snippet": "REDIS_URL = ...",
-      "score": 0.83
+      "score": 0.83,
+      "url": "https://github.com/owner/repo/blob/HEAD/backend/app/core/redis.py#L10"
     }
   ]
 }
@@ -1292,9 +1293,10 @@ oauth_scope, oauth_expires_at}`.
 
 - Векторное хранилище — PostgreSQL + `pgvector`; на SQLite поиск возвращает
   `503 rag_unavailable`, остальное приложение работает.
-- Эмбеддинги — локальная модель LM Studio/Ollama (`EMBEDDING_MODEL`, default
-  `nomic-embed-text-v1.5`, 768 измерений); remote embeddings — только
-  `EMBEDDING_ALLOW_REMOTE=true`.
+- Эмбеддинги — OpenAI-compatible `/v1/embeddings` (`EMBEDDING_BASE_URL`,
+  `EMBEDDING_MODEL`, default `text-embedding-3-small`, 1536 измерений;
+  локальная модель настраивается через `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS`);
+  remote embeddings — только `EMBEDDING_ALLOW_REMOTE=true`.
 - Индекс инкрементальный: hash файла/чанка; неизменённые чанки не
   переэмбеддируются.
 - `stale=true`, если индекс старше последнего сканирования/HEAD; автоматическая
@@ -1304,8 +1306,8 @@ oauth_scope, oauth_expires_at}`.
 - Ошибки: `400` — валидация; `503 rag_unavailable` — нет pgvector/LM Studio;
   `504 embedding_timeout`; `429` — при включённом локальном rate-limit.
 
-**`CodeIndexJob`:** `{job_id, status: "queued"|"running"|"completed"|"failed",
-indexed_repositories, indexed_chunks, skipped_files, errors[]}`.
+**`CodeIndexJob`:** `{status: "started"|"running"|"completed"|"failed",
+message, started_at}`.
 **`CodeIndexStatus`:** `{indexed_repositories, indexed_chunks, last_indexed_at,
 running, errors[]}`.
 
@@ -1469,7 +1471,7 @@ ai_provider_profiles(       -- v0.8.0 (Sprint 39), GigaChat v0.9.0 (Sprint 43)
   oauth_scope TEXT NULL, oauth_expires_at, access_token TEXT NULL
 )
 
-code_chunks(                -- v0.9.0 (план, Sprint 44; PostgreSQL + pgvector)
+code_chunks(                -- v0.9.0 (реализовано, Sprint 44; PostgreSQL + pgvector)
   id BIGSERIAL PRIMARY KEY,
   repository_id→repositories,
   path TEXT,
@@ -1478,14 +1480,14 @@ code_chunks(                -- v0.9.0 (план, Sprint 44; PostgreSQL + pgvecto
   language TEXT NULL,
   content TEXT,
   content_hash TEXT,        -- sha256 нормализованного чанка
-  embedding vector(768),    -- EMBEDDING_DIMENSIONS
+  embedding vector(1536),   -- EMBEDDING_DIMENSIONS
   embedding_model TEXT,
   indexed_at,
   UNIQUE(repository_id, path, chunk_index, content_hash)
 )
 ```
 
-Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (план):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`.
+Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`.
 
 ---
 
@@ -1518,7 +1520,7 @@ code_chunks(                -- v0.9.0 (план, Sprint 44; PostgreSQL + pgvecto
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
 | **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
-| **RAG (v0.9.0, план)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_MODEL` (default `nomic-embed-text-v1.5`), `EMBEDDING_DIMENSIONS` (default 768), `EMBEDDING_ALLOW_REMOTE` (default false), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO`, `RAG_BATCH_SIZE` (default 32), `RAG_CONCURRENCY` (default 2), `RAG_CHUNK_TOKENS` (default 512), `RAG_CHUNK_OVERLAP` (default 64); на SQLite — `503 rag_unavailable`** |
+| **RAG (v0.9.0, реализовано)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL` (default `text-embedding-3-small`), `EMBEDDING_DIMENSIONS` (default 1536), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO` (default 2000), `RAG_CHUNK_CHARS` (default 1000), `RAG_CHUNK_OVERLAP` (default 150); на SQLite — `503 rag_unavailable`** |
 
 ---
 

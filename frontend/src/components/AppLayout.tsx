@@ -63,6 +63,13 @@ export default function AppLayout() {
               {t('nav.dashboard')}
             </Link>
             <Link
+              to="/search"
+              className="inline-flex items-center gap-1 hover:text-primary"
+              title={t('nav.search')}
+            >
+              <span aria-hidden="true">⌕</span> {t('nav.search')}
+            </Link>
+            <Link
               to="/settings"
               className="inline-flex items-center gap-1 hover:text-primary"
               title={t('nav.settings')}

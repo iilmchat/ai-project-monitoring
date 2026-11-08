@@ -74,6 +74,17 @@ class Settings(BaseSettings):
     gigachat_ca_bundle: str = ""
     gigachat_token_refresh_margin_seconds: int = 60
     gigachat_timeout_seconds: float = 30.0
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    embedding_base_url: str = "http://127.0.0.1:1234/v1"
+    embedding_api_key: str = ""
+    embedding_allow_remote: bool = False
+    embedding_batch_size: int = 32
+    embedding_timeout_seconds: float = 30.0
+    rag_max_file_bytes: int = 524288
+    rag_max_chunks_per_repo: int = 2000
+    rag_chunk_chars: int = 1000
+    rag_chunk_overlap: int = 150
     global_analytics_cache_ttl_seconds: int = 3600
     global_analytics_limit: int = 50
     global_analytics_concurrency: int = 4
@@ -88,7 +99,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     debug: bool = False
-    app_version: str = "0.8.0"
+    app_version: str = "0.9.0"
 
     @property
     def scan_root_paths(self) -> list[str]:

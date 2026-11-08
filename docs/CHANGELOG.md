@@ -1,6 +1,10 @@
 # CHANGELOG — История версий
 
-## [Unreleased]
+## [0.9.0] - 2026-11-08
+
+Stability & RAG: E2E-тесты Playwright, entry bundle < 90 kB gzip, GigaChat OAuth,
+умное кэширование LLM, расширенные настройки и семантический поиск по коду на
+PostgreSQL + pgvector.
 
 ### Добавлено
 
@@ -12,6 +16,9 @@
 - feat(ai): `provider_type`/`auth_type` в `ai_provider_profiles`, `GigaChatProvider` (OAuth 2.0, in-memory token cache, single-flight refresh, повтор после `401`) и эндпоинты `/settings/ai-providers/gigachat/auth` + `.../{id}/gigachat/refresh` (S43-002).
 - feat(ai): smart-кэш по `state_hash` (`<feature>:<scope>:<hash>:<model>:<prompt_version>`) для dashboard-advice, unification-advice, CVE и commit message; `X-AI-Cache: hit|miss`, `refresh=true`, single-flight и метрики hit/miss/LLM calls (S43-003).
 - docs(adr): ADR-0012 «Мультипровайдерные AI-профили и GigaChat OAuth».
+- feat(rag): `CodeSearchService` — индексация README/docs/кода tracked-репозиториев, чанкинг с перекрытием, embeddings через OpenAI-compatible `/v1/embeddings`, `code_chunks` + pgvector; `POST /search/code`, `POST /search/code/index`, `GET /search/code/status` (S44-001/002).
+- feat(ui): lazy-страница `/search` с полем «Поиск по коду (RAG)…», фильтром языка, карточками результатов и ссылками на проект/GitHub; вход из навигации и Command Palette (S44-003).
+- docs(adr): ADR-0015 «RAG on pgvector».
 
 ### Изменено
 

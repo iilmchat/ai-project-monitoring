@@ -25,6 +25,7 @@ from app.services.agent_task_service import AgentTaskService
 from app.services.ai_provider_service import AIProviderService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
+from app.services.code_search_service import CodeSearchService
 from app.services.compare_cache import CompareCache
 from app.services.dashboard_advice_service import DashboardAdviceService
 from app.services.dependency_service import DependencyService
@@ -151,6 +152,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prompt_version=resolved.ai_prompt_version,
     )
     identity_service = IdentityService(session_factory)
+    code_search_service = CodeSearchService(
+        session_factory,
+        resolved,
+        llm_service,
+        database_url=resolved.database_url,
+    )
     dashboard_advice_service = DashboardAdviceService(
         session_factory,
         dependency_service,
@@ -235,6 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.gigachat_provider = gigachat_provider
     application.state.global_analytics_service = global_analytics_service
     application.state.identity_service = identity_service
+    application.state.code_search_service = code_search_service
     application.state.dashboard_advice_service = dashboard_advice_service
     application.state.agent_task_service = agent_task_service
     application.state.ai_provider_service = ai_provider_service

@@ -87,6 +87,12 @@ function CommandPaletteContent({ open, onClose }: CommandPaletteProps) {
         run: () => navigate('/settings'),
       },
       {
+        id: 'page-search',
+        title: t('palette.searchCode'),
+        group: t('palette.pages'),
+        run: () => navigate('/search'),
+      },
+      {
         id: 'action-scan',
         title: t('palette.scan'),
         group: t('palette.actions'),

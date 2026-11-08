@@ -1,6 +1,28 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v0.8.0 (2026-11-08)
+**Текущая версия:** v0.9.0 (2026-11-08)
+
+---
+
+## Релиз v0.9.0 — «Stability & RAG»
+
+**Дата:** 2026-11-08 · **Тег:** `v0.9.0`
+
+Итоги спринтов 41–44:
+
+- **S41 — Planning:** план v0.9.0, контракты RAG/GigaChat/Smart Cache.
+- **S42 — E2E & Bundle:** Playwright-сценарии (onboarding, RU/EN + тема,
+  AI-коммит) на моках; entry bundle 99.0 → **89.99 kB gzip**; lazy i18n-словари;
+  budget-check.
+- **S43 — GigaChat & Smart Cache:** аудит `.env` → UI, сид `app_settings`,
+  GigaChat OAuth 2.0 с refresh, state-hash кэш LLM с `X-AI-Cache`, метрики.
+- **S44 — RAG & Release:** `CodeSearchService` на PostgreSQL + pgvector,
+  индексация README/docs/src, семантический поиск, lazy-страница `/search`,
+  релиз v0.9.0.
+- **Проверки:** backend `pytest` (246 тестов), `ruff`, `mypy`; frontend 44 unit
+  + 3 E2E; bundle budget зелёный.
+- **Ограничение:** RAG доступен только на PostgreSQL + pgvector; на SQLite
+  API отвечает `503 rag_unavailable` (KI-017).
 
 ---
 

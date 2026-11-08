@@ -6,6 +6,10 @@ import type {
   AIProviderUpdate,
   AppSettings,
   CIStatus,
+  CodeIndexJob,
+  CodeIndexStatus,
+  CodeSearchRequest,
+  CodeSearchResponse,
   CommitInfo,
   CommitMessageSuggestion,
   CveExplanation,
@@ -389,6 +393,28 @@ export async function testLlm(): Promise<LLMTestResult> {
 
 export async function getDuplicates(): Promise<DuplicatesResponse> {
   return request<DuplicatesResponse>('/dashboard/duplicates')
+}
+
+export async function searchCode(
+  payload: CodeSearchRequest,
+): Promise<CodeSearchResponse> {
+  return request<CodeSearchResponse>('/search/code', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function indexCode(
+  payload: { repository_ids?: number[]; force?: boolean } = {},
+): Promise<CodeIndexJob> {
+  return request<CodeIndexJob>('/search/code/index', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function getCodeSearchStatus(): Promise<CodeIndexStatus> {
+  return request<CodeIndexStatus>('/search/code/status')
 }
 
 export async function getUnificationAdvice(

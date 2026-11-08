@@ -13,6 +13,7 @@ from app.api.v1 import (
     metrics,
     repositories,
     scan,
+    search,
     settings,
     webhooks,
 )
@@ -24,6 +25,7 @@ api_router.include_router(scan.router)
 api_router.include_router(settings.router)
 api_router.include_router(ai_providers.router)
 api_router.include_router(repositories.router)
+api_router.include_router(search.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(activity.router)
 api_router.include_router(webhooks.router)

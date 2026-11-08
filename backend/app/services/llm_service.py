@@ -267,6 +267,65 @@ class LLMService:
             max_chars=MAX_EXPLANATION_CHARS,
         )
 
+    async def embed(self, texts: list[str]) -> list[list[float]] | None:
+        """Return embeddings for ``texts`` via an OpenAI-compatible endpoint."""
+        if not texts:
+            return []
+        base = self._settings.embedding_base_url.strip().rstrip("/")
+        if not _is_remote_allowed(base, self._settings.embedding_allow_remote):
+            logger.warning("embedding_request_blocked", reason="remote_not_allowed")
+            return None
+        headers = {"Accept": "application/json"}
+        api_key = self._settings.embedding_api_key or self._settings.llm_api_key
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        payload = {
+            "model": self._settings.embedding_model,
+            "input": texts,
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._settings.embedding_timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                response = await client.post(
+                    _embeddings_endpoint(base),
+                    json=payload,
+                    headers=headers,
+                )
+        except httpx.TimeoutException:
+            logger.warning("embedding_request_failed", reason="timeout")
+            return None
+        except httpx.HTTPError:
+            logger.warning("embedding_request_failed", reason="http_error")
+            return None
+        if response.status_code != 200:
+            logger.warning(
+                "embedding_request_failed",
+                status_code=response.status_code,
+            )
+            return None
+        try:
+            body = response.json()
+        except ValueError:
+            return None
+        data = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(data, list) or len(data) != len(texts):
+            return None
+        vectors: list[list[float]] = []
+        for index, item in enumerate(data):
+            if not isinstance(item, dict):
+                return None
+            vector = item.get("embedding")
+            if not isinstance(vector, list) or not vector:
+                return None
+            if not all(isinstance(value, int | float) for value in vector):
+                return None
+            if item.get("index") not in (None, index):
+                return None
+            vectors.append([float(value) for value in vector])
+        return vectors
+
     async def test_connection(self) -> tuple[bool, float, str | None]:
         """Ping the configured model and return ``(ok, latency_ms, error)``."""
         config = await self.resolve()
@@ -447,6 +506,15 @@ class LLMService:
         if base.endswith("/v1"):
             return f"{base}/chat/completions"
         return f"{base}/v1/chat/completions"
+
+
+def _embeddings_endpoint(base_url: str) -> str:
+    base = base_url.strip().rstrip("/")
+    if base.endswith("/embeddings"):
+        return base
+    if base.endswith("/v1"):
+        return f"{base}/embeddings"
+    return f"{base}/v1/embeddings"
 
 
 def _provider_from_url(base_url: str) -> str:
