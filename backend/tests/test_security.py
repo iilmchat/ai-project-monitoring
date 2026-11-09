@@ -24,7 +24,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 AWS_KEY = "AKIAABCDEFGHIJKLMNOP"
-GITHUB_TOKEN = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+GITHUB_TOKEN = "ghp_" + "A" * 32 + "6789"
 JWT = (
     "eyJhbGciOiJIUzI1NiJ9."
     "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
