@@ -342,6 +342,19 @@ pnpm --dir frontend exec playwright install chromium
   Tauri Updater, раздел «Обновления» в настройках, GitHub Actions-релиз по тегу
   `v*` с `.msi`/`.exe`/`latest.json`.
 
+**v1.2.0 «AI Review & Everywhere»** — планируется (спринты 52–55,
+[`TODO_V1.2.0.md`](TODO_V1.2.0.md)):
+
+- **Sprint 52 — Planning:** ✅ контракты AI Code Review, Conflict Resolver,
+  Release Notes, Conversational RAG; KI-023/KI-024.
+- **Sprint 53 — Cross-Platform CI & AI Code Review:** матрица
+  Windows/macOS/Linux (`.msi`/`.exe`/`.dmg`/`.AppImage`) и AI-ревью
+  незакоммиченных изменений.
+- **Sprint 54 — AI Conflict Resolver & Release Notes:** разбор
+  `<<<<<<<`-конфликтов и генерация CHANGELOG между тегами.
+- **Sprint 55 — Conversational RAG & Release v1.2.0:** чат с базой знаний на
+  `/search` (pgvector + LLM) и финальный релиз.
+
 ---
 
 ## Лицензия

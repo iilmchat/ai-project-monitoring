@@ -8,7 +8,9 @@
 §18 (manifest discovery/README) — в Sprint 35; §19 (identity/duplicates) —
 в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 (`CodeSearchService`) и
 §22 (`GigaChatProvider`) — реализованы в v0.9.0 (Sprints 43–44); §23 — дальнейшее;
-§24 (`AuthService`) и §25 (Tauri desktop) — **план v1.0.0** (Sprints 47–48).
+§24 (`AuthService`) и §25 (Tauri desktop) — реализованы в v1.0.0 (Sprints 47–48);
+§26–§28 — **план v1.2.0** (Sprints 53–55), см.
+[`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 
 ---
 
@@ -1466,3 +1468,216 @@ Tauri shell (Rust)
   установки на чистую машину.
 - Проверено: Windows `.msi` и NSIS `.exe` собраны; при закрытии приложения
   sidecar завершается без orphan-процессов.
+
+---
+
+## 26. AI code review, conflict resolver & release notes (v1.2.0 — план)
+
+> **Статус:** план; контракты — SPEC §3.29, задачи — Sprints 53–54
+> ([`TODO_V1.2.0.md`](../TODO_V1.2.0.md)). Все операции read-only.
+
+### 26.1. Общая схема LLMService
+
+Новые методы `LLMService` используют тот же `resolve()`/провайдеры, что
+commit message и CVE (§15), но с обязательным **бюджетом контекста**:
+
+```
+route → ContextBuilder → Chunker → LLMService.<feature>()
+                              ├─ per-chunk call (≤ LLM_MAX_DIFF_CHARS)
+                              ├─ reduce/merge
+                              ├─ output limit
+                              └─ ai_cache (1 час)
+```
+
+- **Бюджет:** `LLM_MAX_DIFF_CHARS` (default 10000) — максимум символов
+  пользовательского контекста в одном вызове; системный промпт и запас на ответ
+  вычитаются до отправки.
+- **Оценка токенов:** без новых зависимостей — консервативная оценка
+  `chars / 3`; при превышении контекст режется по границе файла/блока, а не
+  посередине строки.
+- **Чанкинг:** diff — по файлам и ханкам; конфликты — по маркерным блокам;
+  release notes — по диапазонам коммитов. Каждый чанк самодостаточен (путь,
+  диапазон строк, заголовок файла).
+- **Map-reduce:** для code review каждый чанк ревьюится отдельно, затем
+  сводный вызов объединяет находки, убирает дубли и ранжирует по
+  critical/high/medium/low. Для release notes — группировка по Keep a
+  Changelog.
+- **Лимиты:** `AI_CODE_REVIEW_MAX_CHARS` (40000),
+  `AI_CODE_REVIEW_MAX_FILES` (30), `AI_CONFLICT_MAX_CHARS` (20000),
+  `AI_CONFLICT_MAX_BLOCKS` (10), `AI_RELEASE_NOTES_MAX_COMMITS` (500).
+  При превышении — `truncated=true`, `warnings`, частичный результат.
+- **Выход:** review ≤ 8000, conflict ≤ 12000, release notes ≤ 12000 символов;
+  обрезка по границе раздела Markdown.
+- **Ошибки:** `409 llm_disabled`/`llm_remote_not_allowed`, `503
+  llm_unavailable`, `504 llm_timeout`; частичный результат не подменяется
+  выдуманным текстом.
+
+### 26.2. Code review
+
+```
+POST /repositories/{id}/ai/code-review
+  → git diff HEAD --no-color --no-ext-diff --unified=3
+  → фильтр бинарных файлов + маскирование секретов
+  → Chunker (file/hunk, ≤ LLM_MAX_DIFF_CHARS)
+  → для каждого чанка: LLM «баги/безопасность/улучшения»
+  → reduce: сводный Markdown (critical → low)
+  → ai_cache(code-review:<repo>:<state_hash>:<model>:<prompt>)
+```
+
+- Пустой diff — `400 no_changes`; LLM не вызывается.
+- В промпт попадает только diff и имена файлов; полный файл и история не
+  отправляются.
+- Результат — рекомендация; кнопок «применить» нет.
+
+### 26.3. Conflict resolver
+
+```
+POST /repositories/{id}/ai/resolve-conflict {path}
+  → path validation (inside repo, not binary, not .git)
+  → read file (read-only) → parse <<<<<<< / ======= / >>>>>>>
+  → блоки + контекст ≤ AI_CONFLICT_MAX_CHARS
+  → LLM: merge both sides, return code only
+  → склейка блоков в исходном порядке
+  → warnings=["verify_before_apply"]
+```
+
+- Контекст — только конфликтный блок и несколько строк вокруг; остальной файл
+  не отправляется.
+- Ответ не пишется на диск: UI показывает diff и копирует текст.
+- При нескольких блоках каждый обрабатывается отдельно; при превышении лимита
+  — `truncated=true`, необработанные блоки возвращаются с маркерами.
+- KI-023: LLM может «галлюцинировать»; обязательна ручная проверка и тесты на
+  неизменность файла/`git status`.
+
+### 26.4. Release notes
+
+```
+POST /repositories/{id}/ai/release-notes {from_tag, to_tag?}
+  → git rev-parse --verify <tag>
+  → git log --no-merges --format=%H%x09%s%x09%b from..to
+  → лимит AI_RELEASE_NOTES_MAX_COMMITS, body ≤ 500 символов
+  → LLM: Keep a Changelog (Added/Changed/Fixed/Removed/Security)
+  → Markdown ≤ 12000 символов
+```
+
+- Теги только читаются; `to_tag` по умолчанию `HEAD`.
+- В LLM не отправляются diff, код и имена файлов — только commit subjects и
+  bodies.
+- Результат — черновик CHANGELOG; запись в репозиторий не выполняется.
+
+---
+
+## 27. Cross-platform release matrix (v1.2.0 — план)
+
+> **Статус:** план; задача — Sprint 53. Обновление
+> `.github/workflows/release-desktop.yml`.
+
+### 27.1. Матрица
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    include:
+      - os: windows-latest
+        bundles: msi,nsis
+        artifact: windows
+      - os: macos-latest
+        bundles: dmg
+        artifact: macos
+      - os: ubuntu-latest
+        bundles: appimage
+        artifact: linux
+```
+
+Для каждой ноги:
+
+1. checkout → pnpm/action-setup → setup-node (cache pnpm) → Rust stable
+   (`Swatinem/rust-cache@v2`) → setup-python 3.12 (cache pip).
+2. `pnpm --dir frontend install --frozen-lockfile`.
+3. `pip install -r backend/requirements-desktop.txt`.
+4. `python backend/build_sidecar.py` — PyInstaller под целевую ОС;
+   target triple определяется скриптом (Windows/macOS/Linux).
+5. `tauri-apps/tauri-action@v0`:
+   - `projectPath: frontend`;
+   - `tagName: ${{ github.ref_name }}`;
+   - `releaseName: "IIRuchating ${{ github.ref_name }}"`;
+   - `args: --bundles <bundles>`;
+   - окружение подписи: `TAURI_SIGNING_PRIVATE_KEY`,
+     `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (из Secrets).
+6. Артефакты ноги: установщик(и), `.sig`, платформенный updater-манифест.
+
+### 27.2. Linux и macOS
+
+- Linux: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`,
+  `patchelf`, `libgtk-3-dev`; AppImage собирается `tauri build --bundles
+  appimage`.
+- macOS: `aarch64-apple-darwin` для Apple Silicon; x86_64 — опциональная нога
+  или universal-сборка. `.dmg` требует codesign/notarization для запуска без
+  предупреждений; до сертификата — KI-024.
+- Windows: `.msi` + NSIS `.exe`, без изменений относительно v1.1.0.
+
+### 27.3. Публикация и `latest.json`
+
+- Параллельные ноги не должны перезаписывать один `latest.json`.
+- Каждая нога загружает свои файлы и платформенный JSON как artifacts.
+- Финальная job `publish` (зависит от всех ног):
+  - скачивает artifacts;
+  - мержит платформенные записи в единый `latest.json`;
+  - прикладывает манифест и установщики к GitHub Release (idempotent update).
+- Проверка: `latest.json` содержит `windows-x86_64`, `darwin-aarch64`,
+  `linux-x86_64` (ключи — по фактическим target triple) и корректные `signature`.
+- Сбой одной ноги не отменяет остальные (`fail-fast: false`), но `publish`
+  не публикует неполный релиз без явного `allow_partial`.
+
+### 27.4. Кэш и надёжность
+
+- pnpm store, pip, Rust registry/target — кэшируются; PyInstaller — нет.
+- Таймаут job 60 минут; artifacts — 14 дней.
+- Секреты не печатаются; подпись проверяется на наличии `.sig` до публикации.
+- Windows/Ubuntu/macOS smoke: sidecar health `db_ok=true`, логи в app-data.
+
+---
+
+## 28. Conversational RAG (v1.2.0 — план)
+
+> **Статус:** план; контракт — SPEC §3.30, задача — Sprint 55.
+
+### 28.1. Поток
+
+```
+POST /api/v1/search/chat {message, history?, repository_ids?, limit?, min_score?}
+  → validate (message 3–2000, history ≤ 10, limit 1–20)
+  → embed(message) (тот же embedding-провайдер, что §21)
+  → SELECT chunks ORDER BY embedding <=> :q LIMIT :limit
+  → фильтры repository/min_score; score = 1 - cosine_distance
+  → ContextBuilder: [n] repository/path/start_line/end_line + snippet
+  → LLM: answer only from context, cite [n]
+  → ChatResponse {answer, sources[], model, embedding_model, cached, took_ms}
+```
+
+### 28.2. Контекст и лимиты
+
+- Контекст — top-k чанков (default 8), каждый ≤ 400 символов сниппета; общий
+  бюджет — `LLM_MAX_DIFF_CHARS` (тот же принцип, что §26), при превышении
+  число чанков уменьшается, а не режется посередине.
+- История ≤ `AI_CHAT_MAX_HISTORY` (10) сообщений; в промпт попадает только
+  последняя часть, старые сообщения суммаризуются/отбрасываются.
+- Ответ ≤ `AI_CHAT_MAX_OUTPUT_CHARS` (4000); ссылки `[n]` строго на `sources`.
+- Чанки оборачиваются в явные разделители и помечаются как данные; инструкции
+  внутри кода игнорируются (prompt injection).
+- Секреты маскируются; `.env`/ключи не индексируются (§21).
+
+### 28.3. Деградация и кэш
+
+- SQLite/без pgvector → `503 rag_unavailable`; UI показывает empty-state и
+  ссылку на настройку PostgreSQL.
+- Нет результатов после `min_score` → LLM не вызывается, ответ «в базе знаний
+  нет подходящих фрагментов» + пустые `sources`.
+- Ошибки embedding → `503 rag_unavailable`/`504 embedding_timeout`; ошибки LLM
+  → `503 llm_unavailable`/`504 llm_timeout`.
+- Кэш `ai_cache` 1 час по hash(message + history + filters + model +
+  prompt_version); `cached=true` при попадании; `refresh` не входит в v1.2.0
+  (чат интерактивен).
+- Rate-limit — локальный, как у остальных AI-эндпоинтов; запросы/ответы не
+  логируются.
