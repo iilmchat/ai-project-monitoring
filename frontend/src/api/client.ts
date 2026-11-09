@@ -11,6 +11,8 @@ import type {
   CodeIndexStatus,
   CodeSearchRequest,
   CodeSearchResponse,
+  ChatRequest,
+  ChatResponse,
   CommitInfo,
   CommitMessageSuggestion,
   CodeReviewResponse,
@@ -479,6 +481,13 @@ export async function searchCode(
   payload: CodeSearchRequest,
 ): Promise<CodeSearchResponse> {
   return request<CodeSearchResponse>('/search/code', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function chatWithCode(payload: ChatRequest): Promise<ChatResponse> {
+  return request<ChatResponse>('/search/chat', {
     method: 'POST',
     body: payload,
   })

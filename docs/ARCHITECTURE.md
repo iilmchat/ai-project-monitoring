@@ -9,7 +9,7 @@
 в Sprint 37; §20 (i18n RU/EN) — в Sprint 36; §21 (`CodeSearchService`) и
 §22 (`GigaChatProvider`) — реализованы в v0.9.0 (Sprints 43–44); §23 — дальнейшее;
 §24 (`AuthService`) и §25 (Tauri desktop) — реализованы в v1.0.0 (Sprints 47–48);
-§26–§28 — **план v1.2.0** (Sprints 53–55), см.
+§26–§28 — реализованы в v1.2.0 (Sprints 53–55), см.
 [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 
 ---
@@ -1641,36 +1641,37 @@ strategy:
 
 ---
 
-## 28. Conversational RAG (v1.2.0 — план)
+## 28. Conversational RAG (v1.2.0 — реализовано)
 
-> **Статус:** план; контракт — SPEC §3.30, задача — Sprint 55.
+> **Статус:** реализовано в Sprint 55; контракт — SPEC §3.30.
 
 ### 28.1. Поток
 
 ```
-POST /api/v1/search/chat {message, history?, repository_ids?, limit?, min_score?}
-  → validate (message 3–2000, history ≤ 10, limit 1–20)
-  → embed(message) (тот же embedding-провайдер, что §21)
+POST /api/v1/search/chat {query, history?, repository_ids?, limit?, min_score?}
+  → validate (query 3–2000, history ≤ 10, limit 1–20)
+  → embed(query) (тот же embedding-провайдер, что §21)
   → SELECT chunks ORDER BY embedding <=> :q LIMIT :limit
   → фильтры repository/min_score; score = 1 - cosine_distance
   → ContextBuilder: [n] repository/path/start_line/end_line + snippet
   → LLM: answer only from context, cite [n]
-  → ChatResponse {answer, sources[], model, embedding_model, cached, took_ms}
+  → ChatResponse {answer, sources[], citations[], model, embedding_model, took_ms}
 ```
 
 ### 28.2. Контекст и лимиты
 
-- Контекст — top-k чанков (default 8), каждый ≤ 400 символов сниппета; общий
-  бюджет — `LLM_MAX_DIFF_CHARS` (тот же принцип, что §26), при превышении
-  число чанков уменьшается, а не режется посередине.
+- Контекст — top-k чанков (default 5), каждый ≤ 400 символов сниппета; общий
+  бюджет — `AI_CHAT_MAX_CONTEXT_CHARS` (12000), при превышении число чанков
+  уменьшается, а не режется посередине.
 - История ≤ `AI_CHAT_MAX_HISTORY` (10) сообщений; в промпт попадает только
-  последняя часть, старые сообщения суммаризуются/отбрасываются.
-- Ответ ≤ `AI_CHAT_MAX_OUTPUT_CHARS` (4000); ссылки `[n]` строго на `sources`.
+  последняя часть, старые сообщения отбрасываются.
+- Ответ ≤ `AI_CHAT_MAX_OUTPUT_CHARS` (4000); ссылки `[n]` строго на `sources`,
+  `citations` содержат метаданные для UI-ссылок.
 - Чанки оборачиваются в явные разделители и помечаются как данные; инструкции
   внутри кода игнорируются (prompt injection).
 - Секреты маскируются; `.env`/ключи не индексируются (§21).
 
-### 28.3. Деградация и кэш
+### 28.3. Деградация
 
 - SQLite/без pgvector → `503 rag_unavailable`; UI показывает empty-state и
   ссылку на настройку PostgreSQL.
@@ -1678,8 +1679,6 @@ POST /api/v1/search/chat {message, history?, repository_ids?, limit?, min_score?
   нет подходящих фрагментов» + пустые `sources`.
 - Ошибки embedding → `503 rag_unavailable`/`504 embedding_timeout`; ошибки LLM
   → `503 llm_unavailable`/`504 llm_timeout`.
-- Кэш `ai_cache` 1 час по hash(message + history + filters + model +
-  prompt_version); `cached=true` при попадании; `refresh` не входит в v1.2.0
-  (чат интерактивен).
+- Кэш в v1.2.0 не используется: чат интерактивный, история влияет на ответ.
 - Rate-limit — локальный, как у остальных AI-эндпоинтов; запросы/ответы не
   логируются.

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
+AI Analytics & Cross-Platform: кросс-платформенные релизы, AI Code Review,
+AI Conflict Resolver, AI Release Notes и чат с кодовой базой.
+
 ### Добавлено
 
 - feat(ci): `release-desktop.yml` — матрица Windows/macOS/Linux, `.msi`/`.exe`/`.dmg`/`.AppImage`, системные зависимости Linux/macOS и сборка sidecar под целевую ОС (S53-001).
@@ -12,6 +17,9 @@
 - feat(ai): `POST /api/v1/repositories/{id}/ai/release-notes` — `git log from..to --oneline`, Keep a Changelog через LLM, кэш; `GET /repositories/{id}/tags` для выбора тегов (S54-002).
 - feat(ui): кнопки «AI Подсказка» в конфликтах и «AI Release Notes» рядом с CI; lazy-модалки с Markdown, выбором тегов и копированием (S54-003).
 - docs: SPEC §3.29, CHANGELOG/RELEASES/README, KI-023 — AI-конфликты требуют ручной проверки (S54-003).
+- feat(ai): `POST /api/v1/search/chat` — Conversational RAG: embedding запроса, top-5 чанков из pgvector, LLM-ответ только по контексту, `sources`/`citations`, защита от prompt injection (S55-001).
+- feat(ui): режим «Чат с кодом» на `/search`: история сообщений, поле ввода, цитаты-ссылки, lazy-чанк (S55-002).
+- release: версии `1.2.0`, CHANGELOG/RELEASES/README, тег `v1.2.0` и кросс-платформенная сборка (S55-003..S55-004).
 
 ## [1.1.0] - 2026-11-09
 

@@ -30,4 +30,19 @@ export const search = {
   'search.language': 'Язык',
   'search.languageAll': 'Все языки',
   'search.queryHint': 'Например: «где у меня настроен Redis?»',
+  'search.modeSearch': 'Поиск',
+  'search.modeChat': 'Чат с кодом',
+  'search.chatTitle': 'Чат с базой знаний',
+  'search.chatHint':
+    'Вопросы по README, docs и коду tracked-репозиториев. Ответы — только по найденным фрагментам.',
+  'search.chatEmpty':
+    'Задайте вопрос, например: «В каких проектах я использую Redis?».',
+  'search.chatPlaceholder': 'Спросите о кодовой базе…',
+  'search.chatSend': 'Отправить',
+  'search.chatSending': 'Отправка…',
+  'search.chatThinking': 'Ищу в базе знаний и формулирую ответ…',
+  'search.chatClear': 'Очистить',
+  'search.chatError': 'Не удалось получить ответ.',
+  'search.chatLlmUnavailable':
+    'LLM недоступна. Проверьте настройки AI-провайдера.',
 } as const

@@ -28,5 +28,20 @@ export const search = {
   'search.score': 'relevance {score}',
   'search.language': 'Language',
   'search.languageAll': 'All languages',
-  'search.queryHint': 'For example: “where is Redis configured?”',
+  'search.queryHint': 'For example: "where is Redis configured?"',
+  'search.modeSearch': 'Search',
+  'search.modeChat': 'Chat with code',
+  'search.chatTitle': 'Knowledge base chat',
+  'search.chatHint':
+    'Ask about README, docs and code of tracked repositories. Answers use only retrieved fragments.',
+  'search.chatEmpty':
+    'Ask a question, for example: "Which projects use Redis?".',
+  'search.chatPlaceholder': 'Ask about your codebase…',
+  'search.chatSend': 'Send',
+  'search.chatSending': 'Sending…',
+  'search.chatThinking': 'Searching the knowledge base and drafting an answer…',
+  'search.chatClear': 'Clear',
+  'search.chatError': 'Could not get an answer.',
+  'search.chatLlmUnavailable':
+    'The LLM is unavailable. Check the AI provider settings.',
 } as const

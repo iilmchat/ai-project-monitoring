@@ -590,6 +590,28 @@ export interface CodeSearchRequest {
   language?: string
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatRequest {
+  query: string
+  history: ChatMessage[]
+  repository_ids?: number[]
+  limit?: number
+  min_score?: number
+}
+
+export interface ChatResponse {
+  answer: string
+  sources: string[]
+  citations: CodeSearchResult[]
+  model: string
+  embedding_model: string
+  took_ms: number
+}
+
 export interface CodeIndexStatus {
   indexed_repositories: number
   indexed_chunks: number

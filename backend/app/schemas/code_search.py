@@ -37,6 +37,28 @@ class CodeSearchResponse(BaseModel):
     results: list[CodeSearchResult] = Field(default_factory=list)
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class ChatRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=2000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=10)
+    repository_ids: list[int] | None = None
+    limit: int = Field(default=5, ge=1, le=20)
+    min_score: float = Field(default=0.2, ge=0.0, le=1.0)
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[str] = Field(default_factory=list)
+    citations: list[CodeSearchResult] = Field(default_factory=list)
+    model: str
+    embedding_model: str
+    took_ms: float
+
+
 class CodeIndexRequest(BaseModel):
     repository_ids: list[int] | None = None
     force: bool = False
@@ -57,6 +79,9 @@ class CodeIndexStatus(BaseModel):
 
 
 __all__ = [
+    "ChatMessage",
+    "ChatRequest",
+    "ChatResponse",
     "CodeIndexJob",
     "CodeIndexRequest",
     "CodeIndexStatus",

@@ -6,6 +6,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from app.db.base import utcnow
 from app.schemas.code_search import (
+    ChatRequest,
+    ChatResponse,
     CodeIndexJob,
     CodeIndexRequest,
     CodeIndexStatus,
@@ -61,6 +63,24 @@ async def search_code(
         )
     except RagUnavailableError as exc:
         raise _unavailable(exc) from exc
+
+
+@router.post("/search/chat", response_model=ChatResponse)
+async def chat_with_code(
+    payload: ChatRequest,
+    request: Request,
+) -> ChatResponse:
+    try:
+        result = await _service(request).chat_with_code(
+            payload.query,
+            [message.model_dump() for message in payload.history],
+            repository_ids=payload.repository_ids,
+            limit=payload.limit,
+            min_score=payload.min_score,
+        )
+    except RagUnavailableError as exc:
+        raise _unavailable(exc) from exc
+    return ChatResponse.model_validate(result)
 
 
 @router.post(

@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     ai_conflict_max_blocks: int = 10
     ai_release_notes_max_commits: int = 500
     ai_release_notes_max_chars: int = 20000
+    ai_chat_max_history: int = 10
+    ai_chat_max_context_chars: int = 12000
+    ai_chat_max_output_chars: int = 4000
     gigachat_oauth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     gigachat_api_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
     gigachat_scope: str = "GIGACHAT_API_PERS"
@@ -120,7 +123,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.1.0"
+    app_version: str = "1.2.0"
 
     @property
     def scan_root_paths(self) -> list[str]:

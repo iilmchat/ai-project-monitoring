@@ -38,6 +38,7 @@
 - **Desktop-приложение (v1.0.0+)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
+- **Conversational RAG** — чат с кодовой базой на `/search`: pgvector-поиск по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -121,8 +122,8 @@ pnpm --dir frontend desktop:build
 
 Артефакты:
 
-- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.1.0_x64_en-US.msi`
-- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.1.0_x64-setup.exe`
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.2.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.2.0_x64-setup.exe`
 
 Sidecar запускается на свободном `127.0.0.1:<port>`; данные и логи —
 в `%APPDATA%/IIRuchating` (`backend.log`). Desktop по умолчанию использует
@@ -152,8 +153,8 @@ SQLite; RAG доступен только при внешнем PostgreSQL + `pg
 
 1. Откройте [GitHub Releases](https://github.com/iilmchat/ai-project-monitoring/releases/latest).
 2. Скачайте один из файлов:
-   - `IIRuchating_1.1.0_x64-setup.exe` — NSIS-установщик;
-   - `IIRuchating_1.1.0_x64_en-US.msi` — MSI для групповых политик.
+   - `IIRuchating_1.2.0_x64-setup.exe` — NSIS-установщик;
+   - `IIRuchating_1.2.0_x64_en-US.msi` — MSI для групповых политик.
 3. Запустите установщик. Windows SmartScreen может показать
    «Unknown publisher», так как бинарники пока не подписаны код-сертификатом
    (KI-021). Нажмите «More info» → «Run anyway».
@@ -198,8 +199,8 @@ pnpm --dir frontend desktop:build
 
 Артефакты:
 
-- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.1.0_x64_en-US.msi`
-- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.1.0_x64-setup.exe`
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.2.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.2.0_x64-setup.exe`
 
 ### Ограничения desktop
 
@@ -265,12 +266,12 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.1.0** (2026-11-09) |
-| Статус | **v1.1.0 «Seamless Updates & Onboarding»** |
-| Спринты | 1–51 |
-| Тесты backend | **259** (258 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **53** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **87.80 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
+| Версия | **v1.2.0** (2026-11-09) |
+| Статус | **v1.2.0 «AI Analytics & Cross-Platform»** |
+| Спринты | 1–55 |
+| Тесты backend | **276** (275 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **58** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **87.93 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -344,8 +345,8 @@ pnpm --dir frontend exec playwright install chromium
   Tauri Updater, раздел «Обновления» в настройках, GitHub Actions-релиз по тегу
   `v*` с `.msi`/`.exe`/`latest.json`.
 
-**v1.2.0 «AI Review & Everywhere»** — планируется (спринты 52–55,
-[`TODO_V1.2.0.md`](TODO_V1.2.0.md)):
+**v1.2.0 «AI Analytics & Cross-Platform»** — релиз 2026-11-09
+([`TODO_V1.2.0.md`](TODO_V1.2.0.md)):
 
 - **Sprint 52 — Planning:** ✅ контракты AI Code Review, Conflict Resolver,
   Release Notes, Conversational RAG; KI-023/KI-024.
@@ -354,8 +355,8 @@ pnpm --dir frontend exec playwright install chromium
   незакоммиченных изменений с чанкингом и кэшем.
 - **Sprint 54 — AI Conflict Resolver & Release Notes:** ✅ разбор
   `<<<<<<<`-конфликтов без записи файла и генерация CHANGELOG между тегами.
-- **Sprint 55 — Conversational RAG & Release v1.2.0:** чат с базой знаний на
-  `/search` (pgvector + LLM) и финальный релиз.
+- **Sprint 55 — Conversational RAG & Release v1.2.0:** ✅ чат с базой знаний на
+  `/search` (pgvector + LLM), цитаты на файлы и финальный релиз.
 
 ---
 

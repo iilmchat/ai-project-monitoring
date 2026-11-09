@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -13,6 +13,8 @@ import type {
   CodeSearchResult,
 } from '../api/types'
 import { useI18n, useI18nNamespace } from '../i18n'
+
+const CodeChat = lazy(() => import('../components/CodeChat'))
 
 const LANGUAGES = [
   'python',
@@ -35,6 +37,7 @@ export default function CodeSearchPage() {
 
 function CodeSearchContent() {
   const { t } = useI18n()
+  const [mode, setMode] = useState<'search' | 'chat'>('search')
   const [query, setQuery] = useState('')
   const [language, setLanguage] = useState('')
   const [status, setStatus] = useState<CodeIndexStatus | null>(null)
@@ -142,6 +145,40 @@ function CodeSearchContent() {
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 text-sm dark:border-slate-600 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => setMode('search')}
+            className={`rounded-md px-3 py-1.5 font-medium ${
+              mode === 'search'
+                ? 'bg-primary text-white'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {t('search.modeSearch')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('chat')}
+            className={`rounded-md px-3 py-1.5 font-medium ${
+              mode === 'chat'
+                ? 'bg-primary text-white'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {t('search.modeChat')}
+          </button>
+        </div>
+      </div>
+
+      {mode === 'chat' && (
+        <Suspense fallback={<p className="text-sm text-slate-500">{t('common.loading')}</p>}>
+          <CodeChat />
+        </Suspense>
+      )}
+
+      {mode === 'search' && (
       <form
         onSubmit={(event) => void submit(event)}
         className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
@@ -229,7 +266,9 @@ function CodeSearchContent() {
           </p>
         )}
       </form>
+      )}
 
+      {mode === 'search' && (
       <div aria-live="polite">
         {response && (
           <div className="space-y-3">
@@ -261,6 +300,7 @@ function CodeSearchContent() {
           </div>
         )}
       </div>
+      )}
     </section>
   )
 }

@@ -1,6 +1,26 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.1.0 (2026-11-09)
+**Текущая версия:** v1.2.0 (2026-11-09)
+
+---
+
+## Релиз v1.2.0 — «AI Analytics & Cross-Platform»
+
+**Дата:** 2026-11-09 · **Тег:** `v1.2.0`
+
+Итоги спринтов 53–55:
+
+- **S53 — Cross-Platform CI & AI Code Review:** матрица Windows/macOS/Linux,
+  `.msi`/`.exe`/`.dmg`/`.AppImage`; AI-ревью незакоммиченных изменений с
+  чанкингом и кэшем.
+- **S54 — AI Conflict Resolver & Release Notes:** read-only объединение
+  `<<<<<<<`-блоков, генерация Keep a Changelog между тегами, `GET /tags`.
+- **S55 — Conversational RAG:** `/search/chat` — embedding запроса, top-5
+  чанков из pgvector, ответ LLM только по контексту, цитаты на файлы;
+  режим «Чат с кодом» на `/search`.
+- **Проверки:** backend 276 (275 passed, 1 skipped), frontend 58 unit,
+  `ruff`/`mypy`, `pnpm build` и budget-check.
+- **Релиз:** тег `v1.2.0` запускает GitHub Actions для Windows/macOS/Linux.
 
 ---
 
