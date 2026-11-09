@@ -1435,6 +1435,9 @@ Tauri shell (Rust)
 - `bundle.externalBin` указывает на sidecar; сборка — CI-матрица Windows/macOS.
 - Порт выбирается свободный; при конфликте — повтор. Логи — в app data
   (`backend.log`).
+- Логи Tauri-shell (`tauri-plugin-log`): `%APPDATA%/IIRuchating/logs/app.log`,
+  уровень `info` в release / `debug` в dev, ротация при 5 МБ; путь отдаёт
+  команда `logs_dir`, кнопка «Открыть папку с логами» в настройках.
 - SQLite по умолчанию (`TAURI_MODE=true` → app-data); RAG — только при внешнем
   PostgreSQL + pgvector (`DATABASE_URL`). Встроенный PostgreSQL — v1.1 (KI-019).
 - Auth: webview cookie или Bearer из OS keychain (KI-020).

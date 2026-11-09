@@ -84,4 +84,9 @@ export const settings = {
   'settings.gigachatRefreshed': 'GigaChat token refreshed.',
   'settings.gigachatBadge': 'GigaChat',
   'settings.gigachatBaseUrl': 'GigaChat API Base URL',
+  'settings.diagnostics': 'Diagnostics',
+  'settings.diagnosticsHint':
+    'Desktop logs are written to app.log and rotated once the file reaches 5 MB.',
+  'settings.openLogs': 'Open logs folder',
+  'settings.openLogsError': 'Could not open the logs folder.',
 } as const

@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::net::TcpListener;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::{Manager, RunEvent, State};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use tauri_plugin_shell::{process::CommandChild, ShellExt};
 
 struct BackendState {
@@ -25,9 +27,49 @@ fn free_port() -> Result<u16, Box<dyn std::error::Error>> {
     Ok(listener.local_addr()?.port())
 }
 
+/// Desktop log directory: `%APPDATA%/IIRuchating/logs` on Windows.
+fn logs_dir_path() -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join("IIRuchating").join("logs");
+        }
+    }
+
+    PathBuf::from("logs")
+}
+
+/// Expose the log directory to the "Open logs folder" settings button.
+#[tauri::command]
+fn logs_dir() -> String {
+    logs_dir_path().to_string_lossy().into_owned()
+}
+
 fn main() {
+    let log_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(Target::new(TargetKind::Stdout))
+                .target(Target::new(TargetKind::Folder {
+                    path: logs_dir_path(),
+                    file_name: Some("app".to_string()),
+                }))
+                .level(log_level)
+                // Rotate once the file reaches 5 MiB, keeping one backup.
+                .max_file_size(5 * 1024 * 1024)
+                .rotation_strategy(RotationStrategy::KeepOne)
+                .timezone_strategy(TimezoneStrategy::UseLocal)
+                .build(),
+        )
         .setup(|app| {
             let port = free_port()?;
             let data_dir = app.path().app_data_dir()?.join("IIRuchating");
@@ -62,7 +104,7 @@ fn main() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![backend_url])
+        .invoke_handler(tauri::generate_handler![backend_url, logs_dir])
         .build(tauri::generate_context!())
         .expect("error while building IIRuchating");
 

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.config import Settings
 from app.schemas.ai import LLMTestResponse
-from app.schemas.settings import SettingsResponse, SettingsUpdate
+from app.schemas.settings import (
+    SettingsResponse,
+    SettingsStatusResponse,
+    SettingsUpdate,
+)
 from app.services.llm_service import LLMService
 from app.services.settings_service import SettingsService, mask_secret
 
@@ -51,6 +56,18 @@ def _as_int(value: str | None, default: int) -> int:
         return int(float(value)) if value is not None else default
     except (TypeError, ValueError):
         return default
+
+
+@router.get("/settings/status", response_model=SettingsStatusResponse)
+async def get_settings_status(request: Request) -> SettingsStatusResponse:
+    """Report whether the first-run wizard has been completed (S50-001).
+
+    A non-empty SCAN_ROOTS is enough: the first scan may still be discovering
+    repositories in the background, so gating on repository rows would send the
+    user back into the wizard right after they finished it.
+    """
+    settings: Settings = request.app.state.settings
+    return SettingsStatusResponse(is_configured=bool(settings.scan_root_paths))
 
 
 @router.get("/settings", response_model=SettingsResponse)

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(api): `GET /api/v1/settings/status` → `{is_configured: bool}` — признак завершённой первичной настройки (непустой `SCAN_ROOTS`), без побочных эффектов (S50-001).
+- feat(ui): мастер первичной настройки `/onboarding` (приветствие → выбор папок → опциональные GitHub/GitFlic токены); по завершении `PATCH /settings` + `POST /scan` и переход на дашборд; автоматический редирект при `is_configured=false` (S50-002).
+- feat(desktop): файловые логи Tauri через `tauri-plugin-log` в `%APPDATA%/IIRuchating/logs/app.log`, уровень `info` в release / `debug` в dev, ротация 5 МБ; кнопка «Открыть папку с логами» в настройках (S50-003).
+- test: `backend/tests/test_settings_status.py`, `frontend/src/pages/Onboarding.test.tsx`; lazy-чанк onboarding не увеличивает entry bundle (S50-004).
+
 ### Исправлено
 
 - fix(desktop): на Windows скрыто консольное окно Python-sidecar и всех дочерних процессов (`git`, `pip`, `pnpm`): `CREATE_NO_WINDOW` для `subprocess`/`asyncio.create_subprocess_exec`; sidecar Tauri уже использует флаг из `tauri-plugin-shell`.

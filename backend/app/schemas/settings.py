@@ -5,6 +5,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class SettingsStatusResponse(BaseModel):
+    """First-run onboarding status (S50-001)."""
+
+    is_configured: bool
+
+
 class SettingsResponse(BaseModel):
     scan_roots: str
     github_token: str
@@ -47,4 +53,4 @@ class SettingsUpdate(BaseModel):
     mirror_poll_interval_seconds: int | None = None
 
 
-__all__ = ["SettingsResponse", "SettingsUpdate"]
+__all__ = ["SettingsResponse", "SettingsStatusResponse", "SettingsUpdate"]

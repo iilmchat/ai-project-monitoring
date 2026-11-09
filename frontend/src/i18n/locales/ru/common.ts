@@ -69,4 +69,33 @@ export const common = {
   'ci.failure': 'ошибка',
   'ci.pending': 'в процессе',
   'ci.unknown': 'неизвестно',
+  'onboarding.badge': 'первый запуск',
+  'onboarding.progress': 'Прогресс настройки',
+  'onboarding.welcomeTitle': 'Добро пожаловать в IIRuchating!',
+  'onboarding.welcomeBody':
+    'Приложение помогает следить за локальными Git-репозиториями, не изменяя их: оно только читает состояние, историю и данные удалённых провайдеров.',
+  'onboarding.bulletFolder': 'Укажите папку, внутри которой лежат ваши проекты.',
+  'onboarding.bulletTokens': 'При желании добавьте токены GitHub и GitFlic.',
+  'onboarding.bulletScan': 'Запустите первое сканирование и перейдите на дашборд.',
+  'onboarding.start': 'Начать',
+  'onboarding.folderTitle': 'Папка для сканирования',
+  'onboarding.folderBody':
+    'Выберите папку, в которой находятся ваши Git-репозитории. Поиск выполняется рекурсивно на заданную глубину.',
+  'onboarding.pickFolder': 'Выбрать папку…',
+  'onboarding.pickingFolder': 'Открытие диалога…',
+  'onboarding.noFolder': 'Папка не выбрана',
+  'onboarding.folderPath': 'Путь к папке',
+  'onboarding.folderPlaceholder': 'C:\\Projects',
+  'onboarding.next': 'Далее',
+  'onboarding.tokensTitle': 'Токены доступа',
+  'onboarding.tokensBody':
+    'Токены нужны для сравнения с удалёнными репозиториями и зеркалами. Этот шаг можно пропустить и добавить токены позже в настройках.',
+  'onboarding.githubToken': 'GitHub token',
+  'onboarding.gitflicToken': 'GitFlic token',
+  'onboarding.skip': 'Пропустить',
+  'onboarding.finish': 'Сохранить и продолжить',
+  'onboarding.folderRequired': 'Укажите папку для сканирования.',
+  'onboarding.pickError': 'Не удалось открыть диалог выбора папки.',
+  'onboarding.saveError':
+    'Не удалось сохранить настройки или запустить сканирование.',
 } as const

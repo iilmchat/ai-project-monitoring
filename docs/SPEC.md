@@ -328,6 +328,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 |-------|------|--------------|
 | GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote, telegram_bot_token, telegram_chat_id, notifications_enabled, fetch_timeout, status_ttl_seconds, mirror_poll_interval_seconds}` |
 | PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
+| GET | `/settings/status` | `{is_configured: bool}` — `true`, если `SCAN_ROOTS` непустой (v1.1.0, S50) |
 
 Токены, `webhook_secret`, `llm_api_key` и `telegram_bot_token` в ответе
 **маскируются** (`ghp_****1234`, `sk-****1234`). Разрешённые ключи: `scan_roots`,

@@ -39,6 +39,7 @@ import type {
   ScanStarted,
   ScanStatus,
   SecurityReport,
+  SettingsStatus,
   SettingsUpdate,
   GigaChatAuthResponse,
 } from './types'
@@ -525,6 +526,10 @@ export async function migrateToGitflic(): Promise<Record<string, unknown>> {
 
 export async function getSettings(): Promise<AppSettings> {
   return request<AppSettings>('/settings')
+}
+
+export async function getSettingsStatus(): Promise<SettingsStatus> {
+  return request<SettingsStatus>('/settings/status')
 }
 
 export async function updateSettings(payload: SettingsUpdate): Promise<AppSettings> {

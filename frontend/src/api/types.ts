@@ -357,6 +357,10 @@ export interface InsightsReport {
 
 export type HeatmapData = Record<string, number>
 
+export interface SettingsStatus {
+  is_configured: boolean
+}
+
 export interface AppSettings {
   scan_roots: string
   github_token: string

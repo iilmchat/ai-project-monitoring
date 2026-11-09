@@ -15,6 +15,7 @@ import type {
   AppSettings,
   LLMTestResult,
 } from '../api/types'
+import { isTauri, openLogsFolder } from '../desktop/tauri'
 import { useI18n, useI18nNamespace } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -64,8 +65,10 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [logsError, setLogsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const desktop = isTauri()
   const viewsExport = useViewsStore((state) => state.getExportState)
   const importViews = useViewsStore((state) => state.importState)
   const tableExport = useTableStore((state) => state.getExportState)
@@ -192,6 +195,15 @@ function SettingsContent() {
       setError(null)
     } catch {
       setError(t('settings.gigachatAuthError'))
+    }
+  }
+
+  async function handleOpenLogs() {
+    setLogsError(null)
+    try {
+      await openLogsFolder()
+    } catch {
+      setLogsError(t('settings.openLogsError'))
     }
   }
 
@@ -575,6 +587,31 @@ function SettingsContent() {
           )}
         </div>
       </div>
+
+      {desktop && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {t('settings.diagnostics')}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t('settings.diagnosticsHint')}
+          </p>
+          {logsError && (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+              {logsError}
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleOpenLogs()}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {t('settings.openLogs')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">

@@ -35,7 +35,7 @@
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
 - **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
-- **Desktop-приложение (v1.0.0)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker.
+- **Desktop-приложение (v1.0.0)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены) и файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ.
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
