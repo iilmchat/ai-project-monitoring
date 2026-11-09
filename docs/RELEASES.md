@@ -1,6 +1,29 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.0.0 (2026-11-08)
+**Текущая версия:** v1.1.0 (2026-11-09)
+
+---
+
+## Релиз v1.1.0 — «Seamless Updates & Onboarding»
+
+**Дата:** 2026-11-09 · **Тег:** `v1.1.0`
+
+Итоги спринтов 50–51:
+
+- **S50 — Onboarding & Logging:** `GET /api/v1/settings/status`, мастер первичной
+  настройки `/onboarding` (папки сканирования, опциональные GitHub/GitFlic
+  токены, первый scan), автопереход на wizard при `is_configured=false`;
+  файловые логи Tauri в `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и
+  кнопкой «Открыть папку с логами».
+- **S51 — Auto-Updates & CI/CD:** Tauri Updater с подписанными артефактами и
+  endpoint `releases/latest/download/latest.json`; раздел «Обновления» в
+  настройках (проверка, прогресс, установка, перезапуск); GitHub Actions
+  `release-desktop.yml` собирает Windows `.msi`/`.exe` и публикует Release по
+  тегу `v*`.
+- **Проверки:** backend 259 (258 passed, 1 skipped), frontend 53 unit + 3 E2E,
+  entry bundle 87.80 kB gzip.
+- **Обновление:** установленные v1.0.0+ клиенты получают v1.1.0 автоматически
+  через «Настройки → Обновления».
 
 ---
 

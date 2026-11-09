@@ -2,16 +2,22 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+Seamless Updates & Onboarding: мастер первичной настройки, файловые логи
+desktop-приложения, подписанные автообновления через Tauri Updater и
+CI/CD-релизы GitHub Actions.
+
 ### Добавлено
 
 - feat(api): `GET /api/v1/settings/status` → `{is_configured: bool}` — признак завершённой первичной настройки (непустой `SCAN_ROOTS`), без побочных эффектов (S50-001).
+- feat(ui): мастер первичной настройки `/onboarding` (приветствие → выбор папок → опциональные GitHub/GitFlic токены); по завершении `PATCH /settings` + `POST /scan` и переход на дашборд; автоматический редирект при `is_configured=false` (S50-002).
+- feat(desktop): файловые логи Tauri через `tauri-plugin-log` в `%APPDATA%/IIRuchating/logs/app.log`, уровень `info` в release / `debug` в dev, ротация 5 МБ; кнопка «Открыть папку с логами» в настройках (S50-003).
+- test: `backend/tests/test_settings_status.py`, `frontend/src/pages/Onboarding.test.tsx`; lazy-чанк onboarding не увеличивает entry bundle (S50-004).
 - feat(updater): Tauri Updater (`tauri-plugin-updater` + `tauri-plugin-process`), endpoint `releases/latest/download/latest.json`, публичный ключ подписи в `tauri.conf.json`, `createUpdaterArtifacts` для `.sig`/`latest.json` (S51-001).
 - feat(ui): раздел «Обновления» в настройках — проверка, модалка с версией и release notes, прогресс загрузки, `downloadAndInstall()` + `relaunch()`, toast «У вас последняя версия» (S51-002).
 - ci(release): `.github/workflows/release-desktop.yml` — сборка на `windows-latest` по тегу `v*`, Python-sidecar, `tauri-action` с подписью из Secrets `TAURI_PRIVATE_KEY`/`TAURI_KEY_PASSWORD`, публикация GitHub Release (S51-003).
 - docs: `GETTING_STARTED.md` — настройка Secrets и процесс выпуска версии; README/ARCHITECTURE обновлены (S51-004).
-- feat(ui): мастер первичной настройки `/onboarding` (приветствие → выбор папок → опциональные GitHub/GitFlic токены); по завершении `PATCH /settings` + `POST /scan` и переход на дашборд; автоматический редирект при `is_configured=false` (S50-002).
-- feat(desktop): файловые логи Tauri через `tauri-plugin-log` в `%APPDATA%/IIRuchating/logs/app.log`, уровень `info` в release / `debug` в dev, ротация 5 МБ; кнопка «Открыть папку с логами» в настройках (S50-003).
-- test: `backend/tests/test_settings_status.py`, `frontend/src/pages/Onboarding.test.tsx`; lazy-чанк onboarding не увеличивает entry bundle (S50-004).
 
 ### Исправлено
 

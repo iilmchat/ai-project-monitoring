@@ -35,7 +35,7 @@
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
 - **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
-- **Desktop-приложение (v1.0.0)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
+- **Desktop-приложение (v1.0.0+)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -119,8 +119,8 @@ pnpm --dir frontend desktop:build
 
 Артефакты:
 
-- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.0.0_x64_en-US.msi`
-- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.0.0_x64-setup.exe`
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.1.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.1.0_x64-setup.exe`
 
 Sidecar запускается на свободном `127.0.0.1:<port>`; данные и логи —
 в `%APPDATA%/IIRuchating` (`backend.log`). Desktop по умолчанию использует
@@ -142,16 +142,16 @@ SQLite; RAG доступен только при внешнем PostgreSQL + `pg
 
 ## Десктопное приложение (Windows/macOS)
 
-В v1.0.0 приложение можно установить как обычную desktop-программу: React UI
+В v1.0.0+ приложение можно установить как обычную desktop-программу: React UI
 и FastAPI backend упакованы в Tauri + Python-sidecar. Docker, Python и Node на
 машине пользователя **не нужны**.
 
 ### Windows: скачать и установить
 
-1. Откройте [GitHub Releases](https://github.com/iilmchat/ai-project-monitoring/releases/tag/v1.0.0).
+1. Откройте [GitHub Releases](https://github.com/iilmchat/ai-project-monitoring/releases/latest).
 2. Скачайте один из файлов:
-   - `IIRuchating_1.0.0_x64-setup.exe` — NSIS-установщик;
-   - `IIRuchating_1.0.0_x64_en-US.msi` — MSI для групповых политик.
+   - `IIRuchating_1.1.0_x64-setup.exe` — NSIS-установщик;
+   - `IIRuchating_1.1.0_x64_en-US.msi` — MSI для групповых политик.
 3. Запустите установщик. Windows SmartScreen может показать
    «Unknown publisher», так как бинарники пока не подписаны код-сертификатом
    (KI-021). Нажмите «More info» → «Run anyway».
@@ -196,8 +196,8 @@ pnpm --dir frontend desktop:build
 
 Артефакты:
 
-- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.0.0_x64_en-US.msi`
-- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.0.0_x64-setup.exe`
+- `frontend/src-tauri/target/release/bundle/msi/IIRuchating_1.1.0_x64_en-US.msi`
+- `frontend/src-tauri/target/release/bundle/nsis/IIRuchating_1.1.0_x64-setup.exe`
 
 ### Ограничения desktop
 
@@ -263,13 +263,13 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.0.0** (2026-11-08) |
-| Статус | **v1.0.0 «Secure Desktop» выпущен** |
-| Спринты | 1–49 |
-| Тесты backend | **254** (pytest, реальные tmp-репозитории; в v0.1.0 — 59) |
-| Тесты frontend | **45** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **89.62 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, логин 1.0 kB, AI-дайджест 0.8 kB) |
-| Desktop | Windows `.msi` + NSIS `.exe`; macOS — сборка на macOS (CI/notarization) |
+| Версия | **v1.1.0** (2026-11-09) |
+| Статус | **v1.1.0 «Seamless Updates & Onboarding»** |
+| Спринты | 1–51 |
+| Тесты backend | **259** (258 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **53** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **87.80 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
+| Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
 
@@ -333,6 +333,14 @@ pnpm --dir frontend exec playwright install chromium
   SQLite в AppData, автоматический запуск/остановка backend без Docker.
 - **Sprint 49 — Release v1.0.0:** ✅ аудит безопасности, версии 1.0.0,
   документация, GitHub Release и GitFlic mirror.
+
+**v1.1.0 «Seamless Updates & Onboarding»** — релиз 2026-11-09:
+
+- **Sprint 50 — Onboarding & Logging:** ✅ статус первичной настройки, мастер
+  `/onboarding` (папки, токены, первый scan), файловые логи Tauri с ротацией 5 МБ.
+- **Sprint 51 — Auto-Updates & CI/CD:** ✅ подписанные автообновления через
+  Tauri Updater, раздел «Обновления» в настройках, GitHub Actions-релиз по тегу
+  `v*` с `.msi`/`.exe`/`latest.json`.
 
 ---
 
