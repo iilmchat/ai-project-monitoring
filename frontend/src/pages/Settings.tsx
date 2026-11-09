@@ -16,6 +16,8 @@ import type {
   LLMTestResult,
 } from '../api/types'
 import { isTauri, openLogsFolder } from '../desktop/tauri'
+import { checkForUpdates, installUpdate, relaunchApp } from '../desktop/updater'
+import type { Update } from '../desktop/updater'
 import { useI18n, useI18nNamespace } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
@@ -66,7 +68,14 @@ function SettingsContent() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logsError, setLogsError] = useState<string | null>(null)
+  const [updateChecking, setUpdateChecking] = useState(false)
+  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null)
+  const [updateInstalling, setUpdateInstalling] = useState(false)
+  const [updateProgress, setUpdateProgress] = useState(0)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [updateToast, setUpdateToast] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const updateToastTimer = useRef<number | null>(null)
 
   const desktop = isTauri()
   const viewsExport = useViewsStore((state) => state.getExportState)
@@ -102,6 +111,15 @@ function SettingsContent() {
       active = false
     }
   }, [t])
+
+  useEffect(
+    () => () => {
+      if (updateToastTimer.current !== null) {
+        window.clearTimeout(updateToastTimer.current)
+      }
+    },
+    [],
+  )
 
   async function reloadProviders() {
     try {
@@ -205,6 +223,61 @@ function SettingsContent() {
     } catch {
       setLogsError(t('settings.openLogsError'))
     }
+  }
+
+  function showUpdateToast(text: string) {
+    setUpdateToast(text)
+    if (updateToastTimer.current !== null) {
+      window.clearTimeout(updateToastTimer.current)
+    }
+    updateToastTimer.current = window.setTimeout(() => {
+      setUpdateToast(null)
+      updateToastTimer.current = null
+    }, 4000)
+  }
+
+  async function handleCheckUpdates() {
+    setUpdateChecking(true)
+    setUpdateError(null)
+    setUpdateToast(null)
+    try {
+      const update = await checkForUpdates()
+      if (update) {
+        setAvailableUpdate(update)
+      } else {
+        showUpdateToast(t('settings.upToDate'))
+      }
+    } catch {
+      setUpdateError(t('settings.updateCheckError'))
+    } finally {
+      setUpdateChecking(false)
+    }
+  }
+
+  async function handleInstallUpdate() {
+    if (!availableUpdate) {
+      return
+    }
+    setUpdateInstalling(true)
+    setUpdateProgress(0)
+    setUpdateError(null)
+    try {
+      await installUpdate(availableUpdate, setUpdateProgress)
+      await relaunchApp()
+    } catch {
+      setUpdateError(t('settings.updateInstallError'))
+      setUpdateInstalling(false)
+    }
+  }
+
+  function dismissUpdate() {
+    if (updateInstalling) {
+      return
+    }
+    void availableUpdate?.close()
+    setAvailableUpdate(null)
+    setUpdateProgress(0)
+    setUpdateError(null)
   }
 
   function handleExportWorkspace() {
@@ -591,6 +664,34 @@ function SettingsContent() {
       {desktop && (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {t('settings.updates')}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t('settings.updatesHint')}
+          </p>
+          {updateError && (
+            <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+              {updateError}
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleCheckUpdates()}
+              disabled={updateChecking || updateInstalling}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {updateChecking
+                ? t('settings.checkingUpdates')
+                : t('settings.checkUpdates')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {desktop && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t('settings.diagnostics')}
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -657,6 +758,82 @@ function SettingsContent() {
             onSaved={handleProviderSaved}
           />
         </Suspense>
+      )}
+
+      {availableUpdate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-title"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900"
+          >
+            <h2
+              id="update-title"
+              className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+            >
+              {t('settings.updateAvailableTitle')}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {t('settings.updateAvailableBody', {
+                version: availableUpdate.version,
+                current: availableUpdate.currentVersion,
+              })}
+            </p>
+            {availableUpdate.body && (
+              <p className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {availableUpdate.body}
+              </p>
+            )}
+            {updateInstalling && (
+              <div className="mt-4">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {t('settings.updateProgress', { percent: updateProgress })}
+                </p>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${updateProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {updateError && (
+              <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+                {updateError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={dismissUpdate}
+                disabled={updateInstalling}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {t('settings.updateLater')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleInstallUpdate()}
+                disabled={updateInstalling}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {updateInstalling
+                  ? t('settings.installingUpdate')
+                  : t('settings.installUpdate')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {updateToast && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-slate-100 dark:text-slate-900"
+        >
+          {updateToast}
+        </div>
       )}
     </section>
   )

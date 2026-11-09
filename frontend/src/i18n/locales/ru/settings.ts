@@ -89,4 +89,19 @@ export const settings = {
     'Логи desktop-приложения сохраняются в app.log и ротируются при достижении 5 МБ.',
   'settings.openLogs': 'Открыть папку с логами',
   'settings.openLogsError': 'Не удалось открыть папку с логами.',
+  'settings.updates': 'Обновления',
+  'settings.updatesHint':
+    'Приложение проверяет GitHub Releases и устанавливает подписанные обновления.',
+  'settings.checkUpdates': 'Проверить обновления',
+  'settings.checkingUpdates': 'Проверка…',
+  'settings.upToDate': 'У вас последняя версия.',
+  'settings.updateCheckError': 'Не удалось проверить обновления.',
+  'settings.updateAvailableTitle': 'Доступно обновление',
+  'settings.updateAvailableBody':
+    'Версия {version} (у вас {current}). Скачать и установить сейчас?',
+  'settings.installUpdate': 'Скачать и установить',
+  'settings.installingUpdate': 'Установка…',
+  'settings.updateProgress': 'Загрузка: {percent}%',
+  'settings.updateLater': 'Позже',
+  'settings.updateInstallError': 'Не удалось установить обновление.',
 } as const

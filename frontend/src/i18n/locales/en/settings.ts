@@ -89,4 +89,19 @@ export const settings = {
     'Desktop logs are written to app.log and rotated once the file reaches 5 MB.',
   'settings.openLogs': 'Open logs folder',
   'settings.openLogsError': 'Could not open the logs folder.',
+  'settings.updates': 'Updates',
+  'settings.updatesHint':
+    'The app checks GitHub Releases and installs signed updates.',
+  'settings.checkUpdates': 'Check for updates',
+  'settings.checkingUpdates': 'Checking…',
+  'settings.upToDate': 'You are running the latest version.',
+  'settings.updateCheckError': 'Could not check for updates.',
+  'settings.updateAvailableTitle': 'Update available',
+  'settings.updateAvailableBody':
+    'Version {version} is available (you have {current}). Download and install now?',
+  'settings.installUpdate': 'Download and install',
+  'settings.installingUpdate': 'Installing…',
+  'settings.updateProgress': 'Downloading: {percent}%',
+  'settings.updateLater': 'Later',
+  'settings.updateInstallError': 'Could not install the update.',
 } as const

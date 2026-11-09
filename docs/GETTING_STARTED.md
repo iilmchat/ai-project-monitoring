@@ -294,3 +294,58 @@ ngrok http 8000
 (`X-Hub-Signature-256` для GitHub, `X-Gitflic-Signature` для GitFlic)
 отклоняются с 401. Webhook инвалидирует кэш зеркала; polling остаётся
 страховкой, если событие потерялось.
+
+---
+
+## 9. Настройка GitHub Actions для релизов
+
+Релизы desktop-приложения собираются workflow
+`.github/workflows/release-desktop.yml` при пуше тега `v*`. Сборка идёт на
+`windows-latest`: Python-sidecar (PyInstaller) → `tauri-action` → GitHub Release
+с `.msi`, NSIS `.exe`, подписями `.sig` и `latest.json` для автообновления.
+
+### 9.1. Ключи подписи обновлений
+
+Ключи создаются один раз (Rust не требуется, используется Tauri CLI):
+
+```bash
+cd frontend
+pnpm tauri signer generate -w ~/.tauri/myapp.key
+```
+
+Будут созданы `myapp.key` (приватный) и `myapp.key.pub` (публичный). Публичный
+ключ уже вставлен в `frontend/src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
+Приватный ключ и пароль **не коммитятся** в git.
+
+Добавьте в GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Значение |
+|--------|----------|
+| `TAURI_PRIVATE_KEY` | Полное содержимое файла `myapp.key` (включая строки `untrusted comment:` / `trusted comment:` и base64-блок) |
+| `TAURI_KEY_PASSWORD` | Пароль, указанный при генерации ключа |
+
+Workflow передаёт их в `tauri-action` как `TAURI_SIGNING_PRIVATE_KEY` и
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (имена Tauri v2), поэтому ничего больше
+настраивать не нужно.
+
+### 9.2. Выпуск новой версии
+
+1. Поднимите версию в трёх местах (Tauri берёт версию из `tauri.conf.json`, но
+   она должна совпадать с `package.json` и `Cargo.toml`):
+   - `frontend/package.json` → `version`;
+   - `frontend/src-tauri/tauri.conf.json` → `version`;
+   - `frontend/src-tauri/Cargo.toml` → `[package].version`.
+2. Закоммитьте изменения и запушьте в `main`.
+3. Поставьте тег и запушьте его:
+
+   ```bash
+   git tag v1.1.0
+   git push origin v1.1.0
+   ```
+
+4. GitHub Actions соберёт приложение, подпишет обновление и опубликует Release.
+   Установленные клиенты увидят его через
+   `https://github.com/iilmchat/ai-project-monitoring/releases/latest/download/latest.json`.
+
+Проверить сборку без тега можно вручную: **Actions → Release Desktop → Run workflow**
+(`workflow_dispatch`).

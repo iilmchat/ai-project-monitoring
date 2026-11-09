@@ -1452,7 +1452,10 @@ Tauri shell (Rust)
 - `spawn` → health poll с таймаутом → показать UI; ошибка → понятный экран/лог.
 - Закрытие окна → SIGTERM/CTRL_BREAK → ожидание завершения → kill при таймауте.
 - Падение sidecar → перезапуск с backoff и лог; не оставлять orphan-процессы.
-- Обновления приложения — через Tauri updater (план), данные не удаляются.
+- Обновления приложения — через Tauri Updater: подписанные артефакты (`.sig`) и
+  `latest.json` публикуются GitHub Actions по тегу `v*`; endpoint —
+  `releases/latest/download/latest.json`, публичный ключ — в
+  `tauri.conf.json` → `plugins.updater.pubkey`.
 
 ### 25.3. Сборка и релиз
 
