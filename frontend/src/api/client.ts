@@ -14,7 +14,10 @@ import type {
   CommitInfo,
   CommitMessageSuggestion,
   CodeReviewResponse,
+  ConflictResolveResponse,
   CveExplanation,
+  ReleaseNotesResponse,
+  RepositoryTagsResponse,
   CompareResponse,
   ConflictsResponse,
   DashboardAdvice,
@@ -273,6 +276,36 @@ export async function getCiStatus(repositoryId: number): Promise<CIStatus> {
 
 export async function getConflicts(repositoryId: number): Promise<ConflictsResponse> {
   return request<ConflictsResponse>(`/repositories/${repositoryId}/conflicts`)
+}
+
+export async function getTags(repositoryId: number): Promise<RepositoryTagsResponse> {
+  return request<RepositoryTagsResponse>(`/repositories/${repositoryId}/tags`)
+}
+
+export async function resolveConflict(
+  repositoryId: number,
+  filePath: string,
+  language: 'ru' | 'en',
+): Promise<ConflictResolveResponse> {
+  return request<ConflictResolveResponse>(
+    `/repositories/${repositoryId}/ai/resolve-conflict`,
+    { method: 'POST', body: { file_path: filePath, language } },
+  )
+}
+
+export async function generateReleaseNotes(
+  repositoryId: number,
+  fromTag: string,
+  toTag: string,
+  language: 'ru' | 'en',
+): Promise<ReleaseNotesResponse> {
+  return request<ReleaseNotesResponse>(
+    `/repositories/${repositoryId}/ai/release-notes`,
+    {
+      method: 'POST',
+      body: { from_tag: fromTag, to_tag: toTag, language },
+    },
+  )
 }
 
 export async function getDockerStatus(

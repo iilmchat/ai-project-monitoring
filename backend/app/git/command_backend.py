@@ -201,6 +201,47 @@ def get_staged_diff(
     )
 
 
+def list_tags(repository_path: str | Path, timeout: float = 10) -> list[str]:
+    """Return local tag names sorted by name (read-only)."""
+    result = run_git(["tag", "--list"], cwd=repository_path, timeout=timeout)
+    if not result.ok:
+        return []
+    return sorted(line.strip() for line in result.stdout.splitlines() if line.strip())
+
+
+def ref_exists(repository_path: str | Path, ref: str, timeout: float = 10) -> bool:
+    """Check that ``ref`` resolves in the repository (read-only)."""
+    result = run_git(
+        ["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+    return result.ok
+
+
+def log_between(
+    repository_path: str | Path,
+    from_ref: str,
+    to_ref: str,
+    *,
+    limit: int = 500,
+    timeout: float = 10,
+) -> CommandResult:
+    """Return ``git log --oneline from_ref..to_ref`` (read-only)."""
+    return run_git(
+        [
+            "log",
+            f"{from_ref}..{to_ref}",
+            "--oneline",
+            "--no-decorate",
+            "-n",
+            str(max(limit, 1)),
+        ],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+
+
 def commit_dates(
     repository_path: str | Path,
     since: str,

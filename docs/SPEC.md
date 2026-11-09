@@ -7,8 +7,8 @@ AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33), global
 analytics §3.19 и dependency updates §3.20 — реализованы в Sprint 32–34.
 §3.26 (RAG-поиск по коду) и §3.27 (GigaChat OAuth) реализованы в v0.9.0
 (Sprints 43–44). §3.28 (single-user auth) — реализовано в v1.0.0 (Sprint 47);
-§3.29 (AI Code Review) — реализовано в Sprint 53; conflict resolver/release
-notes и §3.30 (conversational RAG) — **план v1.2.0** (Sprints 54–55);
+§3.29 (AI Code Review, Conflict Resolver, Release Notes) — реализовано в
+Sprints 53–54; §3.30 (conversational RAG) — **план v1.2.0** (Sprint 55);
 см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 
 **Версия:** v1.1.0 «Seamless Updates & Onboarding» · **Планируется:** v1.2.0 · **Обновлено:** 2026-11-09
@@ -1464,10 +1464,13 @@ users(
 ### 3.29. AI code review, conflict resolver & release notes (v1.2.0)
 
 > **Статус:** AI Code Review реализован в Sprint 53; conflict resolver и
-> release notes — план Sprint 54. Контракты ниже — обязательные для
+> release notes — реализованы в Sprint 54. Контракты ниже — обязательные для
 > реализации; см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 > Все эндпоинты **read-only**: читают diff/файлы/историю и возвращают текст, но
 > не пишут файлы, не меняют индекс и `.git`.
+>
+> Для выбора тегов в UI: `GET /api/v1/repositories/{id}/tags` →
+> `{repository_id, tags: string[]}` (только чтение).
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
@@ -1528,7 +1531,7 @@ users(
 
 ```json
 {
-  "path": "src/app.ts",
+  "file_path": "src/app.ts",
   "language": "ru",
   "refresh": false
 }
@@ -1539,10 +1542,12 @@ users(
 ```json
 {
   "repository_id": 1,
-  "path": "src/app.ts",
-  "resolved": "// merged code...",
+  "file_path": "src/app.ts",
+  "resolved": "// merged full file...",
   "blocks": 1,
+  "provider": "lmstudio",
   "model": "qwen2.5-coder-7b-instruct",
+  "cached": false,
   "generated_at": "2026-11-09T12:00:00Z",
   "truncated": false,
   "warnings": ["verify_before_apply"]
@@ -1551,20 +1556,25 @@ users(
 
 **Conflict resolver — правила:**
 
-- `path` — относительный путь внутри репозитория; traversal/symlink за пределы
-  репозитория → `403 path_outside_repository`; бинарный файл →
-  `400 binary_file`; отсутствует → `404 file_not_found`.
+- `file_path` — относительный путь внутри репозитория; traversal/symlink за
+  пределы репозитория → `403 path_outside_repository`; бинарный файл →
+  `400 binary_file`; отсутствует → `404 file_not_found`; файл больше
+  `AI_CONFLICT_MAX_FILE_BYTES` (default 1048576) → `400 file_too_large`.
 - Ищутся маркеры `<<<<<<<`, `=======`, `>>>>>>>`; если их нет →
-  `400 no_conflicts`.
-- Каждый блок с контекстом ≤ `AI_CONFLICT_MAX_CHARS` (default 20000), не более
-  `AI_CONFLICT_MAX_BLOCKS` (default 10); при превышении — `truncated=true`.
+  `400` («Конфликтов не найдено»).
+- Каждый блок ≤ `AI_CONFLICT_MAX_CHARS` (default 20000), не более
+  `AI_CONFLICT_MAX_BLOCKS` (default 10); при превышении — `truncated=true`,
+  необработанные блоки остаются с маркерами.
 - Промпт: объединить обе стороны, сохранить поведение/стиль; вернуть только код
   без маркеров и пояснений.
-- `resolved` — только объединённые фрагменты, не весь файл; UI показывает diff
-  и копирует результат, но **не пишет файл**.
-- Ответ всегда содержит `warnings=["verify_before_apply"]` (KI-023).
-- Кэш 1 час:
-  `resolve-conflict:<repo_id>:<path>:<hash>:<model>:<prompt_version>`.
+- `resolved` — **полный файл** с заменёнными блоками; UI показывает его и
+  копирует, но **не пишет файл** (read-only).
+- Ответ всегда содержит `warnings=["verify_before_apply"]` (KI-023);
+  при частичной обработке добавляется `conflict_truncated`.
+- Кэш `ai_cache` с TTL `AI_CACHE_TTL_SECONDS`:
+  `resolve-conflict:<repo_id>:<file_path>:<hash>:<model>:<prompt_version>`;
+  кэшируются только объединённые блоки, файл пересобирается из актуального
+  содержимого.
 
 **`ReleaseNotesRequest`:**
 
@@ -1586,9 +1596,12 @@ users(
   "to_tag": "v1.1.0",
   "changelog": "## [1.1.0] - 2026-11-09\n### Added\n- ...",
   "commits": 42,
+  "provider": "lmstudio",
   "model": "qwen2.5-coder-7b-instruct",
+  "cached": false,
   "generated_at": "2026-11-09T12:00:00Z",
-  "truncated": false
+  "truncated": false,
+  "warnings": []
 }
 ```
 
@@ -1596,17 +1609,16 @@ users(
 
 - `from_tag` обязателен; `to_tag` опционален (default `HEAD`); теги
   проверяются read-only через `git rev-parse --verify`.
-- История: `git log --no-merges --format=%H%x09%s%x09%b from..to`; лимит
-  `AI_RELEASE_NOTES_MAX_COMMITS` (default 500), тело коммита ≤ 500 символов;
-  при превышении — `truncated=true`.
-- Промпт: сгруппировать по Keep a Changelog (`Added`, `Changed`, `Fixed`,
-  `Removed`, `Security`), не выдумывать изменения, сохранять breaking changes.
-- Ответ — Markdown; ограничен `AI_RELEASE_NOTES_MAX_OUTPUT_CHARS` (default
-  12000).
-- В LLM отправляются только subjects/bodies коммитов; diff и код не
-  отправляются.
-- Кэш 1 час:
-  `release-notes:<repo_id>:<from>:<to>:<model>:<prompt_version>`.
+- История: `git log from..to --oneline --no-decorate`; лимит
+  `AI_RELEASE_NOTES_MAX_COMMITS` (default 500), общий лимит
+  `AI_RELEASE_NOTES_MAX_CHARS` (default 20000); при превышении —
+  `truncated=true`, `warnings=["commits_truncated"]`.
+- Промпт: сгруппировать по Keep a Changelog (`Added`, `Changed`, `Fixed`),
+  не выдумывать изменения.
+- Ответ — Markdown; ограничен 12000 символов (`MAX_RELEASE_NOTES_CHARS`).
+- В LLM отправляются только oneline-коммиты; diff и код не отправляются.
+- Кэш `ai_cache` с TTL `AI_CACHE_TTL_SECONDS`:
+  `release-notes:<repo_id>:<from>:<to>:<hash>:<model>:<prompt_version>`.
 
 **Общие ошибки AI-эндпоинтов §3.29:**
 

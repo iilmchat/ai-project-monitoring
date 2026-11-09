@@ -1,6 +1,6 @@
 # TODO v1.2.0 — AI Review, Cross-Platform & Conversational RAG
 
-**Статус:** планирование (Sprint 52); реализация — спринты 53–55.
+**Статус:** Sprint 52–54 реализованы; остался Sprint 55.
 **База:** v1.1.0 «Seamless Updates & Onboarding» (Onboarding, Tauri logging,
 auto-updates, GitHub Actions).
 **Цель:** добавить AI-ревью изменений, разрешение конфликтов, генерацию

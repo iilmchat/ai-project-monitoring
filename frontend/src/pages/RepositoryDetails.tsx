@@ -79,6 +79,8 @@ const RECOMMENDATION_KEYS: Record<string, TranslationKey> = {
 
 const AgentTaskModal = lazy(() => import('../components/AgentTaskModal'))
 const CodeReviewModal = lazy(() => import('../components/CodeReviewModal'))
+const ConflictResolverModal = lazy(() => import('../components/ConflictResolverModal'))
+const ReleaseNotesModal = lazy(() => import('../components/ReleaseNotesModal'))
 const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
 
 interface ActionPrompt {
@@ -181,6 +183,8 @@ function RepositoryDetailsContent() {
   const [readmeOpen, setReadmeOpen] = useState(false)
   const [agentTaskOpen, setAgentTaskOpen] = useState(false)
   const [codeReviewOpen, setCodeReviewOpen] = useState(false)
+  const [conflictFile, setConflictFile] = useState<string | null>(null)
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitMessage, setCommitMessage] = useState('')
@@ -1094,9 +1098,18 @@ function RepositoryDetailsContent() {
                   {conflicts.files.map((file) => (
                     <li
                       key={file}
-                      className="rounded bg-red-50 px-2 py-1 font-mono text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      className="flex items-center justify-between gap-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300"
                     >
-                      {file}
+                      <span className="break-all font-mono">{file}</span>
+                      {llmEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => setConflictFile(file)}
+                          className="shrink-0 rounded border border-red-300 px-2 py-0.5 font-medium hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900/40"
+                        >
+                          {t('repo.conflicts.aiHint')}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1113,13 +1126,24 @@ function RepositoryDetailsContent() {
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 CI Status
               </h2>
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${ciBadgeStyle(
-                  ciStatus?.aggregate,
-                )}`}
-              >
-                {ciStatus?.aggregate ?? 'unknown'}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {llmEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setReleaseNotesOpen(true)}
+                    className="rounded-md border border-primary px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                  >
+                    {t('repo.releaseNotes.open')}
+                  </button>
+                )}
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${ciBadgeStyle(
+                    ciStatus?.aggregate,
+                  )}`}
+                >
+                  {ciStatus?.aggregate ?? 'unknown'}
+                </span>
+              </div>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {[ciStatus?.github, ciStatus?.gitflic].map((provider, index) => (
@@ -2236,6 +2260,25 @@ function RepositoryDetailsContent() {
           <CodeReviewModal
             repositoryId={repositoryId}
             onClose={() => setCodeReviewOpen(false)}
+          />
+        </Suspense>
+      )}
+
+      {conflictFile && (
+        <Suspense fallback={null}>
+          <ConflictResolverModal
+            repositoryId={repositoryId}
+            filePath={conflictFile}
+            onClose={() => setConflictFile(null)}
+          />
+        </Suspense>
+      )}
+
+      {releaseNotesOpen && (
+        <Suspense fallback={null}>
+          <ReleaseNotesModal
+            repositoryId={repositoryId}
+            onClose={() => setReleaseNotesOpen(false)}
           />
         </Suspense>
       )}

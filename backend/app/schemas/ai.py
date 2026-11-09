@@ -24,6 +24,54 @@ class CommitMessageSuggestion(BaseModel):
     generated_at: datetime
 
 
+class ConflictResolveRequest(BaseModel):
+    """Payload for ``POST /repositories/{id}/ai/resolve-conflict``."""
+
+    file_path: str = Field(min_length=1, max_length=1024)
+    language: Literal["ru", "en"] = "ru"
+    refresh: bool = False
+
+
+class ConflictResolveResponse(BaseModel):
+    """Result of AI conflict resolution (full file text, not written)."""
+
+    repository_id: int
+    file_path: str
+    resolved: str
+    blocks: int = Field(default=0, ge=0)
+    provider: str
+    model: str
+    truncated: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    cached: bool = False
+    generated_at: datetime
+
+
+class ReleaseNotesRequest(BaseModel):
+    """Payload for ``POST /repositories/{id}/ai/release-notes``."""
+
+    from_tag: str = Field(min_length=1, max_length=256)
+    to_tag: str = Field(default="HEAD", min_length=1, max_length=256)
+    language: Literal["ru", "en"] = "ru"
+    refresh: bool = False
+
+
+class ReleaseNotesResponse(BaseModel):
+    """Result of AI release notes generation."""
+
+    repository_id: int
+    from_tag: str
+    to_tag: str
+    changelog: str
+    commits: int = Field(default=0, ge=0)
+    provider: str
+    model: str
+    truncated: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    cached: bool = False
+    generated_at: datetime
+
+
 class CodeReviewRequest(BaseModel):
     """Payload for ``POST /repositories/{id}/ai/code-review``."""
 
@@ -107,9 +155,13 @@ __all__ = [
     "CodeReviewRequest",
     "CodeReviewResponse",
     "CommitMessageSuggestion",
+    "ConflictResolveRequest",
+    "ConflictResolveResponse",
     "CveExplainRequest",
     "CveExplanation",
     "DashboardAdvice",
     "DashboardAdviceRequest",
     "LLMTestResponse",
+    "ReleaseNotesRequest",
+    "ReleaseNotesResponse",
 ]

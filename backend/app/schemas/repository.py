@@ -39,6 +39,11 @@ class RepositoryConflictsResponse(BaseModel):
     files: list[str] = Field(default_factory=list)
 
 
+class RepositoryTagsResponse(BaseModel):
+    repository_id: int
+    tags: list[str] = Field(default_factory=list)
+
+
 class DirtyCountsResponse(BaseModel):
     """Uncommitted change counters (SPEC §3.4)."""
 

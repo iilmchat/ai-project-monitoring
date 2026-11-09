@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     ai_code_review_max_chars: int = 40000
     ai_code_review_chunk_chars: int = 5000
     ai_code_review_max_chunks: int = 8
+    ai_conflict_max_file_bytes: int = 1048576
+    ai_conflict_max_chars: int = 20000
+    ai_conflict_max_blocks: int = 10
+    ai_release_notes_max_commits: int = 500
+    ai_release_notes_max_chars: int = 20000
     gigachat_oauth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     gigachat_api_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
     gigachat_scope: str = "GIGACHAT_API_PERS"

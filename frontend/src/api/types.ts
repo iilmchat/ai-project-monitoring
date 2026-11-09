@@ -431,6 +431,38 @@ export interface CodeReviewResponse {
   generated_at: string
 }
 
+export interface ConflictResolveResponse {
+  repository_id: number
+  file_path: string
+  resolved: string
+  blocks: number
+  provider: string
+  model: string
+  truncated: boolean
+  warnings: string[]
+  cached: boolean
+  generated_at: string
+}
+
+export interface ReleaseNotesResponse {
+  repository_id: number
+  from_tag: string
+  to_tag: string
+  changelog: string
+  commits: number
+  provider: string
+  model: string
+  truncated: boolean
+  warnings: string[]
+  cached: boolean
+  generated_at: string
+}
+
+export interface RepositoryTagsResponse {
+  repository_id: number
+  tags: string[]
+}
+
 export interface CveExplanation {
   explanation: string
   cached: boolean

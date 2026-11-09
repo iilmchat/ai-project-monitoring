@@ -37,6 +37,7 @@
 - **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
 - **Desktop-приложение (v1.0.0+)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
+- **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
 - **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -351,8 +352,8 @@ pnpm --dir frontend exec playwright install chromium
 - **Sprint 53 — Cross-Platform CI & AI Code Review:** ✅ матрица
   Windows/macOS/Linux (`.msi`/`.exe`/`.dmg`/`.AppImage`) и AI-ревью
   незакоммиченных изменений с чанкингом и кэшем.
-- **Sprint 54 — AI Conflict Resolver & Release Notes:** разбор
-  `<<<<<<<`-конфликтов и генерация CHANGELOG между тегами.
+- **Sprint 54 — AI Conflict Resolver & Release Notes:** ✅ разбор
+  `<<<<<<<`-конфликтов без записи файла и генерация CHANGELOG между тегами.
 - **Sprint 55 — Conversational RAG & Release v1.2.0:** чат с базой знаний на
   `/search` (pgvector + LLM) и финальный релиз.
 

@@ -1473,7 +1473,8 @@ Tauri shell (Rust)
 
 ## 26. AI code review, conflict resolver & release notes (v1.2.0 — план)
 
-> **Статус:** план; контракты — SPEC §3.29, задачи — Sprints 53–54
+> **Статус:** code review реализован в Sprint 53; conflict resolver и release
+> notes — в Sprint 54. Контракты — SPEC §3.29, задачи — Sprints 53–54
 > ([`TODO_V1.2.0.md`](../TODO_V1.2.0.md)). Все операции read-only.
 
 ### 26.1. Общая схема LLMService
@@ -1533,20 +1534,21 @@ POST /repositories/{id}/ai/code-review
 ### 26.3. Conflict resolver
 
 ```
-POST /repositories/{id}/ai/resolve-conflict {path}
-  → path validation (inside repo, not binary, not .git)
+POST /repositories/{id}/ai/resolve-conflict {file_path}
+  → пути: inside repo, not binary, not .git, size ≤ AI_CONFLICT_MAX_FILE_BYTES
   → read file (read-only) → parse <<<<<<< / ======= / >>>>>>>
-  → блоки + контекст ≤ AI_CONFLICT_MAX_CHARS
+  → блоки ≤ AI_CONFLICT_MAX_CHARS, max AI_CONFLICT_MAX_BLOCKS
   → LLM: merge both sides, return code only
-  → склейка блоков в исходном порядке
-  → warnings=["verify_before_apply"]
+  → склейка полного файла в исходном порядке
+  → warnings=["verify_before_apply"] (+ conflict_truncated)
 ```
 
-- Контекст — только конфликтный блок и несколько строк вокруг; остальной файл
-  не отправляется.
-- Ответ не пишется на диск: UI показывает diff и копирует текст.
+- Контекст — только конфликтный блок; остальной файл в LLM не отправляется.
+- `resolved` — полный файл с заменёнными блоками; на диск **не пишется**,
+  UI показывает и копирует текст.
 - При нескольких блоках каждый обрабатывается отдельно; при превышении лимита
   — `truncated=true`, необработанные блоки возвращаются с маркерами.
+- Кэш `ai_cache` (`AI_CACHE_TTL_SECONDS`) хранит только объединённые блоки.
 - KI-023: LLM может «галлюцинировать»; обязательна ручная проверка и тесты на
   неизменность файла/`git status`.
 
@@ -1555,15 +1557,14 @@ POST /repositories/{id}/ai/resolve-conflict {path}
 ```
 POST /repositories/{id}/ai/release-notes {from_tag, to_tag?}
   → git rev-parse --verify <tag>
-  → git log --no-merges --format=%H%x09%s%x09%b from..to
-  → лимит AI_RELEASE_NOTES_MAX_COMMITS, body ≤ 500 символов
-  → LLM: Keep a Changelog (Added/Changed/Fixed/Removed/Security)
+  → git log from..to --oneline --no-decorate (limit AI_RELEASE_NOTES_MAX_COMMITS)
+  → обрезка AI_RELEASE_NOTES_MAX_CHARS
+  → LLM: Keep a Changelog (Added/Changed/Fixed)
   → Markdown ≤ 12000 символов
 ```
 
 - Теги только читаются; `to_tag` по умолчанию `HEAD`.
-- В LLM не отправляются diff, код и имена файлов — только commit subjects и
-  bodies.
+- В LLM не отправляются diff, код и имена файлов — только oneline-коммиты.
 - Результат — черновик CHANGELOG; запись в репозиторий не выполняется.
 
 ---

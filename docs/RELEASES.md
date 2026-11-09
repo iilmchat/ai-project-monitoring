@@ -4,6 +4,24 @@
 
 ---
 
+## Спринт 54: AI Conflict Resolver & Release Notes (v1.2.0)
+
+**Дата:** 2026-11-09 · **Статус:** ✅ Завершён
+
+- [x] **S54-001. AI Conflict Resolver:** `POST /api/v1/repositories/{id}/ai/resolve-conflict`
+  (`file_path`), безопасное чтение внутри репозитория, разбор маркеров,
+  LLM-объединение, возврат полного файла **без записи**; кэш по блокам.
+- [x] **S54-002. AI Release Notes:** `POST /api/v1/repositories/{id}/ai/release-notes`
+  (`from_tag`, `to_tag`), `git log --oneline`, Keep a Changelog, кэш;
+  `GET /repositories/{id}/tags` для выбора тегов.
+- [x] **S54-003. UI и документация:** кнопки «AI Подсказка» и «AI Release Notes»,
+  lazy-модалки с Markdown/копированием; SPEC §3.29, CHANGELOG/RELEASES/README,
+  KI-023.
+- **Проверки:** backend 273 (272 passed, 1 skipped), frontend 57 unit,
+  `ruff`/`mypy`, `pnpm build` и budget-check — см. отчёт спринта.
+
+---
+
 ## Спринт 53: Cross-Platform CI & AI Code Review (v1.2.0)
 
 **Дата:** 2026-11-09 · **Статус:** ✅ Завершён

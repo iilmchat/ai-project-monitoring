@@ -7,6 +7,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -27,7 +28,14 @@ from sqlalchemy.orm import selectinload
 from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.db.session import get_session
-from app.git.command_backend import get_conflicts, get_staged_diff, get_worktree_diff
+from app.git.command_backend import (
+    get_conflicts,
+    get_staged_diff,
+    get_worktree_diff,
+    list_tags,
+    log_between,
+    ref_exists,
+)
 from app.git.pygit2_backend import (
     GitStatusError,
     compare_refs,
@@ -48,8 +56,12 @@ from app.schemas.ai import (
     CodeReviewRequest,
     CodeReviewResponse,
     CommitMessageSuggestion,
+    ConflictResolveRequest,
+    ConflictResolveResponse,
     CveExplainRequest,
     CveExplanation,
+    ReleaseNotesRequest,
+    ReleaseNotesResponse,
 )
 from app.schemas.ci import CIStatusResponse, ProviderCIStatus
 from app.schemas.dependency import DependencyReport
@@ -70,6 +82,7 @@ from app.schemas.repository import (
     RepositoryListResponse,
     RepositoryRead,
     RepositoryStatusResponse,
+    RepositoryTagsResponse,
 )
 from app.schemas.security import SecurityReport
 from app.services.action_service import (
@@ -556,6 +569,133 @@ def _payload_int(value: object) -> int:
     return 0
 
 
+def _safe_repository_file(
+    repository_path: str,
+    file_path: str,
+    *,
+    max_bytes: int,
+) -> Path:
+    """Resolve ``file_path`` inside the repository and reject traversal."""
+    root = Path(repository_path).resolve()
+    raw = Path(file_path)
+    if raw.is_absolute():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="path_outside_repository",
+        )
+    try:
+        candidate = (root / raw).resolve()
+        relative = candidate.relative_to(root)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="path_outside_repository",
+        ) from exc
+    if ".git" in relative.parts:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="path_outside_repository",
+        )
+    if not candidate.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="file_not_found",
+        )
+    if candidate.stat().st_size > max(max_bytes, 1):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="file_too_large",
+        )
+    return candidate
+
+
+def _find_conflict_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """Return ``(start, end)`` line indexes for ``<<<<<<<`` … ``>>>>>>>``."""
+    blocks: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, line in enumerate(lines):
+        marker = line.lstrip()
+        if marker.startswith("<<<<<<<"):
+            start = index
+        elif marker.startswith(">>>>>>>") and start is not None:
+            blocks.append((start, index))
+            start = None
+    return blocks
+
+
+def _assemble_conflict_file(
+    lines: list[str],
+    blocks: list[tuple[int, int]],
+    merged: list[str],
+) -> str:
+    """Replace processed conflict blocks with merged code, keep the rest."""
+    output: list[str] = []
+    cursor = 0
+    for (start, end), code in zip(blocks, merged, strict=False):
+        output.extend(lines[cursor:start])
+        output.append(code)
+        if code and not code.endswith("\n"):
+            output.append("\n")
+        cursor = end + 1
+    output.extend(lines[cursor:])
+    return "".join(output)
+
+
+def _cached_conflict_blocks(
+    row: AICache | None,
+    ttl: int,
+    expected: int,
+) -> list[str] | None:
+    if row is None or not cache_is_fresh(row.checked_at, ttl):
+        return None
+    payload = row.payload if isinstance(row.payload, dict) else {}
+    merged = payload.get("merged")
+    if (
+        not isinstance(merged, list)
+        or len(merged) != expected
+        or not all(isinstance(item, str) for item in merged)
+    ):
+        return None
+    return [str(item) for item in merged]
+
+
+def _cached_release_notes(
+    repository_id: int,
+    row: AICache | None,
+    ttl: int,
+    from_tag: str,
+    to_tag: str,
+    provider: str,
+    model: str,
+) -> ReleaseNotesResponse | None:
+    if row is None or not cache_is_fresh(row.checked_at, ttl):
+        return None
+    payload = row.payload if isinstance(row.payload, dict) else {}
+    changelog = payload.get("changelog")
+    if not isinstance(changelog, str) or not changelog:
+        return None
+    warnings = payload.get("warnings")
+    return ReleaseNotesResponse(
+        repository_id=repository_id,
+        from_tag=from_tag,
+        to_tag=to_tag,
+        changelog=changelog,
+        commits=_payload_int(payload.get("commits")),
+        provider=provider,
+        model=row.model or model,
+        truncated=bool(payload.get("truncated", False)),
+        warnings=[str(item) for item in warnings] if isinstance(warnings, list) else [],
+        cached=True,
+        generated_at=utcnow(),
+    )
+
+
+def _valid_ref(ref: str) -> bool:
+    if not ref or ref.startswith("-") or ".." in ref:
+        return False
+    return re.fullmatch(r"[A-Za-z0-9._/-]+", ref) is not None
+
+
 @router.post(
     "/repositories/{repository_id}/ai/code-review",
     response_model=CodeReviewResponse,
@@ -711,6 +851,340 @@ def _cached_code_review_from_row(
         truncated=bool(payload.get("truncated", False)),
         warnings=[str(item) for item in warnings] if isinstance(warnings, list) else [],
         cached=True,
+        generated_at=utcnow(),
+    )
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/resolve-conflict",
+    response_model=ConflictResolveResponse,
+)
+async def resolve_repository_conflict(
+    repository_id: int,
+    payload: ConflictResolveRequest,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ConflictResolveResponse:
+    repository = await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    ok, error = await service.availability()
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error or "llm_disabled",
+        )
+    config = await service.resolve()
+    settings = request.app.state.settings
+
+    path = _safe_repository_file(
+        repository.path,
+        payload.file_path,
+        max_bytes=int(settings.ai_conflict_max_file_bytes),
+    )
+    data = await asyncio.to_thread(path.read_bytes)
+    if b"\x00" in data[:8192]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="binary_file",
+        )
+    text = data.decode("utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    blocks = _find_conflict_blocks(lines)
+    if not blocks:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Конфликтов не найдено",
+        )
+
+    max_blocks = max(int(settings.ai_conflict_max_blocks), 1)
+    max_chars = max(int(settings.ai_conflict_max_chars), 100)
+    selected: list[tuple[int, int]] = []
+    total = 0
+    for start, end in blocks:
+        block_text = "".join(lines[start : end + 1])
+        if len(selected) >= max_blocks or total + len(block_text) > max_chars:
+            break
+        selected.append((start, end))
+        total += len(block_text)
+    if not selected:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Конфликт слишком большой",
+        )
+
+    truncated = len(blocks) > len(selected)
+    warnings = ["verify_before_apply"]
+    if truncated:
+        warnings.append("conflict_truncated")
+
+    block_text = "\n".join(
+        "".join(lines[start : end + 1]) for start, end in selected
+    )
+    state = {
+        "file_path": payload.file_path,
+        "blocks_sha": hashlib.sha256(block_text.encode("utf-8")).hexdigest(),
+        "language": payload.language,
+    }
+    cache_key = build_cache_key(
+        "resolve-conflict",
+        str(repository_id),
+        state,
+        config.model,
+        settings.ai_prompt_version,
+    )
+    ttl = int(settings.ai_cache_ttl_seconds)
+
+    if not payload.refresh:
+        row = await session.get(AICache, cache_key)
+        cached_merged = _cached_conflict_blocks(row, ttl, len(selected))
+        if cached_merged is not None:
+            observe_ai_cache("conflict_resolve", hit=True)
+            response.headers["X-AI-Cache"] = "hit"
+            return ConflictResolveResponse(
+                repository_id=repository_id,
+                file_path=payload.file_path,
+                resolved=_assemble_conflict_file(lines, selected, cached_merged),
+                blocks=len(cached_merged),
+                provider=config.provider,
+                model=row.model if row is not None else config.model,
+                truncated=truncated,
+                warnings=warnings,
+                cached=True,
+                generated_at=utcnow(),
+            )
+
+    lock = cache_lock(cache_key)
+    async with lock:
+        if not payload.refresh:
+            row = await session.get(AICache, cache_key)
+            cached_merged = _cached_conflict_blocks(row, ttl, len(selected))
+            if cached_merged is not None:
+                observe_ai_cache("conflict_resolve", hit=True)
+                response.headers["X-AI-Cache"] = "hit"
+                return ConflictResolveResponse(
+                    repository_id=repository_id,
+                    file_path=payload.file_path,
+                    resolved=_assemble_conflict_file(lines, selected, cached_merged),
+                    blocks=len(cached_merged),
+                    provider=config.provider,
+                    model=row.model if row is not None else config.model,
+                    truncated=truncated,
+                    warnings=warnings,
+                    cached=True,
+                    generated_at=utcnow(),
+                )
+
+        observe_ai_cache("conflict_resolve", hit=False)
+        merged_blocks: list[str] = []
+        for start, end in selected:
+            merged_block = await service.resolve_conflict(
+                "".join(lines[start : end + 1]),
+                language=payload.language,
+            )
+            if merged_block is None:
+                observe_llm_call("conflict_resolve", config.provider, "error")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="LLM недоступна. Проверьте настройки.",
+                )
+            merged_blocks.append(merged_block)
+        observe_llm_call("conflict_resolve", config.provider, "ok")
+
+        row = await session.get(AICache, cache_key)
+        if row is None:
+            row = AICache(
+                key=cache_key,
+                kind="conflict_resolve",
+                model=config.model,
+            )
+            session.add(row)
+        row.payload = {"merged": merged_blocks}
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
+    return ConflictResolveResponse(
+        repository_id=repository_id,
+        file_path=payload.file_path,
+        resolved=_assemble_conflict_file(lines, selected, merged_blocks),
+        blocks=len(merged_blocks),
+        provider=config.provider,
+        model=config.model,
+        truncated=truncated,
+        warnings=warnings,
+        cached=False,
+        generated_at=utcnow(),
+    )
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/release-notes",
+    response_model=ReleaseNotesResponse,
+)
+async def generate_repository_release_notes(
+    repository_id: int,
+    payload: ReleaseNotesRequest,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ReleaseNotesResponse:
+    repository = await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    ok, error = await service.availability()
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error or "llm_disabled",
+        )
+    config = await service.resolve()
+    settings = request.app.state.settings
+
+    from_tag = payload.from_tag.strip()
+    to_tag = payload.to_tag.strip() or "HEAD"
+    if not _valid_ref(from_tag) or not _valid_ref(to_tag):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_range",
+        )
+    if not await asyncio.to_thread(ref_exists, repository.path, from_tag):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"tag_not_found:{from_tag}",
+        )
+    if not await asyncio.to_thread(ref_exists, repository.path, to_tag):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"tag_not_found:{to_tag}",
+        )
+
+    max_commits = max(int(settings.ai_release_notes_max_commits), 1)
+    log_result = await asyncio.to_thread(
+        log_between,
+        repository.path,
+        from_tag,
+        to_tag,
+        limit=max_commits,
+    )
+    if not log_result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=log_result.error or "git_log_failed",
+        )
+    commits_text = log_result.stdout.strip()
+    if not commits_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нет коммитов",
+        )
+
+    max_chars = max(int(settings.ai_release_notes_max_chars), 100)
+    truncated = len(commits_text) > max_chars
+    prepared = commits_text
+    warnings: list[str] = []
+    if truncated:
+        prepared = f"{commits_text[:max_chars]}\n[commits truncated]"
+        warnings.append("commits_truncated")
+    commits_count = len(commits_text.splitlines())
+    if commits_count >= max_commits:
+        truncated = True
+        if "commits_truncated" not in warnings:
+            warnings.append("commits_truncated")
+
+    state = {
+        "from_tag": from_tag,
+        "to_tag": to_tag,
+        "commits_sha": hashlib.sha256(prepared.encode("utf-8")).hexdigest(),
+        "language": payload.language,
+    }
+    cache_key = build_cache_key(
+        "release-notes",
+        str(repository_id),
+        state,
+        config.model,
+        settings.ai_prompt_version,
+    )
+    ttl = int(settings.ai_cache_ttl_seconds)
+
+    if not payload.refresh:
+        row = await session.get(AICache, cache_key)
+        cached = _cached_release_notes(
+            repository_id,
+            row,
+            ttl,
+            from_tag,
+            to_tag,
+            config.provider,
+            config.model,
+        )
+        if cached is not None:
+            observe_ai_cache("release_notes", hit=True)
+            response.headers["X-AI-Cache"] = "hit"
+            return cached
+
+    lock = cache_lock(cache_key)
+    async with lock:
+        if not payload.refresh:
+            row = await session.get(AICache, cache_key)
+            cached = _cached_release_notes(
+                repository_id,
+                row,
+                ttl,
+                from_tag,
+                to_tag,
+                config.provider,
+                config.model,
+            )
+            if cached is not None:
+                observe_ai_cache("release_notes", hit=True)
+                response.headers["X-AI-Cache"] = "hit"
+                return cached
+
+        observe_ai_cache("release_notes", hit=False)
+        changelog = await service.generate_release_notes(
+            prepared,
+            language=payload.language,
+        )
+        observe_llm_call(
+            "release_notes",
+            config.provider,
+            "ok" if changelog is not None else "error",
+        )
+        if changelog is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLM недоступна. Проверьте настройки.",
+            )
+
+        row = await session.get(AICache, cache_key)
+        if row is None:
+            row = AICache(
+                key=cache_key,
+                kind="release_notes",
+                model=config.model,
+            )
+            session.add(row)
+        row.payload = {
+            "changelog": changelog,
+            "commits": commits_count,
+            "truncated": truncated,
+            "warnings": warnings,
+        }
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
+    return ReleaseNotesResponse(
+        repository_id=repository_id,
+        from_tag=from_tag,
+        to_tag=to_tag,
+        changelog=changelog,
+        commits=commits_count,
+        provider=config.provider,
+        model=config.model,
+        truncated=truncated,
+        warnings=warnings,
+        cached=False,
         generated_at=utcnow(),
     )
 
@@ -1309,6 +1783,19 @@ async def repository_conflicts(
     repository = await _get_repository(session, repository_id)
     files = await asyncio.to_thread(get_conflicts, repository.path)
     return RepositoryConflictsResponse(repository_id=repository_id, files=files)
+
+
+@router.get(
+    "/repositories/{repository_id}/tags",
+    response_model=RepositoryTagsResponse,
+)
+async def repository_tags(
+    repository_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RepositoryTagsResponse:
+    repository = await _get_repository(session, repository_id)
+    tags = await asyncio.to_thread(list_tags, repository.path)
+    return RepositoryTagsResponse(repository_id=repository_id, tags=tags)
 
 
 @router.get("/repositories/{repository_id}/log", response_model=list[CommitInfoResponse])

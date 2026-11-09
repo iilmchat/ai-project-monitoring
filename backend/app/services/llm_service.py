@@ -48,9 +48,22 @@ CODE_REVIEW_SYSTEM_PROMPT = (
     "уязвимости безопасности и предложи улучшения. Ответь в формате Markdown "
     "(список проблем с указанием строк)."
 )
+CONFLICT_SYSTEM_PROMPT = (
+    "Ты — Senior-разработчик. Ниже приведен фрагмент кода с Git-конфликтом "
+    "(маркеры <<<<<<<, =======, >>>>>>>). Предложи, как объединить этот код, "
+    "чтобы сохранить функциональность обеих веток. Верни ТОЛЬКО итоговый код "
+    "без маркеров."
+)
+RELEASE_NOTES_SYSTEM_PROMPT = (
+    "Ты — Release Manager. Напиши красивый CHANGELOG.md в формате Keep a "
+    "Changelog (Added, Changed, Fixed). Сгруппируй коммиты по смыслу, не "
+    "выдумывай изменения."
+)
 MAX_MESSAGE_CHARS = 2000
 MAX_EXPLANATION_CHARS = 2000
 MAX_CODE_REVIEW_CHARS = 8000
+MAX_CONFLICT_CHARS = 12000
+MAX_RELEASE_NOTES_CHARS = 12000
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +227,41 @@ class LLMService:
                 f"{len(selected)} частей."
             )
         return combined[:MAX_CODE_REVIEW_CHARS]
+
+    async def resolve_conflict(
+        self, conflicted_text: str, *, language: str = "ru"
+    ) -> str | None:
+        """Return merged code for a conflict block (markers removed)."""
+        text = conflicted_text.strip()
+        if not text:
+            return None
+        prompt = text + "\n\n" + _language_instruction(language)
+        return await self._complete(
+            CONFLICT_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=2000,
+            max_chars=MAX_CONFLICT_CHARS,
+        )
+
+    async def generate_release_notes(
+        self, commits: str, *, language: str = "ru"
+    ) -> str | None:
+        """Return a Keep a Changelog Markdown draft for the commit list."""
+        text = commits.strip()
+        if not text:
+            return None
+        prompt = (
+            "Коммиты за релиз:\n"
+            + text
+            + "\n\n"
+            + _language_instruction(language)
+        )
+        return await self._complete(
+            RELEASE_NOTES_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=2000,
+            max_chars=MAX_RELEASE_NOTES_CHARS,
+        )
 
     async def explain_cve(self, cve_id: str, summary: str) -> str | None:
         """Return a short, developer-friendly CVE explanation."""
@@ -677,10 +725,14 @@ __all__ = [
     "AGENT_TASK_SYSTEM_PROMPT",
     "CODE_REVIEW_SYSTEM_PROMPT",
     "COMMIT_SYSTEM_PROMPT",
+    "CONFLICT_SYSTEM_PROMPT",
     "DEVOPS_SYSTEM_PROMPT",
     "MAX_CODE_REVIEW_CHARS",
+    "MAX_CONFLICT_CHARS",
     "MAX_EXPLANATION_CHARS",
     "MAX_MESSAGE_CHARS",
+    "MAX_RELEASE_NOTES_CHARS",
+    "RELEASE_NOTES_SYSTEM_PROMPT",
     "SECURITY_SYSTEM_PROMPT",
     "UNIFICATION_SYSTEM_PROMPT",
     "LLMConfig",

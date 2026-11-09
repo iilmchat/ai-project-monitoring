@@ -8,6 +8,10 @@
 - feat(ai): `POST /api/v1/repositories/{id}/ai/code-review` — ревью `git diff HEAD` с fallback на `git diff --cached`, чанкинг >5000 символов, map-reduce, кэш `ai_cache` по хэшу diff (S53-002).
 - feat(ui): кнопка «AI Code Review» и lazy-модалка `CodeReviewModal` с Markdown, спиннером, кэш/truncated-уведомлениями и копированием (S53-003).
 - docs: SPEC §3.29 (статус code review), GETTING_STARTED/RELEASES/README — кросс-платформенная сборка и AI-ревью (S53-004).
+- feat(ai): `POST /api/v1/repositories/{id}/ai/resolve-conflict` — безопасное чтение файла, разбор `<<<<<<<`-блоков, LLM-объединение, возврат полного кода без записи файла; кэш `ai_cache` (S54-001).
+- feat(ai): `POST /api/v1/repositories/{id}/ai/release-notes` — `git log from..to --oneline`, Keep a Changelog через LLM, кэш; `GET /repositories/{id}/tags` для выбора тегов (S54-002).
+- feat(ui): кнопки «AI Подсказка» в конфликтах и «AI Release Notes» рядом с CI; lazy-модалки с Markdown, выбором тегов и копированием (S54-003).
+- docs: SPEC §3.29, CHANGELOG/RELEASES/README, KI-023 — AI-конфликты требуют ручной проверки (S54-003).
 
 ## [1.1.0] - 2026-11-09
 
