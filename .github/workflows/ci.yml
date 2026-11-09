@@ -20,6 +20,7 @@ jobs:
           
       - name: Check no secrets in diff
         run: |
-          if git log -p | grep -iE "ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9]{20,}"; then
+          # test_security.py intentionally contains a fake ghp_ fixture.
+          if git log -p -- . ':(exclude)backend/tests/test_security.py' | grep -iE "ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9]{20,}"; then
             echo "SECRET DETECTED"; exit 1
           fi
