@@ -1,4 +1,7 @@
-"""Build the PyInstaller sidecar consumed by Tauri (S48-001).
+"""Build the PyInstaller sidecar consumed by Tauri (S48-001, S53-001).
+
+Works on Windows, macOS and Linux: the output name includes the Tauri target
+triple and the platform suffix (``.exe`` only on Windows).
 
 Usage (from ``backend/``):
     pip install -r requirements-desktop.txt
@@ -33,6 +36,16 @@ def target_triple() -> str:
         if machine in {"arm64", "aarch64"}
         else "x86_64-unknown-linux-gnu"
     )
+
+
+def sidecar_suffix() -> str:
+    """Executable suffix for the current OS (Tauri strips it on non-Windows)."""
+    return ".exe" if sys.platform == "win32" else ""
+
+
+def sidecar_binary_name() -> str:
+    """Name expected by Tauri ``externalBin`` for the current target."""
+    return f"iiruchating-backend-{target_triple()}{sidecar_suffix()}"
 
 
 def main() -> int:
@@ -89,19 +102,21 @@ def main() -> int:
     ]
     if sys.platform == "win32":
         args.insert(4, "--noconsole")
-    else:
-        args.insert(4, "--windowed")
+    # macOS/Linux sidecars must stay plain executables: PyInstaller's
+    # --windowed on macOS produces a .app bundle, which Tauri externalBin
+    # cannot launch.
 
     subprocess.run(args, cwd=backend, check=True)
 
-    suffix = ".exe" if sys.platform == "win32" else ""
+    suffix = sidecar_suffix()
     built = output_dir / f"{name}{suffix}"
-    target = output_dir / f"{name}-{target_triple()}{suffix}"
+    target = output_dir / sidecar_binary_name()
     if not built.exists():
         print(f"PyInstaller output not found: {built}", file=sys.stderr)
         return 1
     shutil.copy2(built, target)
     print(f"Sidecar: {target}")
+    print(f"Tauri externalBin: binaries/{name} (target {target_triple()})")
     return 0
 
 

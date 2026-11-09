@@ -1483,10 +1483,10 @@ commit message и CVE (§15), но с обязательным **бюджето�
 
 ```
 route → ContextBuilder → Chunker → LLMService.<feature>()
-                              ├─ per-chunk call (≤ LLM_MAX_DIFF_CHARS)
+                              ├─ per-chunk call (≤ AI_CODE_REVIEW_CHUNK_CHARS)
                               ├─ reduce/merge
                               ├─ output limit
-                              └─ ai_cache (1 час)
+                              └─ ai_cache (AI_CACHE_TTL_SECONDS)
 ```
 
 - **Бюджет:** `LLM_MAX_DIFF_CHARS` (default 10000) — максимум символов
@@ -1499,12 +1499,12 @@ route → ContextBuilder → Chunker → LLMService.<feature>()
   release notes — по диапазонам коммитов. Каждый чанк самодостаточен (путь,
   диапазон строк, заголовок файла).
 - **Map-reduce:** для code review каждый чанк ревьюится отдельно, затем
-  сводный вызов объединяет находки, убирает дубли и ранжирует по
-  critical/high/medium/low. Для release notes — группировка по Keep a
-  Changelog.
+  результаты объединяются по частям с заголовками (без отдельного сводного
+  вызова); для release notes — группировка по Keep a Changelog.
 - **Лимиты:** `AI_CODE_REVIEW_MAX_CHARS` (40000),
-  `AI_CODE_REVIEW_MAX_FILES` (30), `AI_CONFLICT_MAX_CHARS` (20000),
-  `AI_CONFLICT_MAX_BLOCKS` (10), `AI_RELEASE_NOTES_MAX_COMMITS` (500).
+  `AI_CODE_REVIEW_CHUNK_CHARS` (5000), `AI_CODE_REVIEW_MAX_CHUNKS` (8),
+  `AI_CONFLICT_MAX_CHARS` (20000), `AI_CONFLICT_MAX_BLOCKS` (10),
+  `AI_RELEASE_NOTES_MAX_COMMITS` (500).
   При превышении — `truncated=true`, `warnings`, частичный результат.
 - **Выход:** review ≤ 8000, conflict ≤ 12000, release notes ≤ 12000 символов;
   обрезка по границе раздела Markdown.
@@ -1517,14 +1517,15 @@ route → ContextBuilder → Chunker → LLMService.<feature>()
 ```
 POST /repositories/{id}/ai/code-review
   → git diff HEAD --no-color --no-ext-diff --unified=3
+  → fallback git diff --cached (unborn HEAD / пустой HEAD-diff)
   → фильтр бинарных файлов + маскирование секретов
-  → Chunker (file/hunk, ≤ LLM_MAX_DIFF_CHARS)
+  → Chunker (file/hunk, ≤ AI_CODE_REVIEW_CHUNK_CHARS, max AI_CODE_REVIEW_MAX_CHUNKS)
   → для каждого чанка: LLM «баги/безопасность/улучшения»
-  → reduce: сводный Markdown (critical → low)
+  → merge: Markdown по частям (без сводного вызова)
   → ai_cache(code-review:<repo>:<state_hash>:<model>:<prompt>)
 ```
 
-- Пустой diff — `400 no_changes`; LLM не вызывается.
+- Пустой diff (оба варианта) — `400` («Нет изменений»); LLM не вызывается.
 - В промпт попадает только diff и имена файлов; полный файл и история не
   отправляются.
 - Результат — рекомендация; кнопок «применить» нет.

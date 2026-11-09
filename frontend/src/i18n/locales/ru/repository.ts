@@ -165,6 +165,17 @@ export const repository = {
   'repo.commit.copy': 'Скопировать',
   'repo.commit.running': 'Коммит…',
   'repo.commit.submit': 'Выполнить коммит',
+  'repo.codeReview.open': 'AI Code Review',
+  'repo.codeReview.title': 'AI Code Review',
+  'repo.codeReview.hint':
+    'Анализ незакоммиченных изменений. Результат — рекомендация, ничего не применяется автоматически.',
+  'repo.codeReview.loading': 'Анализируем изменения…',
+  'repo.codeReview.error': 'Не удалось выполнить AI-ревью.',
+  'repo.codeReview.cached': 'Результат из кэша: diff не изменился.',
+  'repo.codeReview.truncated':
+    'Diff был обрезан — часть изменений не проанализирована.',
+  'repo.codeReview.copy': 'Скопировать',
+  'repo.codeReview.copyError': 'Не удалось скопировать ревью.',
   'repo.dependencyUpdate.title': 'Обновить зависимости',
   'repo.dependencyUpdate.body':
     'Вы собираетесь обновить зависимости ({ecosystem}). Это может изменить `requirements.txt` / `package.json` и lock-файлы. Продолжить?',

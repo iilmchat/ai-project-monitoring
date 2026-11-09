@@ -43,8 +43,14 @@ AGENT_TASK_SYSTEM_PROMPT = (
     "Ты - Senior-разработчик. Пиши чёткие пошаговые инструкции для другого "
     "AI-агента. Не выполняй действия сам, только составь задачу."
 )
+CODE_REVIEW_SYSTEM_PROMPT = (
+    "Ты — Senior Code Reviewer. Проанализируй этот diff. Найди баги, "
+    "уязвимости безопасности и предложи улучшения. Ответь в формате Markdown "
+    "(список проблем с указанием строк)."
+)
 MAX_MESSAGE_CHARS = 2000
 MAX_EXPLANATION_CHARS = 2000
+MAX_CODE_REVIEW_CHARS = 8000
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +171,49 @@ class LLMService:
             max_tokens=512,
             max_chars=MAX_MESSAGE_CHARS,
         )
+
+    async def review_code(
+        self, diff: str, *, language: str = "ru"
+    ) -> str | None:
+        """Return a Markdown review for a diff, chunking large diffs."""
+        text = diff.strip()
+        if not text:
+            return None
+
+        chunk_limit = max(int(self._settings.ai_code_review_chunk_chars), 500)
+        max_chunks = max(int(self._settings.ai_code_review_max_chunks), 1)
+        chunks = _split_diff(text, chunk_limit)
+        selected = chunks[:max_chunks]
+        reviews: list[tuple[int, str]] = []
+
+        for index, chunk in enumerate(selected, start=1):
+            prompt = (
+                f"Diff (часть {index} из {len(selected)}):\n{chunk}\n\n"
+                + _language_instruction(language)
+            )
+            result = await self._complete(
+                CODE_REVIEW_SYSTEM_PROMPT,
+                prompt,
+                max_tokens=1200,
+                max_chars=MAX_CODE_REVIEW_CHARS,
+            )
+            if result is not None:
+                reviews.append((index, result))
+
+        if not reviews:
+            return None
+        if len(selected) == 1:
+            combined = reviews[0][1]
+        else:
+            combined = "\n\n".join(
+                f"### Часть {index}\n\n{review}" for index, review in reviews
+            )
+        if len(chunks) > len(selected):
+            combined += (
+                "\n\n> Diff был обрезан: проанализированы первые "
+                f"{len(selected)} частей."
+            )
+        return combined[:MAX_CODE_REVIEW_CHARS]
 
     async def explain_cve(self, cve_id: str, summary: str) -> str | None:
         """Return a short, developer-friendly CVE explanation."""
@@ -548,6 +597,45 @@ def _language_instruction(language: str) -> str:
     return "Answer in English." if language == "en" else "Отвечай на русском."
 
 
+def _split_diff(diff: str, limit: int) -> list[str]:
+    """Split a unified diff into chunks of at most ``limit`` characters.
+
+    New files are kept whole when possible; oversized lines are hard-split so a
+    single generated/minified file cannot exceed the context budget.
+    """
+    if limit <= 0 or len(diff) <= limit:
+        return [diff]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    size = 0
+
+    for line in diff.splitlines(keepends=True):
+        if line.startswith("diff --git ") and current and size + len(line) > limit:
+            chunks.append("".join(current))
+            current = [line]
+            size = len(line)
+            continue
+        if size + len(line) > limit and current:
+            chunks.append("".join(current))
+            current = []
+            size = 0
+        while len(line) > limit:
+            if current:
+                chunks.append("".join(current))
+                current = []
+                size = 0
+            chunks.append(line[:limit])
+            line = line[limit:]
+        if line:
+            current.append(line)
+            size += len(line)
+
+    if current:
+        chunks.append("".join(current))
+    return chunks or [diff]
+
+
 def _elapsed_ms(started: float) -> float:
     return round((time.perf_counter() - started) * 1000, 1)
 
@@ -587,8 +675,10 @@ def _clean_message(value: str) -> str:
 
 __all__ = [
     "AGENT_TASK_SYSTEM_PROMPT",
+    "CODE_REVIEW_SYSTEM_PROMPT",
     "COMMIT_SYSTEM_PROMPT",
     "DEVOPS_SYSTEM_PROMPT",
+    "MAX_CODE_REVIEW_CHARS",
     "MAX_EXPLANATION_CHARS",
     "MAX_MESSAGE_CHARS",
     "SECURITY_SYSTEM_PROMPT",

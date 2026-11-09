@@ -108,6 +108,22 @@ def mask_secret(value: str) -> str:
     return f"{value[:4]}****{value[-4:]}"
 
 
+def redact_secrets(text: str) -> str:
+    """Mask known secret patterns in free-form text (e.g. a git diff)."""
+    redacted = text
+    for rule in RULES:
+        def replace(match: re.Match[str], rule: SecretRule = rule) -> str:
+            secret = (
+                match.group(rule.value_group)
+                if rule.value_group is not None
+                else match.group(0)
+            )
+            return match.group(0).replace(secret, mask_secret(secret), 1)
+
+        redacted = rule.pattern.sub(replace, redacted)
+    return redacted
+
+
 def scan_secrets(
     repo_path: str,
     *,
@@ -269,5 +285,6 @@ __all__ = [
     "RULES",
     "SecretRule",
     "mask_secret",
+    "redact_secrets",
     "scan_secrets",
 ]

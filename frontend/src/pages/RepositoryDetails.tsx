@@ -78,6 +78,7 @@ const RECOMMENDATION_KEYS: Record<string, TranslationKey> = {
 }
 
 const AgentTaskModal = lazy(() => import('../components/AgentTaskModal'))
+const CodeReviewModal = lazy(() => import('../components/CodeReviewModal'))
 const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
 
 interface ActionPrompt {
@@ -179,6 +180,7 @@ function RepositoryDetailsContent() {
   const [readme, setReadme] = useState<ReadmeMetadata | null>(null)
   const [readmeOpen, setReadmeOpen] = useState(false)
   const [agentTaskOpen, setAgentTaskOpen] = useState(false)
+  const [codeReviewOpen, setCodeReviewOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitMessage, setCommitMessage] = useState('')
@@ -834,13 +836,22 @@ function RepositoryDetailsContent() {
           {status !== null &&
             status.dirty.modified + status.dirty.staged > 0 &&
             llmEnabled && (
-              <button
-                type="button"
-                onClick={() => void openCommitModal()}
-                className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
-              >
-                {t('repo.commit.generate')}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void openCommitModal()}
+                  className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+                >
+                  {t('repo.commit.generate')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCodeReviewOpen(true)}
+                  className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+                >
+                  {t('repo.codeReview.open')}
+                </button>
+              </>
             )}
           <button
             type="button"
@@ -2216,6 +2227,15 @@ function RepositoryDetailsContent() {
           <AgentTaskModal
             repositoryId={repositoryId}
             onClose={() => setAgentTaskOpen(false)}
+          />
+        </Suspense>
+      )}
+
+      {codeReviewOpen && (
+        <Suspense fallback={null}>
+          <CodeReviewModal
+            repositoryId={repositoryId}
+            onClose={() => setCodeReviewOpen(false)}
           />
         </Suspense>
       )}

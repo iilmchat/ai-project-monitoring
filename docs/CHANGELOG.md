@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(ci): `release-desktop.yml` — матрица Windows/macOS/Linux, `.msi`/`.exe`/`.dmg`/`.AppImage`, системные зависимости Linux/macOS и сборка sidecar под целевую ОС (S53-001).
+- feat(ai): `POST /api/v1/repositories/{id}/ai/code-review` — ревью `git diff HEAD` с fallback на `git diff --cached`, чанкинг >5000 символов, map-reduce, кэш `ai_cache` по хэшу diff (S53-002).
+- feat(ui): кнопка «AI Code Review» и lazy-модалка `CodeReviewModal` с Markdown, спиннером, кэш/truncated-уведомлениями и копированием (S53-003).
+- docs: SPEC §3.29 (статус code review), GETTING_STARTED/RELEASES/README — кросс-платформенная сборка и AI-ревью (S53-004).
+
 ## [1.1.0] - 2026-11-09
 
 Seamless Updates & Onboarding: мастер первичной настройки, файловые логи

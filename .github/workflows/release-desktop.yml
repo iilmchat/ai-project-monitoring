@@ -6,11 +6,24 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   release:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+    name: Release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: msi,nsis
+          - os: macos-latest
+            bundles: dmg
+          - os: ubuntu-latest
+            bundles: appimage
 
     steps:
       - name: Checkout repository
@@ -20,42 +33,64 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-desktop.txt
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-          run_install: false
-
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-          pip install pyinstaller
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install --quiet pkg-config
 
-      - name: Build Python Sidecar
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf \
+            libgtk-3-dev \
+            build-essential \
+            libssl-dev \
+            pkg-config
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements-desktop.txt
+
+      - name: Build Python sidecar
         run: python backend/build_sidecar.py
 
-      - name: Install Frontend dependencies
-        run: pnpm --dir frontend install
-
-      - name: Build and Release Tauri App
+      - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD }}
         with:
+          projectPath: frontend
           tagName: ${{ github.ref_name }}
           releaseName: 'IIRuchating ${{ github.ref_name }}'
-          releaseBody: 'Автоматическая сборка приложения.'
+          releaseBody: 'Автоматическая сборка приложения для Windows, macOS и Linux (S53).'
           releaseDraft: false
           prerelease: false
+          args: --bundles ${{ matrix.bundles }}

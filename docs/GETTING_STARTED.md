@@ -349,3 +349,22 @@ Workflow передаёт их в `tauri-action` как `TAURI_SIGNING_PRIVATE_K
 
 Проверить сборку без тега можно вручную: **Actions → Release Desktop → Run workflow**
 (`workflow_dispatch`).
+
+### 9.3. Кросс-платформенная матрица (S53)
+
+Начиная с Sprint 53 workflow собирает релиз в матрице:
+
+| ОС | Runner | Артефакты |
+|----|--------|-----------|
+| Windows | `windows-latest` | `.msi`, NSIS `.exe` |
+| macOS | `macos-latest` | `.dmg` (Apple Silicon) |
+| Linux | `ubuntu-latest` | `.AppImage` |
+
+Для Linux CI устанавливает `libwebkit2gtk-4.1-dev`,
+`libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`, `libxdo-dev`,
+`libgtk-3-dev`, `build-essential`, `libssl-dev`; для macOS — `pkg-config`.
+Python-sidecar (`backend/build_sidecar.py`) собирается под target triple каждой
+ОС (`.exe` только на Windows). Подпись обновлений — те же Secrets
+`TAURI_PRIVATE_KEY`/`TAURI_KEY_PASSWORD` (или `TAURI_SIGNING_*`).
+macOS-сборка без Apple Developer ID вызывает предупреждение Gatekeeper — см.
+KI-024.

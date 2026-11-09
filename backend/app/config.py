@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     llm_allow_remote: bool = False
     ai_cache_ttl_seconds: int = 604800
     ai_prompt_version: str = "v1"
+    ai_code_review_max_chars: int = 40000
+    ai_code_review_chunk_chars: int = 5000
+    ai_code_review_max_chunks: int = 8
     gigachat_oauth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     gigachat_api_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
     gigachat_scope: str = "GIGACHAT_API_PERS"

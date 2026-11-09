@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.db.session import get_session
-from app.git.command_backend import get_conflicts, get_worktree_diff
+from app.git.command_backend import get_conflicts, get_staged_diff, get_worktree_diff
 from app.git.pygit2_backend import (
     GitStatusError,
     compare_refs,
@@ -45,6 +45,8 @@ from app.schemas.action import (
 from app.schemas.ai import (
     AgentTask,
     AgentTaskRequest,
+    CodeReviewRequest,
+    CodeReviewResponse,
     CommitMessageSuggestion,
     CveExplainRequest,
     CveExplanation,
@@ -101,6 +103,7 @@ from app.services.readme_service import (
     read_readme,
 )
 from app.services.recommendation_service import generate_recommendations
+from app.services.secret_scanner import redact_secrets
 from app.services.security_service import SecurityService
 from app.services.status_service import StatusService
 
@@ -551,6 +554,165 @@ def _payload_int(value: object) -> int:
         except ValueError:
             return 0
     return 0
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/code-review",
+    response_model=CodeReviewResponse,
+)
+async def review_repository_code(
+    repository_id: int,
+    payload: CodeReviewRequest,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CodeReviewResponse:
+    repository = await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    ok, error = await service.availability()
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error or "llm_disabled",
+        )
+    config = await service.resolve()
+
+    diff_result = await asyncio.to_thread(
+        get_worktree_diff, repository.path, 10
+    )
+    original = diff_result.stdout if diff_result.ok else ""
+    if not original.strip():
+        staged_result = await asyncio.to_thread(
+            get_staged_diff, repository.path, 10
+        )
+        if staged_result.ok and staged_result.stdout.strip():
+            original = staged_result.stdout
+    if not original.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нет изменений",
+        )
+
+    settings = request.app.state.settings
+    max_chars = max(int(settings.ai_code_review_max_chars), 100)
+    truncated = len(original) > max_chars
+    prepared = original
+    warnings: list[str] = []
+    if truncated:
+        prepared = f"{original[:max_chars]}\n[diff truncated]"
+        warnings.append("diff_truncated")
+    prepared = redact_secrets(prepared)
+    files_reviewed = _count_diff_files(original)
+
+    state = {
+        "diff_sha": hashlib.sha256(prepared.encode("utf-8")).hexdigest(),
+        "language": payload.language,
+    }
+    prompt_version = settings.ai_prompt_version
+    cache_key = build_cache_key(
+        "code-review",
+        str(repository_id),
+        state,
+        config.model,
+        prompt_version,
+    )
+    ttl = int(settings.ai_cache_ttl_seconds)
+
+    if not payload.refresh:
+        row = await session.get(AICache, cache_key)
+        cached = _cached_code_review_from_row(
+            repository_id, row, ttl, config.provider, config.model
+        )
+        if cached is not None:
+            observe_ai_cache("code_review", hit=True)
+            response.headers["X-AI-Cache"] = "hit"
+            return cached
+
+    lock = cache_lock(cache_key)
+    async with lock:
+        if not payload.refresh:
+            row = await session.get(AICache, cache_key)
+            cached = _cached_code_review_from_row(
+                repository_id, row, ttl, config.provider, config.model
+            )
+            if cached is not None:
+                observe_ai_cache("code_review", hit=True)
+                response.headers["X-AI-Cache"] = "hit"
+                return cached
+
+        observe_ai_cache("code_review", hit=False)
+        review = await service.review_code(prepared, language=payload.language)
+        observe_llm_call(
+            "code_review",
+            config.provider,
+            "ok" if review is not None else "error",
+        )
+        if review is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLM недоступна. Проверьте настройки.",
+            )
+
+        cached_payload = {
+            "review": review,
+            "truncated": truncated,
+            "diff_chars": len(original),
+            "files_reviewed": files_reviewed,
+            "warnings": warnings,
+        }
+        row = await session.get(AICache, cache_key)
+        if row is None:
+            row = AICache(
+                key=cache_key,
+                kind="code_review",
+                model=config.model,
+            )
+            session.add(row)
+        row.payload = cached_payload
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
+    return CodeReviewResponse(
+        repository_id=repository_id,
+        review=review,
+        provider=config.provider,
+        model=config.model,
+        files_reviewed=files_reviewed,
+        diff_chars=len(original),
+        truncated=truncated,
+        warnings=warnings,
+        cached=False,
+        generated_at=utcnow(),
+    )
+
+
+def _cached_code_review_from_row(
+    repository_id: int,
+    row: AICache | None,
+    ttl: int,
+    provider: str,
+    model: str,
+) -> CodeReviewResponse | None:
+    if row is None or not cache_is_fresh(row.checked_at, ttl):
+        return None
+    payload = row.payload if isinstance(row.payload, dict) else {}
+    review = payload.get("review")
+    if not isinstance(review, str) or not review:
+        return None
+    warnings = payload.get("warnings")
+    return CodeReviewResponse(
+        repository_id=repository_id,
+        review=review,
+        provider=provider,
+        model=row.model or model,
+        files_reviewed=_payload_int(payload.get("files_reviewed")),
+        diff_chars=_payload_int(payload.get("diff_chars")),
+        truncated=bool(payload.get("truncated", False)),
+        warnings=[str(item) for item in warnings] if isinstance(warnings, list) else [],
+        cached=True,
+        generated_at=utcnow(),
+    )
 
 
 @router.post(

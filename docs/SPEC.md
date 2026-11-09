@@ -7,8 +7,8 @@ AI §3.18 (commit message — Sprint 32, CVE explain — Sprint 33), global
 analytics §3.19 и dependency updates §3.20 — реализованы в Sprint 32–34.
 §3.26 (RAG-поиск по коду) и §3.27 (GigaChat OAuth) реализованы в v0.9.0
 (Sprints 43–44). §3.28 (single-user auth) — реализовано в v1.0.0 (Sprint 47);
-§3.29 (AI code review / conflict resolver / release notes) и §3.30
-(conversational RAG) — **план v1.2.0** (Sprints 53–55);
+§3.29 (AI Code Review) — реализовано в Sprint 53; conflict resolver/release
+notes и §3.30 (conversational RAG) — **план v1.2.0** (Sprints 54–55);
 см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 
 **Версия:** v1.1.0 «Seamless Updates & Onboarding» · **Планируется:** v1.2.0 · **Обновлено:** 2026-11-09
@@ -1461,10 +1461,11 @@ users(
 
 ---
 
-### 3.29. AI code review, conflict resolver & release notes (v1.2.0 — план)
+### 3.29. AI code review, conflict resolver & release notes (v1.2.0)
 
-> **Статус:** план (Sprint 52); реализация — Sprints 53–54. Контракты ниже —
-> обязательные для реализации; см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
+> **Статус:** AI Code Review реализован в Sprint 53; conflict resolver и
+> release notes — план Sprint 54. Контракты ниже — обязательные для
+> реализации; см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
 > Все эндпоинты **read-only**: читают diff/файлы/историю и возвращают текст, но
 > не пишут файлы, не меняют индекс и `.git`.
 
@@ -1492,10 +1493,13 @@ users(
 {
   "repository_id": 1,
   "review": "## Потенциальные баги\n- ...",
+  "source": "llm",
+  "provider": "lmstudio",
   "model": "qwen2.5-coder-7b-instruct",
   "cached": false,
   "generated_at": "2026-11-09T12:00:00Z",
   "files_reviewed": 4,
+  "diff_chars": 1234,
   "truncated": false,
   "warnings": []
 }
@@ -1504,18 +1508,19 @@ users(
 **Code review — правила:**
 
 - Diff: `git diff HEAD --no-color --no-ext-diff --unified=3` (staged +
-  unstaged); бинарные файлы пропускаются.
-- Пустой diff → `400 no_changes`.
-- Чанкинг: по файлам/ханкам, размер чанка ≤ `LLM_MAX_DIFF_CHARS`; общий лимит
-  `AI_CODE_REVIEW_MAX_CHARS` (default 40000), максимум
-  `AI_CODE_REVIEW_MAX_FILES` (default 30). При превышении — map-reduce:
-  ревью по чанкам → сводка, `truncated=true`, `warnings=["diff_truncated"]`.
-- Промпт: Senior-разработчик; найти баги, проблемы безопасности, предложить
-  улучшения; ответ — Markdown.
-- Ответ ограничен `AI_REVIEW_MAX_OUTPUT_CHARS` (default 8000).
-- Кэш `ai_cache` 1 час:
+  unstaged); если HEAD недоступен/пуст — fallback `git diff --cached`;
+  бинарные файлы пропускаются. Если оба пусты — `400` («Нет изменений»).
+- Чанкинг: diff режется по файлам/ханкам на части ≤
+  `AI_CODE_REVIEW_CHUNK_CHARS` (default 5000), максимум
+  `AI_CODE_REVIEW_MAX_CHUNKS` (default 8). Общий лимит
+  `AI_CODE_REVIEW_MAX_CHARS` (default 40000); при превышении —
+  `truncated=true`, `warnings=["diff_truncated"]`.
+- Промпт: Senior Code Reviewer; найти баги, проблемы безопасности, предложить
+  улучшения; ответ — Markdown со ссылками на файлы/строки.
+- Ответ ограничен 8000 символов (константа `MAX_CODE_REVIEW_CHARS`).
+- Кэш `ai_cache` с TTL `AI_CACHE_TTL_SECONDS` (default 604800):
   `code-review:<repo_id>:<state_hash>:<model>:<prompt_version>`;
-  `refresh=true` обходит кэш.
+  `state_hash` включает diff и язык; `refresh=true` обходит кэш.
 - В LLM не отправляются файлы вне diff, `.env`, ключи; секреты в diff
   маскируются.
 

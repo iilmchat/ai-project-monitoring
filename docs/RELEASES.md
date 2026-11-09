@@ -4,6 +4,27 @@
 
 ---
 
+## Спринт 53: Cross-Platform CI & AI Code Review (v1.2.0)
+
+**Дата:** 2026-11-09 · **Статус:** ✅ Завершён
+
+- [x] **S53-001. Cross-Platform CI:** матрица `windows-latest` / `macos-latest` /
+  `ubuntu-latest`; Windows `.msi`/`.exe`, macOS `.dmg`, Linux `.AppImage`;
+  Linux-зависимости (`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`,
+  `librsvg2-dev`, `patchelf`, `libxdo-dev`), macOS `pkg-config`; sidecar
+  собирается под target triple каждой ОС.
+- [x] **S53-002. AI Code Review:** `POST /api/v1/repositories/{id}/ai/code-review`,
+  `LLMService.review_code()`, чанкинг diff >5000 символов, map-reduce, кэш
+  `ai_cache` по хэшу diff, fallback `git diff --cached`.
+- [x] **S53-003. UI:** кнопка «AI Code Review» рядом с «Сгенерировать коммит»,
+  lazy-модалка `CodeReviewModal` с Markdown, спиннером и копированием.
+- [x] **S53-004. Документация:** SPEC §3.29, CHANGELOG, RELEASES,
+  GETTING_STARTED, README.
+- **Проверки:** backend 267 (266 passed, 1 skipped), frontend 55 unit,
+  `ruff`/`mypy`, `pnpm build` и budget-check — см. отчёт спринта.
+
+---
+
 ## Релиз v1.1.0 — «Seamless Updates & Onboarding»
 
 **Дата:** 2026-11-09 · **Тег:** `v1.1.0`

@@ -129,18 +129,20 @@ macOS и Linux.
 **Поведение:**
 
 - Diff: `git diff HEAD --no-color --no-ext-diff --unified=3` (staged +
-  unstaged); бинарные файлы пропускаются.
-- Пустой diff → `400 no_changes`.
-- Чанкинг: по файлам/ханкам, размер чанка ≤ `LLM_MAX_DIFF_CHARS`; общий лимит
-  `AI_CODE_REVIEW_MAX_CHARS` (default 40000), максимум
-  `AI_CODE_REVIEW_MAX_FILES` (default 30). При превышении — map-reduce:
-  ревью по чанкам → сводка, `truncated=true`.
-- Промпт: «Ты — Senior-разработчик. Проведи код-ревью этих изменений. Укажи
-  потенциальные баги, проблемы безопасности и предложи улучшения».
-- Ответ — Markdown; максимум `AI_REVIEW_MAX_OUTPUT_CHARS` (default 8000).
-- Кэш `ai_cache` 1 час: `code-review:<repo_id>:<state_hash>:<model>:<prompt_version>`;
+  unstaged); если HEAD недоступен/пуст — fallback `git diff --cached`;
+  бинарные файлы пропускаются.
+- Пустой diff (оба варианта) → `400` («Нет изменений»).
+- Чанкинг: по файлам/ханкам, размер чанка ≤ `AI_CODE_REVIEW_CHUNK_CHARS`
+  (default 5000), максимум `AI_CODE_REVIEW_MAX_CHUNKS` (default 8); общий лимит
+  `AI_CODE_REVIEW_MAX_CHARS` (default 40000). При превышении — `truncated=true`.
+- Промпт: «Ты — Senior Code Reviewer. Проанализируй этот diff. Найди баги,
+  уязвимости безопасности и предложи улучшения. Ответь в формате Markdown
+  (список проблем с указанием строк)».
+- Ответ — Markdown; максимум 8000 символов (`MAX_CODE_REVIEW_CHARS`).
+- Кэш `ai_cache` с TTL `AI_CACHE_TTL_SECONDS` (default 604800):
+  `code-review:<repo_id>:<state_hash>:<model>:<prompt_version>`;
   `refresh=true` обходит кэш.
-- Ошибки: `400 no_changes`, `404 repository_not_found`, `409 llm_disabled` /
+- Ошибки: `400` (нет изменений), `404 repository_not_found`, `409 llm_disabled` /
   `llm_remote_not_allowed`, `503 llm_unavailable`, `504 llm_timeout`.
 - Read-only: никаких `git add/commit`, записи в файлы или индекс.
 

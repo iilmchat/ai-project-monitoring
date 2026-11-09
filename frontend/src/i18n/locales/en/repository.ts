@@ -166,6 +166,17 @@ export const repository = {
   'repo.commit.copy': 'Copy',
   'repo.commit.running': 'Committing…',
   'repo.commit.submit': 'Create commit',
+  'repo.codeReview.open': 'AI Code Review',
+  'repo.codeReview.title': 'AI Code Review',
+  'repo.codeReview.hint':
+    'Review of uncommitted changes. The result is advisory and is not applied automatically.',
+  'repo.codeReview.loading': 'Analyzing changes…',
+  'repo.codeReview.error': 'Could not run the AI review.',
+  'repo.codeReview.cached': 'Cached result: the diff has not changed.',
+  'repo.codeReview.truncated':
+    'The diff was truncated — some changes were not analyzed.',
+  'repo.codeReview.copy': 'Copy',
+  'repo.codeReview.copyError': 'Could not copy the review.',
   'repo.dependencyUpdate.title': 'Update dependencies',
   'repo.dependencyUpdate.body':
     'You are about to update dependencies ({ecosystem}). This may change `requirements.txt` / `package.json` and lock files. Continue?',

@@ -24,6 +24,29 @@ class CommitMessageSuggestion(BaseModel):
     generated_at: datetime
 
 
+class CodeReviewRequest(BaseModel):
+    """Payload for ``POST /repositories/{id}/ai/code-review``."""
+
+    language: Literal["ru", "en"] = "ru"
+    refresh: bool = False
+
+
+class CodeReviewResponse(BaseModel):
+    """Result of AI code review."""
+
+    repository_id: int
+    review: str
+    source: Literal["llm"] = "llm"
+    provider: str
+    model: str
+    files_reviewed: int = Field(default=0, ge=0)
+    diff_chars: int = Field(default=0, ge=0)
+    truncated: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    cached: bool = False
+    generated_at: datetime
+
+
 class CveExplainRequest(BaseModel):
     """Payload for ``POST /repositories/{id}/ai/cve-explain``."""
 
@@ -81,6 +104,8 @@ class LLMTestResponse(BaseModel):
 __all__ = [
     "AgentTask",
     "AgentTaskRequest",
+    "CodeReviewRequest",
+    "CodeReviewResponse",
     "CommitMessageSuggestion",
     "CveExplainRequest",
     "CveExplanation",

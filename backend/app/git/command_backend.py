@@ -180,6 +180,27 @@ def get_worktree_diff(
     )
 
 
+def get_staged_diff(
+    repository_path: str | Path,
+    timeout: float = 10,
+) -> CommandResult:
+    """Return staged changes only (read-only).
+
+    Used as a fallback when ``git diff HEAD`` fails on an unborn branch.
+    """
+    return run_git(
+        [
+            "diff",
+            "--cached",
+            "--no-color",
+            "--no-ext-diff",
+            "--unified=3",
+        ],
+        cwd=repository_path,
+        timeout=timeout,
+    )
+
+
 def commit_dates(
     repository_path: str | Path,
     since: str,

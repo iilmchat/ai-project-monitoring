@@ -13,6 +13,7 @@ import type {
   CodeSearchResponse,
   CommitInfo,
   CommitMessageSuggestion,
+  CodeReviewResponse,
   CveExplanation,
   CompareResponse,
   ConflictsResponse,
@@ -237,6 +238,16 @@ export async function generateCommitMessage(
   return request<CommitMessageSuggestion>(
     `/repositories/${repositoryId}/ai/commit-message`,
     { method: 'POST' },
+  )
+}
+
+export async function reviewCode(
+  repositoryId: number,
+  language: 'ru' | 'en',
+): Promise<CodeReviewResponse> {
+  return request<CodeReviewResponse>(
+    `/repositories/${repositoryId}/ai/code-review`,
+    { method: 'POST', body: { language } },
   )
 }
 

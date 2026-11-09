@@ -417,6 +417,20 @@ export interface CommitMessageSuggestion {
   generated_at: string
 }
 
+export interface CodeReviewResponse {
+  repository_id: number
+  review: string
+  source: 'llm'
+  provider: string
+  model: string
+  files_reviewed: number
+  diff_chars: number
+  truncated: boolean
+  warnings: string[]
+  cached: boolean
+  generated_at: string
+}
+
 export interface CveExplanation {
   explanation: string
   cached: boolean
