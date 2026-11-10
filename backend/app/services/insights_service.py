@@ -37,6 +37,8 @@ _IGNORED_FILENAMES = frozenset(
         "cargo.lock",
         "composer.lock",
         "go.sum",
+        "packages.lock.json",
+        "project.assets.json",
     }
 )
 _IGNORED_SUFFIXES = (
@@ -59,6 +61,10 @@ _IGNORED_DIRS = frozenset(
         "dist",
         "build",
         "target",
+        "bin",
+        "obj",
+        ".vs",
+        "packages",
         "__pycache__",
     }
 )

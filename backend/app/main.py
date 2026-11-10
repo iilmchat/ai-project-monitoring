@@ -18,6 +18,7 @@ from app.middleware import AuthMiddleware, RequestLoggingMiddleware
 from app.providers.gitflic_client import GitFlicClient
 from app.providers.github_client import GitHubClient
 from app.providers.npm_client import NpmClient
+from app.providers.nuget_client import NuGetClient
 from app.providers.osv_client import OsvClient
 from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
@@ -106,10 +107,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     pypi_client = PypiClient(timeout_seconds=resolved.dependency_http_timeout)
     npm_client = NpmClient(timeout_seconds=resolved.dependency_http_timeout)
+    nuget_client = NuGetClient(timeout_seconds=resolved.dependency_http_timeout)
     dependency_service = DependencyService(
         session_factory,
         pypi_client,
         npm_client,
+        nuget_client,
         cache_ttl_seconds=resolved.dependency_cache_ttl_seconds,
         concurrency=resolved.dependency_check_concurrency,
         manifest_max_depth=resolved.dependency_manifest_max_depth,
@@ -237,6 +240,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.docker_service = docker_service
     application.state.pypi_client = pypi_client
     application.state.npm_client = npm_client
+    application.state.nuget_client = nuget_client
     application.state.dependency_service = dependency_service
     application.state.osv_client = osv_client
     application.state.security_service = security_service

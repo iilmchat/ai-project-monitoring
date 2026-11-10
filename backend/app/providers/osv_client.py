@@ -21,7 +21,7 @@ OSV_API = "https://api.osv.dev"
 USER_AGENT = "IIRuchating/0.6"
 MAX_BATCH_SIZE = 100
 
-OsvEcosystem = Literal["PyPI", "npm"]
+OsvEcosystem = Literal["PyPI", "npm", "NuGet"]
 OsvStatus = Literal["ok", "rate_limited", "timeout", "unavailable"]
 
 _CVSS_PREFIX = "CVSS:3."

@@ -321,7 +321,7 @@ export async function getDockerStatus(
 
 export async function getDependencies(
   repositoryId: number,
-  ecosystem: 'python' | 'node' | 'all' = 'all',
+  ecosystem: 'python' | 'node' | 'dotnet' | 'all' = 'all',
   refresh = false,
 ): Promise<DependencyReport> {
   return request<DependencyReport>(`/repositories/${repositoryId}/dependencies`, {
@@ -331,7 +331,7 @@ export async function getDependencies(
 
 export async function updateDependencies(
   repositoryId: number,
-  ecosystem: 'python' | 'node',
+  ecosystem: 'python' | 'node' | 'dotnet',
 ): Promise<ActionLog> {
   return request<ActionLog>(
     `/repositories/${repositoryId}/actions/update-dependencies`,

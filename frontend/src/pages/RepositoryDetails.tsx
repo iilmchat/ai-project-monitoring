@@ -162,9 +162,9 @@ function RepositoryDetailsContent() {
   const [dependenciesLoading, setDependenciesLoading] = useState(!invalidId)
   const [dependenciesRefreshing, setDependenciesRefreshing] = useState(false)
   const [dependenciesError, setDependenciesError] = useState<string | null>(null)
-  const [dependencyEcosystem, setDependencyEcosystem] = useState<'python' | 'node'>(
-    'python',
-  )
+  const [dependencyEcosystem, setDependencyEcosystem] = useState<
+    'python' | 'node' | 'dotnet'
+  >('python')
   const [dependencyUpdateOpen, setDependencyUpdateOpen] = useState(false)
   const [dependencyUpdateRunning, setDependencyUpdateRunning] = useState(false)
   const [dependencyUpdateError, setDependencyUpdateError] = useState<string | null>(
@@ -301,15 +301,18 @@ function RepositoryDetailsContent() {
         if (active) {
           setDependencies(report)
           setDependenciesError(null)
-          const python = report.ecosystems.find((item) => item.ecosystem === 'python')
-          const node = report.ecosystems.find((item) => item.ecosystem === 'node')
-          if (
-            python?.status === 'no_manifest' &&
-            node !== undefined &&
-            node.status !== 'no_manifest'
-          ) {
-            setDependencyEcosystem('node')
-          }
+          setDependencyEcosystem((current) => {
+            const selected = report.ecosystems.find(
+              (item) => item.ecosystem === current,
+            )
+            if (selected && selected.status !== 'no_manifest') {
+              return current
+            }
+            return (
+              report.ecosystems.find((item) => item.status !== 'no_manifest')
+                ?.ecosystem ?? current
+            )
+          })
         }
       })
       .catch(() => {
@@ -753,6 +756,9 @@ function RepositoryDetailsContent() {
       projects: string[]
     }[] = []
     for (const ecosystem of dependencies.ecosystems) {
+      if (ecosystem.ecosystem === 'dotnet') {
+        continue
+      }
       const globalPackages = globalDependencies.ecosystems[ecosystem.ecosystem] ?? []
       for (const packageItem of ecosystem.packages) {
         if (!packageItem.current) {
@@ -1386,6 +1392,18 @@ function RepositoryDetailsContent() {
               >
                 Node
               </button>
+              <button
+                type="button"
+                onClick={() => setDependencyEcosystem('dotnet')}
+                aria-pressed={dependencyEcosystem === 'dotnet'}
+                className={`rounded-md px-3 py-1 text-sm font-medium ${
+                  dependencyEcosystem === 'dotnet'
+                    ? 'bg-primary text-white'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                C# / .NET
+              </button>
               <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
                 {t('repo.dependencies.totalOutdated', {
                   count: dependencies?.summary.outdated ?? 0,
@@ -1411,7 +1429,9 @@ function RepositoryDetailsContent() {
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       {selectedDependencies.manifest === 'package.json'
                         ? t('repo.dependencies.packageJsonMissing')
-                        : t('repo.dependencies.requirementsMissing')}
+                        : selectedDependencies.ecosystem === 'dotnet'
+                          ? t('repo.dependencies.dotnetMissing')
+                          : t('repo.dependencies.requirementsMissing')}
                     </p>
                   )}
                   {selectedDependencies.status === 'parse_error' && (
@@ -1465,6 +1485,16 @@ function RepositoryDetailsContent() {
                       </span>
                     </p>
                   )}
+                  {selectedDependencies.manifests?.some((path) =>
+                    path.toLowerCase().endsWith('directory.packages.props'),
+                  ) && (
+                    <span
+                      data-testid="central-packages-badge"
+                      className="mt-2 inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-medium text-sky-800 ring-1 ring-inset ring-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:ring-sky-800"
+                    >
+                      {t('repo.dependencies.centralPackages')}
+                    </span>
+                  )}
                   {selectedDependencies.packages.length > 0 ? (
                     <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
                       {selectedDependencies.packages.map((item) => (
@@ -1489,6 +1519,7 @@ function RepositoryDetailsContent() {
                       source: dependencySourceLabel(
                         selectedDependencies.source,
                         t,
+                        selectedDependencies.ecosystem,
                       ),
                       outdated: dependencies?.summary.outdated ?? 0,
                     })}
@@ -2363,7 +2394,7 @@ function DependencyPackageRow({
   t,
 }: {
   item: DependencyPackage
-  ecosystem: 'python' | 'node'
+  ecosystem: 'python' | 'node' | 'dotnet'
   t: Translate
 }) {
   const statusClass =
@@ -2381,7 +2412,9 @@ function DependencyPackageRow({
   const projectUrl =
     ecosystem === 'python'
       ? `https://pypi.org/project/${encodeURIComponent(item.name)}/`
-      : `https://www.npmjs.com/package/${encodeURIComponent(item.name)}`
+      : ecosystem === 'node'
+        ? `https://www.npmjs.com/package/${encodeURIComponent(item.name)}`
+        : `https://www.nuget.org/packages/${encodeURIComponent(item.name)}`
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
       <div className="min-w-0">
@@ -2393,6 +2426,11 @@ function DependencyPackageRow({
         >
           {item.name}
         </a>
+        {item.is_dev && (
+          <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+            {t('repo.dependencies.dev')}
+          </span>
+        )}
         <p
           className="truncate font-mono text-[11px] text-slate-500 dark:text-slate-400"
           title={item.manifest_path ? `${item.declared} · ${item.manifest_path}` : item.declared}
@@ -2440,10 +2478,11 @@ function dependencyErrorMessage(code: string | null, t: Translate): string {
 function dependencySourceLabel(
   source: DependencyEcosystemReport['source'],
   t: Translate,
+  ecosystem: DependencyEcosystemReport['ecosystem'] = 'python',
 ): string {
   switch (source) {
     case 'registry':
-      return 'PyPI'
+      return ecosystem === 'node' ? 'npm' : ecosystem === 'dotnet' ? 'NuGet' : 'PyPI'
     case 'cache':
       return t('repo.dependencySource.cache')
     case 'mixed':
@@ -2451,7 +2490,7 @@ function dependencySourceLabel(
     case 'stale_cache':
       return t('repo.dependencySource.staleCache')
     default:
-      return '—'
+      return '-'
   }
 }
 

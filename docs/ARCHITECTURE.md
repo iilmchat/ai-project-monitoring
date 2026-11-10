@@ -550,7 +550,7 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 
 ---
 
-## 11. Dependency Management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57 — план)
+## 11. Dependency Management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57 — реализовано)
 
 **Задача.** Показать, какие объявленные зависимости устарели, не изменяя
 репозиторий и не запуская пакетные менеджеры.
@@ -558,8 +558,8 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 **Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25;
 Node (`package.json`, npm) — в Sprint 26. В v0.8.0 (Sprint 35) добавлен
 рекурсивный поиск вложенных манифестов (`backend/`, `frontend/`, `apps/*`).
-`ecosystem=all` объединяет отчёты. В v1.3.0 (Sprint 57 — план) добавляется
-C#/.NET: `*.csproj`, `Directory.Packages.props`, `packages.config`, NuGet;
+`ecosystem=all` объединяет отчёты. В v1.3.0 (Sprint 57) добавлен C#/.NET:
+`*.csproj`, `Directory.Packages.props`, `packages.config`, NuGet;
 детали — §29.
 
 ### 11.1. Поток
@@ -615,11 +615,11 @@ GET /repositories/{id}/dependencies
   имя URL-encode.
 - npm: `GET https://registry.npmjs.org/{name}/latest`; scoped-имя кодируется
   (`@scope%2Fname`), latest = `version`.
-- NuGet (v1.3.0 — план): `GET
+- NuGet (v1.3.0 — реализовано): `GET
   https://api.nuget.org/v3-flatcontainer/{id-lower}/index.json`; latest —
   максимальная stable-версия SemVer 2.0.0, prerelease игнорируются.
-- Все три клиента реализуют общий контракт `get_latest(name) ->
-  RegistryResult` и используют один HTTP-layer/cache; `DependencyService`
+- Все три клиента реализуют общий контракт `get_latest_version(name) ->
+  PackageVersionResult` и используют один HTTP-layer/cache; `DependencyService`
   не зависит от формата конкретного реестра.
 - Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/0.5`.
 - 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `not_found`
@@ -690,7 +690,7 @@ GET /repositories/{id}/security
 
 - Клиент `app/providers/osv_client.py`: `POST /v1/querybatch` с массивом
   `queries: [{package: {name, ecosystem}, version}]`, батчи по 100 запросов.
-- Ecosystem: `PyPI` / `npm` / `NuGet` (v1.3.0 — план; имена case-insensitive).
+- Ecosystem: `PyPI` / `npm` / `NuGet` (v1.3.0, реализовано; имена case-insensitive).
 - Timeout 10 с, concurrency ≤ 4, backoff 0.5/1/2 с на 429/5xx (max 3 попытки).
 - Ответ нормализуется в `{osv_id, aliases, summary, severity, cvss, fixed}`
   сразу на границе провайдера; сервис не работает с сырым JSON OSV.
@@ -1109,11 +1109,10 @@ POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
   (запускается как `python -m pip ...`). `pip` меняет окружение backend.
 - Node: `pnpm-lock.yaml` → `pnpm update`; иначе `package.json` → `npm update`.
   Команда может изменить lockfile/`package.json`.
-- .NET (v1.3.0 — план): `dotnet add <project> package <id> --version <version>
-  --no-restore`; `restore`/`build`/`publish` не запускаются. Read-only
-  подсказка `dotnet list package --outdated --no-restore` — только при наличии
-  `dotnet` и `obj/project.assets.json`; иначе используется NuGet-отчёт.
-  Нет CLI → `409 dotnet_unavailable`.
+- .NET (v1.3.0 — реализовано): `dotnet list <project> package --outdated
+  --no-restore`, затем `dotnet add <project> package <id> --no-restore`;
+  `restore`/`build`/`publish` не запускаются. Нет CLI → `409
+  dotnet_unavailable`; обход проектов ограничен 20 файлами.
 - Запрещены `--force`, `--legacy-peer-deps`, удаление lock-файлов и любые
   Git-мутации.
 - Bulk: `update_dependencies_all` — concurrency 2, `actor=bulk`, один упавший
@@ -1707,22 +1706,23 @@ POST /api/v1/search/chat {query, history?, repository_ids?, limit?, min_score?}
 
 ---
 
-## 29. .NET manifests & NuGetClient (v1.3.0, Sprint 57 — план)
+## 29. .NET manifests & NuGetClient (v1.3.0, Sprint 57 — реализовано)
 
-> **Статус:** план Sprint 57. Контракт — SPEC §3.15.1; ограничения — KI-025.
+> **Статус:** реализовано в Sprint 57 (`dotnet_parser.py`,
+> `nuget_client.py`). Контракт — SPEC §3.15.1; ограничения — KI-025;
+> ADR-0018.
 
 ### 29.1. Поток
 
 ```
 GET /repositories/{id}/dependencies?ecosystem=dotnet
   → DependencyService
-      ├─ ManifestDiscovery: *.csproj, *.fsproj, *.vbproj,
-      │                     Directory.Packages.props, packages.config (depth 3)
-      ├─ DotnetParser: XML → [{name, declared, kind, line, section, manifest_path}]
-      │    VersionOverride > Version > PackageVersion (CPM) > packages.config
+      ├─ ManifestDiscovery: *.csproj, *.fsproj, *.vbproj, packages.config (depth 3)
+      ├─ DotnetParser: XML → [{name, version, is_dev, project_file}]
+      │    VersionOverride > Version > nearest PackageVersion (CPM) > packages.config
       │    $(Property)/Condition/Import → unknown (без MSBuild-evaluation)
       ├─ cache lookup (dependency_cache, ключ nuget:<lower-id>, 24 ч)
-      ├─ NuGetClient.get_latest(id) для miss/stale, concurrency 4
+      ├─ NuGetClient.get_latest_version(id) для miss/stale, concurrency 4
       └─ normalize → DependencyEcosystemReport(ecosystem="dotnet")
 ```
 
@@ -1737,8 +1737,7 @@ GET /repositories/{id}/dependencies?ecosystem=dotnet
   ≤ 2000 на файл. Превышение → `parse_error` для этого манифеста, остальные
   обрабатываются.
 - `Condition`/`Import`/`Choose`/`$(...)` не вычисляются: пакет получает
-  `unknown`, причина (`conditional`, `msbuild_property`) — в `ecosystem.error`
-  и UI-бейдже.
+  `unknown`, MSBuild не запускается (KI-025).
 - Discovery не следует по symlink'ам; `bin/`, `obj/`, `.vs/`, `packages/`
   игнорируются.
 
@@ -1749,13 +1748,14 @@ GET /repositories/{id}/dependencies?ecosystem=dotnet
 
 ```python
 class NuGetClient:
-    async def get_latest(self, name: str) -> RegistryResult: ...
+    async def get_latest_version(self, name: str) -> PackageVersionResult: ...
 ```
 
 - URL: `https://api.nuget.org/v3-flatcontainer/{id-lower}/index.json`;
   `id` — lower-case + URL-encode.
 - `latest` — максимальная stable-версия по SemVer 2.0.0; prerelease
-  отбрасываются. Только prerelease → `latest=None`, `status=unknown`.
+  отбрасываются. Только prerelease → `latest=None`, `status=not_found`
+  (пакет показывается как `unknown`).
 - 404 → `not_found`; 429/5xx → backoff 0.5/1/2 с (max 3), затем
   `registry_unavailable`; timeout 5 с.
 - Общий HTTP-layer, `DEPENDENCY_CHECK_CONCURRENCY=4`, User-Agent
@@ -1770,20 +1770,21 @@ class NuGetClient:
   `osv:nuget:<lower-id>:<version>`.
 - `version_source`: `exact` для литерала/`[x.y.z]`, `lower_bound` для
   диапазона. Неразрешимые версии — `unknown_packages`.
-- Обновление — §17: `dotnet list --outdated --no-restore` (подсказка),
-  `dotnet add --version --no-restore` (мутация), только `confirm=true`,
-  чистый worktree, `action_log`/`audit_log`. Нет CLI → `409 dotnet_unavailable`.
+- Обновление — §17: `dotnet list <project> package --outdated --no-restore`,
+  затем `dotnet add <project> package <id> --no-restore` (без `--version` —
+  latest stable), только `confirm=true`, чистый worktree,
+  `action_log`/`audit_log`. Нет CLI → `409 dotnet_unavailable`.
 
 ### 29.5. Hotspots и RAG
 
-- Hotspots учитывают `.cs`, `.csproj`, `.fsproj`, `.vbproj`, `.props`,
+- Hotspots учитывают `.cs`, `.fs`, `.csproj`, `.fsproj`, `.vbproj`, `.props`,
   `.targets`; `bin/`, `obj/`, `.vs/`, `packages.lock.json`,
   `project.assets.json` фильтруются.
-- RAG: `.cs` → `csharp`, XML-манифесты → `xml`; чанкинг C# — по
-  классам/методам (эвристика по отступам и `{}`), fallback — окно
-  `RAG_CHUNK_CHARS`/`RAG_CHUNK_OVERLAP`.
-- Строки подключения (`Password=`, `AccountKey=`) маскируются;
-  `appsettings.*.json` с секретами не индексируются.
+- RAG: `.cs` → `csharp`, `.fs/.fsx` → `fsharp`, XML-манифесты → `xml`;
+  чанкинг — общее окно `RAG_CHUNK_CHARS`/`RAG_CHUNK_OVERLAP` (эвристика по
+  классам/методам — кандидат v1.4).
+- Строки подключения (`Password=`, `AccountKey=`) маскируются; `.env` и
+  lock-файлы не индексируются.
 
 ### 29.6. Инварианты
 

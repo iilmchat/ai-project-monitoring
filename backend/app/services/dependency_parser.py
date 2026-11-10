@@ -42,6 +42,7 @@ class ParsedRequirement:
     manifest_line: int | None = None
     manifest_section: str | None = None
     manifest_path: str | None = None
+    is_dev: bool = False
 
 
 @dataclass(slots=True)

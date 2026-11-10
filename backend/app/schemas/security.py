@@ -13,6 +13,7 @@ SecurityEcosystemStatus = Literal["ok", "no_manifest", "parse_error", "unavailab
 SecurityStatus = Literal["ok", "unavailable"]
 UnknownPackageReason = Literal[
     "unresolved_range",
+    "unresolved_version",
     "unsupported_kind",
     "registry_missing",
     "osv_unavailable",
@@ -54,7 +55,7 @@ class SecurityUnknownPackage(BaseModel):
 class SecurityEcosystemReport(BaseModel):
     """CVE report for one manifest/ecosystem."""
 
-    ecosystem: Literal["python", "node"]
+    ecosystem: Literal["python", "node", "dotnet"]
     manifest: str
     manifests: list[str] = Field(default_factory=list)
     status: SecurityEcosystemStatus

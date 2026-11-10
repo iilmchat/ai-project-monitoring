@@ -463,7 +463,7 @@ Docker API наружу не отдаётся, только нормализов
 
 ---
 
-### 3.15. Dependency management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57 — план)
+### 3.15. Dependency management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57)
 
 Проверка объявленных зависимостей по манифестам в корне и вложенных
 каталогах репозитория (`backend/requirements.txt`, `frontend/package.json`,
@@ -473,8 +473,8 @@ Docker API наружу не отдаётся, только нормализов
 
 **Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25;
 Node (`package.json`, npm) — Sprint 26; C#/.NET (`*.csproj`,
-`Directory.Packages.props`, `packages.config`, NuGet) — **план Sprint 57**
-(контракт ниже — §3.15.1). `ecosystem=all` (или отсутствие параметра)
+`Directory.Packages.props`, `packages.config`, NuGet) — **реализовано в
+Sprint 57** (контракт — §3.15.1). `ecosystem=all` (или отсутствие параметра)
 возвращает объединённый отчёт по всем найденным экосистемам.
 
 | Метод | Путь | Параметры | Ответ |
@@ -564,9 +564,9 @@ Node (`package.json`, npm) — Sprint 26; C#/.NET (`*.csproj`,
 - Node: `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` →
   `range`/`unknown`. `workspace:`, `file:`, `link:`, `portal:`, `git+`,
   `github:`, `http(s):`, `npm:` → `ignored`.
-- .NET (план): `1.2.3` и `[1.2.3]` → `exact`; `[1.0,2.0)`, `1.*`, `1.2.*`,
-  `*` → `range`; `ProjectReference`, `Reference`, локальные пути и
-  `PackageReference` без версии при отсутствии CPM → `ignored`;
+- .NET: `1.2.3` и `[1.2.3]` → `exact`; `[1.0,2.0)`, `1.*`, `1.2.*`,
+  `*` → `range`; `ProjectReference`, `Reference` и локальные пути →
+  `ignored`; `PackageReference` без `Version` при отсутствии CPM,
   `Version="$(Property)"` и `Condition` → `unknown` (причина в §3.15.1).
 - `declared` сохраняет исходное объявление; extras, environment markers и hashes
   не участвуют в сравнении.
@@ -592,10 +592,11 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 `latest=null`, `status=unknown`. При недоступном реестре и отсутствии кэша —
 `ecosystem.status=unavailable`, HTTP 200 (частичный отчёт).
 
-#### 3.15.1. .NET / NuGet (v1.3.0, Sprint 57 — план)
+#### 3.15.1. .NET / NuGet (v1.3.0, Sprint 57 — реализовано)
 
-> **Статус:** контракт планируемого поведения. Реализация — Sprint 57,
-> см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md). Ограничения парсинга — KI-025.
+> **Статус:** реализовано в Sprint 57 (`dotnet_parser.py`,
+> `nuget_client.py`), см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md). Ограничения
+> парсинга — KI-025, решение — ADR-0018.
 
 **Манифесты:**
 
@@ -604,22 +605,23 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 | `*.csproj`, `*.fsproj`, `*.vbproj` | `PackageReference Include="..." Version="..."` / `VersionOverride="..."` | 1 |
 | `Directory.Packages.props` | `PackageVersion Include="..." Version="..."` (Central Package Management) | 2 |
 | `packages.config` | `<package id="..." version="..." />` (legacy, best effort) | 3 |
-| `Directory.Build.props` | `PackageVersion` (если есть) | 2 |
 
 - `PackageReference` без `Version` разрешается через ближайший
   `Directory.Packages.props` (поиск вверх до корня репозитория); если CPM нет —
-  `ignored`.
+  `status=unknown`, `kind=range`.
 - `VersionOverride` важнее `Version` и центральной версии
   (`CentralPackageVersionOverrideEnabled`).
+- `PrivateAssets="all"` и `developmentDependency="true"` помечают пакет как
+  dev (`is_dev=true`); это не влияет на сравнение версий/CVE, но показывается
+  в UI.
 - XML-парсинг — `xml.etree.ElementTree` с запретом DTD/внешних сущностей;
   namespace MSBuild снимается. Лимиты: файл ≤ 256 KiB, глубина ≤ 64,
-  элементов `PackageReference`/`PackageVersion` ≤ 2000 на файл. Превышение или
-  битый XML → `ecosystem.status=parse_error`, `error` содержит путь и причину.
+  элементов `PackageReference`/`PackageVersion` ≤ 2000 на файл. Битый XML или
+  превышение лимита → ошибка в `ecosystem.error`; если не удалось прочитать
+  ни одного пакета — `status=parse_error`.
 - MSBuild-выражения (`$(...)`), `Condition`, `Import`, `Choose/When` **не
-  вычисляются**: пакет получает `status=unknown`, `current=null`, а причина
-  отражается в `ecosystem.error` и UI-бейдже (`msbuild_property`,
-  `conditional`, `unresolved_version`); схема пакета не расширяется. Это
-  осознанный отказ от «угадывания» (KI-025).
+  вычисляются**: пакет получает `status=unknown`, `current=null`; схема
+  пакета не расширяется. Это осознанный отказ от «угадывания» (KI-025).
 - Несколько `TargetFrameworks` не дублируют пакеты; дедупликация по имени,
   `exact` важнее `range`. Провенанс — `manifest_path`.
 - `bin/`, `obj/`, `.vs/`, `packages/` и `.git` при discovery игнорируются.
@@ -664,7 +666,8 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
       "severity": "patch",
       "manifest_line": 18,
       "manifest_section": "PackageReference",
-      "manifest_path": "src/Demo.Api/Demo.Api.csproj"
+      "manifest_path": "src/Demo.Api/Demo.Api.csproj",
+      "is_dev": false
     }
   ],
   "error": null
@@ -692,7 +695,7 @@ case-insensitive; `version_source=exact` для литерала/`[x.y.z]`,
 **Статус реализации:** Sprint 28 — реализовано (`SecurityService`,
 `OsvClient`, `SecretScanner`). С v0.8.0 CVE-сканер использует общий
 `ManifestDiscovery` и проверяет вложенные `requirements.txt`/`package.json`;
-`manifests[]` перечисляет источники. С v1.3.0 (Sprint 57 — план) добавляется
+`manifests[]` перечисляет источники. С v1.3.0 (Sprint 57) проверяется и
 экосистема .NET: `ecosystem="dotnet"`, в OSV — `NuGet` (§3.15.1).
 
 | Метод | Путь | Параметры | Ответ |
@@ -1113,7 +1116,7 @@ case-insensitive; `version_source=exact` для литерала/`[x.y.z]`,
 
 ---
 
-### 3.20. Automated dependency updates (v0.7.0, Sprint 34; .NET — v1.3.0, Sprint 57 — план)
+### 3.20. Automated dependency updates (v0.7.0, Sprint 34; .NET — v1.3.0, Sprint 57 — реализовано)
 
 Явная мутация: обновление пакетов выбранного репозитория. Только при
 `confirm=true`, на чистом worktree и с аудитом. Вне этого действия система
@@ -1124,15 +1127,16 @@ case-insensitive; `version_source=exact` для литерала/`[x.y.z]`,
 | POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem: python\|node\|dotnet}` | `ActionLog` |
 | POST | `/repositories/actions/update_dependencies_all` | `{confirm:true, ecosystem: python\|node\|dotnet, repo_ids?: int[]}` | `202 {status:"accepted"}` |
 
-**.NET (v1.3.0 — план):**
+**.NET (v1.3.0 — реализовано):**
 
-- Read-only подсказка: `dotnet list <project> package --outdated --no-restore`
-  запускается только при наличии `dotnet` в PATH и существующем
-  `obj/project.assets.json`; иначе используется отчёт NuGet-клиента (§3.15.1).
-- Мутация: `dotnet add <project> package <id> --version <version> --no-restore`.
-- `dotnet` отсутствует → `409 dotnet_unavailable`; нет проекта →
-  `409 no_manifest`. `restore`/`build`/`publish`, `--force` и удаление
-  `packages.lock.json` запрещены.
+- Read-only проверка: `dotnet list <project> package --outdated --no-restore`
+  запускается при наличии `dotnet` в PATH. Без CLI — `409 dotnet_unavailable`.
+- Мутация: для каждого найденного outdated-пакета выполняется
+  `dotnet add <project> package <id> --no-restore` (без `--version` — ставится
+  последняя stable-версия). Обход проектов ограничен 20 файлами.
+- Нет проекта → `409 no_manifest`. `restore`/`build`/`publish`, `--force` и
+  удаление `packages.lock.json` запрещены.
+- `dotnet add` не коммитит изменения; пользователь проверяет diff сам.
 
 **Preflight:**
 
@@ -1150,8 +1154,9 @@ case-insensitive; `version_source=exact` для литерала/`[x.y.z]`,
 - Python: `pip install -r requirements.txt --upgrade`
   (запускается как `python -m pip install ...`).
 - Node: `pnpm update` или `npm update`.
-- .NET: `dotnet add <project> package <id> --version <version> --no-restore`
-  (план v1.3.0); `dotnet restore/build/publish` не запускаются.
+- .NET: `dotnet list <project> package --outdated --no-restore`, затем
+  `dotnet add <project> package <id> --no-restore` (реализовано v1.3.0);
+  `dotnet restore/build/publish` не запускаются.
 - Выборочное обновление пакетов и флаги `--force`/`--legacy-peer-deps` не
   поддерживаются; `git`-мутации и удаление lock-файлов запрещены.
 
@@ -2197,14 +2202,14 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |
 | **Токены провайдеров** | **`GITHUB_TOKEN`, `GITFLIC_TOKEN` (обязательны для mirror; без них `mirror_status=unavailable`, `mirror_expected` не влияет на UI-шум)** |
 | **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_HOST` (SDK default: UDS/npipe; в compose — `unix:///var/run/docker.sock`), `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30), `DOCKER_TIMEOUT_SECONDS` (default 3); только `GET`-операции** |
-| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25), `package.json` (Node, Sprint 26) и `*.csproj`/`Directory.Packages.props`/`packages.config` (.NET, v1.3.0 — план) в корне (+ относительные `-r` include); MSBuild не вычисляется** |
+| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25), `package.json` (Node, Sprint 26) и `*.csproj`/`Directory.Packages.props`/`packages.config` (.NET, реализовано в Sprint 57); MSBuild не вычисляется** |
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
 | **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
 | **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 3600), `GLOBAL_ANALYTICS_LIMIT` (default 50), `GLOBAL_ANALYTICS_CONCURRENCY` (default 4); агрегация через `DependencyService` + `dependency_cache`, `refresh=true` обходит кэш** |
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default 10000); только `confirm=true` + чистый worktree (`git status --porcelain`) + `action_log`** |
-| **.NET toolchain (v1.3.0, план)** | **`*.csproj`/`Directory.Packages.props` парсятся stdlib XML без DTD/сущностей; `dotnet` CLI опционален; `dotnet list --outdated --no-restore` — только подсказка, `dotnet add --version --no-restore` — только §3.20; `restore/build/publish` запрещены** |
+| **.NET toolchain (v1.3.0, реализовано)** | **`*.csproj`/`Directory.Packages.props` парсятся stdlib XML без DTD/сущностей; `dotnet` CLI опционален; `dotnet list --outdated --no-restore`, затем `dotnet add <project> package <id> --no-restore` — только §3.20; `restore/build/publish` запрещены** |
 | **Team & audit (v1.3.0, план)** | **`users.role ∈ {admin, auditor}`; `AUDIT_LOG_RETENTION_DAYS` (default 90), `AUDIT_LOG_STORE_CLIENT_INFO` (default true); audit-запись fail-closed для мутаций; секреты/содержимое файлов не пишутся** |
 | **SAST (v1.3.0, план)** | **`SAST_ENABLED` (default true), `SAST_TIMEOUT_SECONDS` (default 120), `SAST_MAX_FINDINGS` (default 500), `SAST_MAX_FILE_BYTES` (default 1048576), `SAST_CACHE_TTL_SECONDS` (default 3600), `SEMGREP_CONFIG` (локальные правила); сеть и `--config auto` запрещены** |
 | **Automation configs (v1.3.0, план)** | **Dependabot/Renovate preview без записи; apply — только `confirm=true` + совпадающий `content_hash` + чистый worktree + allowlist (`.github/dependabot.yml`, `renovate.json`) + `action_log`/`audit_log`; commit/push не выполняются** |
@@ -2362,9 +2367,10 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 
 ### 6.8. v1.3.0 (план, спринты 57–59)
 
-- [ ] .NET: парсинг `.csproj`/`Directory.Packages.props`/`packages.config`,
-      NuGet latest, CVE через OSV (`NuGet`), третья вкладка UI, обновление
-      через `dotnet add --no-restore`, `.cs`/`.csproj` в hotspots и RAG.
+- [x] .NET (Sprint 57): парсинг `.csproj`/`Directory.Packages.props`/
+      `packages.config`, NuGet latest, CVE через OSV (`NuGet`), третья вкладка
+      UI, обновление через `dotnet add --no-restore`, `.cs`/`.csproj` в
+      hotspots и RAG.
 - [ ] Team: роли `admin`/`auditor`, серверная проверка прав, CRUD
       пользователей, все мутации — `403` для auditor.
 - [ ] Audit Log: append-only `audit_log`, admin-only API с фильтрами и CSV,
@@ -2390,8 +2396,8 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | GitHub REST API | v3 (2022-11-28) — v0.2.0 |
 | GitFlic REST API | актуальная (см. docs.gitflic.ru) — v0.2.0 |
 | OSV.dev API | v1 (`POST /v1/query`, `POST /v1/querybatch`) — v0.6.0 |
-| NuGet V3 flat container | `api.nuget.org/v3-flatcontainer` — v1.3.0 (план) |
-| .NET SDK / CLI | 8.0+ (опционально, только для обновления пакетов) — v1.3.0 (план) |
+| NuGet V3 flat container | `api.nuget.org/v3-flatcontainer` — v1.3.0 (Sprint 57, реализовано) |
+| .NET SDK / CLI | 8.0+ (опционально, только для обновления пакетов) — v1.3.0 (Sprint 57) |
 | bandit / semgrep | 1.7+ / 1.x (внешние опциональные бинарники) — v1.3.0 (план) |
 | OpenAI-compatible LLM API | Ollama / LM Studio `/v1/chat/completions` — v0.7.0 |
 | OpenAI-compatible Embeddings API | Ollama / LM Studio `/v1/embeddings` — v0.9.0 (план) |

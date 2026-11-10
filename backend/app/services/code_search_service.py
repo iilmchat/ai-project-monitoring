@@ -37,6 +37,12 @@ logger = structlog.get_logger(__name__)
 
 ALLOWED_EXTENSIONS: dict[str, str] = {
     ".py": "python",
+    ".cs": "csharp",
+    ".fs": "fsharp",
+    ".fsx": "fsharp",
+    ".csproj": "xml",
+    ".fsproj": "xml",
+    ".vbproj": "xml",
     ".ts": "typescript",
     ".tsx": "tsx",
     ".js": "javascript",
@@ -57,6 +63,9 @@ IGNORED_DIRS = frozenset(
         "dist",
         "build",
         "target",
+        "bin",
+        "obj",
+        ".vs",
         "vendor",
         "__pycache__",
         ".mypy_cache",
@@ -77,6 +86,8 @@ IGNORED_FILES = frozenset(
         "Pipfile.lock",
         "uv.lock",
         "composer.lock",
+        "packages.lock.json",
+        "project.assets.json",
     }
 )
 SECRET_PATTERN = re.compile(

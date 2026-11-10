@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- feat(dotnet): `backend/app/services/dotnet_parser.py` — безопасный разбор `*.csproj`/`*.fsproj`/`*.vbproj`, `Directory.Packages.props` (Central Package Management, `VersionOverride`) и legacy `packages.config`; приоритет версий, `is_dev` (`PrivateAssets="all"`), лимиты XML, запрет DTD/XXE; `$(Property)`/`Condition` → `unknown` (S57-001, KI-025).
+- feat(dotnet): `backend/app/providers/nuget_client.py` — NuGet V3 flat container, lower-case id, выбор максимальной stable SemVer, 404/429/5xx/timeout, общий `dependency_cache` (`nuget:<lower-id>`, 24 ч) (S57-002).
+- feat(dependencies): `ecosystem="dotnet"` в `DependencyService` и `GET /repositories/{id}/dependencies`; `all` объединяет Python/Node/.NET; `DependencyPackage.is_dev` (S57-002).
+- feat(security): OSV `ecosystem="NuGet"`, CVE для .NET-пакетов, `unknown_packages` с `unresolved_version` (S57-002).
+- feat(updates): `DependencyUpdateService` — `dotnet list package --outdated --no-restore`, затем `dotnet add <project> package <id> --no-restore` для каждого outdated-пакета; `409 dotnet_unavailable`/`no_manifest`, `action_log` (S57-003).
+- feat(insights,rag): `.cs`/`.fs`/`.csproj` в hotspots и RAG (`csharp`/`fsharp`/`xml`), фильтры `bin/`, `obj/`, `.vs/`, `packages.lock.json`, `project.assets.json` (S57-003).
+- feat(ui): третья вкладка «C# / .NET» в блоке зависимостей, ссылки на nuget.org, бейдж «Central Package Management», dev-бейдж (S57-004).
+- test: `test_dotnet_parser.py` (CPM, `VersionOverride`, `packages.config`, DTD/XXE, NuGet client, OSV NuGet), обновлены тесты зависимостей/обновлений и `RepositoryDetails` (S57-005).
+- docs(adr): ADR-0018 «.NET manifests & NuGet client»; SPEC §3.15/§3.15.1, ARCHITECTURE §29 (S57-005).
+
 ## [1.2.0] - 2026-11-09
 
 AI Analytics & Cross-Platform: кросс-платформенные релизы, AI Code Review,

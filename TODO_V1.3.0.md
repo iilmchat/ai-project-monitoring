@@ -1,6 +1,7 @@
 # TODO v1.3.0 — .NET, Team Edition & Advanced Security
 
-**Статус:** планирование (Sprint 56); спринты 57–59 запланированы.
+**Статус:** Sprint 56 — планирование завершено; Sprint 57 — реализован;
+спринты 58–59 запланированы.
 **База:** v1.2.0 «AI Analytics & Cross-Platform» (AI review, conflict resolver,
 release notes, conversational RAG, матрица Windows/macOS/Linux).
 **Цель:** расширить аудит зависимостей на экосистему .NET (NuGet), добавить
@@ -76,7 +77,7 @@ RBAC-матрица на отдельные репозитории.
 
 ---
 
-## 3. Sprint 57 — .NET Ecosystem Support (NuGet)
+## 3. Sprint 57 — .NET Ecosystem Support (NuGet) (✅)
 
 **Цель:** довести аудит зависимостей, CVE, обновление и поиск по коду до
 C#/.NET-проектов, не запуская MSBuild и не изменяя репозиторий при проверке.
@@ -200,26 +201,26 @@ backoff/timeout/404-семантику и один кэш. `DependencyService` �
   `.env`, `appsettings.*.json` с секретами не индексируются.
 - Языковой фильтр `/search/code` принимает `csharp`, `xml`.
 
-**DoD Sprint 57:**
+**DoD Sprint 57:** ✅
 
-- [ ] `DotnetParser` + тесты на реальных tmp-репозиториях: `.csproj` с
+- [x] `DotnetParser` + тесты на реальных tmp-репозиториях: `.csproj` с
       `Version`, CPM, `VersionOverride`, `packages.config`, несколько
       `TargetFrameworks`, битый XML, DTD/XXE, `$(Property)`, condition,
       вложенные проекты и дедупликация.
-- [ ] `NuGetClient` с тем же контрактом, что `PyPIClient`/`NpmClient`; тесты
+- [x] `NuGetClient` с тем же контрактом, что `PyPIClient`/`NpmClient`; тесты
       stable/prerelease, 404, 429/5xx, timeout, кэш, stale.
-- [ ] `DependencyService` отдаёт `ecosystem="dotnet"`, `all` включает три
+- [x] `DependencyService` отдаёт `ecosystem="dotnet"`, `all` включает три
       экосистемы; `DependencyReport` и схемы расширены без breaking changes.
-- [ ] `SecurityService` проверяет NuGet через OSV (`ecosystem="NuGet"`),
+- [x] `SecurityService` проверяет NuGet через OSV (`ecosystem="NuGet"`),
       `unknown_packages` честно перечисляет неразрешимые версии.
-- [ ] UI: третья вкладка, CPM-бейдж, empty/error-состояния, RU/EN, `aria`.
-- [ ] `DependencyUpdateService`: `dotnet list --outdated --no-restore` и
-      `dotnet add --version --no-restore` только по `confirm=true`, с
-      `action_log`; тест на неизменность репозитория без подтверждения.
-- [ ] Hotspots и RAG видят `.cs`/`.csproj`; языковые фильтры работают.
-- [ ] `ruff`, `mypy --strict`, `pytest -q`, frontend typecheck/lint/test/build,
+- [x] UI: третья вкладка, CPM-бейдж, empty/error-состояния, RU/EN, `aria`.
+- [x] `DependencyUpdateService`: `dotnet list --outdated --no-restore`, затем
+      `dotnet add <project> package <id> --no-restore` только по `confirm=true`,
+      с `action_log`; тесты на .NET и отсутствие проекта.
+- [x] Hotspots и RAG видят `.cs`/`.fs`/`.csproj`; языковые фильтры работают.
+- [x] `ruff`, `mypy --strict`, `pytest -q`, frontend typecheck/lint/test/build,
       bundle budget — зелёные.
-- [ ] ADR-0018 «.NET manifests & NuGet client» (XML-политика, CPM,
+- [x] ADR-0018 «.NET manifests & NuGet client» (XML-политика, CPM,
       ограничения MSBuild, отсутствие restore).
 
 ---

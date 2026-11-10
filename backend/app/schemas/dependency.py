@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-DependencyEcosystem = Literal["python", "node"]
+DependencyEcosystem = Literal["python", "node", "dotnet"]
 DependencyPackageStatus = Literal["outdated", "current", "unknown", "ignored"]
 DependencyPackageKind = Literal["exact", "range", "vcs", "path", "workspace"]
 DependencySeverity = Literal["major", "minor", "patch"]
@@ -28,6 +28,7 @@ class DependencyPackage(BaseModel):
     manifest_line: int | None = None
     manifest_section: str | None = None
     manifest_path: str | None = None
+    is_dev: bool = False
 
 
 class DependencyEcosystemReport(BaseModel):

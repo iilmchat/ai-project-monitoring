@@ -270,9 +270,14 @@ async def test_service_no_manifest_and_node_placeholder(
 
     report = await service.get_report(1, str(tmp_path))
 
-    assert [item.ecosystem for item in report.ecosystems] == ["python", "node"]
+    assert [item.ecosystem for item in report.ecosystems] == [
+        "python",
+        "node",
+        "dotnet",
+    ]
     assert report.ecosystems[0].status == "no_manifest"
     assert report.ecosystems[1].status == "no_manifest"
+    assert report.ecosystems[2].status == "no_manifest"
 
 
 async def test_service_node_report_uses_npm_registry_and_cache(
@@ -333,9 +338,14 @@ async def test_service_combined_report_sums_outdated(
 
     report = await service.get_report(1, str(repo), ecosystem="all")
 
-    assert [item.ecosystem for item in report.ecosystems] == ["python", "node"]
+    assert [item.ecosystem for item in report.ecosystems] == [
+        "python",
+        "node",
+        "dotnet",
+    ]
     assert report.ecosystems[0].outdated == 1
     assert report.ecosystems[1].outdated == 1
+    assert report.ecosystems[2].status == "no_manifest"
     assert report.summary.total == 2
     assert report.summary.outdated == 2
 
@@ -414,9 +424,49 @@ async def test_dependencies_api_all_combines_ecosystems(
 
     assert response.status_code == 200
     payload = response.json()
-    assert [item["ecosystem"] for item in payload["ecosystems"]] == ["python", "node"]
+    assert [item["ecosystem"] for item in payload["ecosystems"]] == [
+        "python",
+        "node",
+        "dotnet",
+    ]
     assert payload["summary"]["total"] == 2
     assert payload["summary"]["outdated"] == 2
+
+
+async def test_dependencies_api_dotnet_ecosystem(
+    app: FastAPI,
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "dotnet-api"
+    repo.mkdir()
+    (repo / "Demo.csproj").write_text(
+        '<Project><ItemGroup><PackageReference Include="Serilog" '
+        'Version="3.0.0" /></ItemGroup></Project>',
+        encoding="utf-8",
+    )
+    repository_id = await _create_repository(session_factory, repo)
+    app.state.dependency_service = DependencyService(
+        session_factory,
+        FakeRegistry({}),
+        FakeRegistry({}),
+        FakeRegistry({"Serilog": "3.1.1"}),
+    )
+
+    response = await client.get(
+        f"/api/v1/repositories/{repository_id}/dependencies",
+        params={"ecosystem": "dotnet"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    ecosystem = payload["ecosystems"][0]
+    assert ecosystem["ecosystem"] == "dotnet"
+    assert ecosystem["manifest"] == "Demo.csproj"
+    assert ecosystem["outdated"] == 1
+    assert ecosystem["packages"][0]["name"] == "Serilog"
+    assert ecosystem["packages"][0]["severity"] == "minor"
 
 
 async def test_dependencies_api_no_manifest(
@@ -486,7 +536,8 @@ async def test_service_reads_nested_manifests_and_keeps_provenance(
 
     report = await service.get_report(1, str(repo), ecosystem="all")
 
-    python, node = report.ecosystems
+    python, node, dotnet = report.ecosystems
+    assert dotnet.status == "no_manifest"
     assert set(python.manifests) == {"backend/requirements.txt", "requirements.txt"}
     assert node.manifests == ["frontend/package.json"]
     assert python.total == 2

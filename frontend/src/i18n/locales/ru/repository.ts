@@ -82,6 +82,9 @@ export const repository = {
   'repo.dependencies.noData': 'Нет данных о зависимостях.',
   'repo.dependencies.packageJsonMissing': 'package.json не найден.',
   'repo.dependencies.requirementsMissing': 'requirements.txt не найден.',
+  'repo.dependencies.dotnetMissing': 'Файлы проекта .NET (*.csproj) не найдены.',
+  'repo.dependencies.centralPackages': 'Central Package Management',
+  'repo.dependencies.dev': 'dev',
   'repo.dependencies.parseError': 'Ошибка разбора {manifest}.',
   'repo.dependencies.manifestFallback': 'манифеста',
   'repo.dependencies.outdated': 'Устарели',
@@ -97,7 +100,7 @@ export const repository = {
   'repo.dependencyStatus.outdated': '{count} устарели',
   'repo.dependencyStatus.current': 'Актуально',
   'repo.dependencySource.cache': 'кэш',
-  'repo.dependencySource.mixed': 'PyPI + кэш',
+  'repo.dependencySource.mixed': 'реестр + кэш',
   'repo.dependencySource.staleCache': 'устаревший кэш',
   'repo.dependencyError.rateLimited':
     'PyPI ограничил частоту запросов. Показаны данные из кэша, если они есть.',

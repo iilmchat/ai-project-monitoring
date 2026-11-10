@@ -1,4 +1,4 @@
-"""Python/Node dependency checks with a persistent TTL cache (S25–S26)."""
+"""Python/Node/.NET dependency checks with a persistent TTL cache (S25-S26, S57)."""
 
 from __future__ import annotations
 
@@ -25,14 +25,15 @@ from app.schemas.dependency import (
 from app.services.dependency_parser import ParsedRequirement
 from app.services.manifest_discovery import (
     discover_manifests,
+    parse_dotnet_manifests,
     parse_node_manifests,
     parse_python_manifests,
 )
 
 IGNORED_KINDS = frozenset({"vcs", "path", "workspace"})
 LookupSource = Literal["registry", "cache", "stale_cache", "none"]
-RegistryPrefix = Literal["pypi", "npm"]
-Ecosystem = Literal["python", "node"]
+RegistryPrefix = Literal["pypi", "npm", "nuget"]
+Ecosystem = Literal["python", "node", "dotnet"]
 
 
 class LatestVersionRegistry(Protocol):
@@ -63,6 +64,7 @@ class DependencyService:
         session_factory: async_sessionmaker[AsyncSession],
         pypi_registry: LatestVersionRegistry,
         npm_registry: LatestVersionRegistry | None = None,
+        nuget_registry: LatestVersionRegistry | None = None,
         *,
         cache_ttl_seconds: int = 86400,
         concurrency: int = 4,
@@ -72,6 +74,7 @@ class DependencyService:
         self._session_factory = session_factory
         self._pypi_registry = pypi_registry
         self._npm_registry = npm_registry
+        self._nuget_registry = nuget_registry
         self._ttl = max(cache_ttl_seconds, 0)
         self._concurrency = max(concurrency, 1)
         self._max_include_depth = max(max_include_depth, 0)
@@ -89,14 +92,14 @@ class DependencyService:
     ) -> DependencyReport:
         """Build a dependency report for one repository.
 
-        ``ecosystem`` accepts ``python``, ``node``, ``all`` or ``None``.
-        ``None`` and ``all`` both produce the combined report.
+        ``ecosystem`` accepts ``python``, ``node``, ``dotnet``, ``all`` or
+        ``None``. ``None`` and ``all`` both produce the combined report.
         """
-        if ecosystem not in (None, "python", "node", "all"):
+        if ecosystem not in (None, "python", "node", "dotnet", "all"):
             raise ValueError(f"unsupported ecosystem: {ecosystem}")
 
         requested: list[Ecosystem] = (
-            ["python", "node"]
+            ["python", "node", "dotnet"]
             if ecosystem in (None, "all")
             else [ecosystem]  # type: ignore[list-item]
         )
@@ -106,9 +109,13 @@ class DependencyService:
                 reports.append(
                     await self._python_report(repo_path, refresh=refresh)
                 )
-            else:
+            elif name == "node":
                 reports.append(
                     await self._node_report(repo_path, refresh=refresh)
+                )
+            else:
+                reports.append(
+                    await self._dotnet_report(repo_path, refresh=refresh)
                 )
 
         summary = DependencySummary(
@@ -215,6 +222,54 @@ class DependencyService:
             report.error = "; ".join(parsed.errors)
         return report
 
+    async def _dotnet_report(
+        self,
+        repo_path: str,
+        *,
+        refresh: bool,
+    ) -> DependencyEcosystemReport:
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_dotnet_manifests(discovered)
+        if not parsed.manifest_found:
+            return _empty_report(
+                ecosystem="dotnet",
+                manifest="*.csproj",
+                status="no_manifest",
+            )
+        if self._nuget_registry is None:
+            return DependencyEcosystemReport(
+                ecosystem="dotnet",
+                manifest=parsed.manifest_label,
+                manifests=parsed.manifests,
+                status="unavailable",
+                source="none",
+                error="nuget_client_not_configured",
+            )
+        if not parsed.packages and parsed.errors:
+            return DependencyEcosystemReport(
+                ecosystem="dotnet",
+                manifest=parsed.manifest_label,
+                manifests=parsed.manifests,
+                status="parse_error",
+                source="none",
+                error="; ".join(parsed.errors),
+            )
+        report = await self._check_requirements(
+            parsed.packages,
+            ecosystem="dotnet",
+            manifest=parsed.manifest_label or "*.csproj",
+            manifests=parsed.manifests,
+            registry_prefix="nuget",
+            registry=self._nuget_registry,
+            refresh=refresh,
+        )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
+
     async def _check_requirements(
         self,
         requirements: list[ParsedRequirement],
@@ -286,7 +341,10 @@ class DependencyService:
         refresh: bool,
         semaphore: asyncio.Semaphore,
     ) -> _Lookup:
-        key = f"{registry_prefix}:{package}"
+        cache_package = (
+            package.lower() if registry_prefix == "nuget" else package
+        )
+        key = f"{registry_prefix}:{cache_package}"
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             cached = await self._read_cache(key)
@@ -304,7 +362,7 @@ class DependencyService:
                 )
 
             if result.status in {"ok", "not_found"}:
-                await self._write_cache(key, registry_prefix, package, result)
+                await self._write_cache(key, registry_prefix, cache_package, result)
                 return _Lookup(latest=result.latest, source="registry")
             if cached is not None:
                 return _Lookup(
@@ -391,6 +449,7 @@ def _package_report(
             manifest_line=requirement.manifest_line,
             manifest_section=requirement.manifest_section,
             manifest_path=requirement.manifest_path,
+            is_dev=requirement.is_dev,
         )
 
     status, severity = _classify(requirement.current, lookup.latest)
@@ -405,6 +464,7 @@ def _package_report(
         manifest_line=requirement.manifest_line,
         manifest_section=requirement.manifest_section,
         manifest_path=requirement.manifest_path,
+        is_dev=requirement.is_dev,
     )
 
 

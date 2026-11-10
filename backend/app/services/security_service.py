@@ -1,4 +1,4 @@
-"""CVE and secret scanning service (S28-001…S28-004)."""
+"""CVE and secret scanning service (S28-001…S28-004, .NET — S57-002)."""
 
 from __future__ import annotations
 
@@ -34,13 +34,14 @@ from app.schemas.security import (
 from app.services.dependency_parser import ParsedRequirement
 from app.services.manifest_discovery import (
     discover_manifests,
+    parse_dotnet_manifests,
     parse_node_manifests,
     parse_python_manifests,
 )
 from app.services.secret_scanner import scan_secrets
 
 MinSeverity = Literal["critical", "high", "medium", "low", "all"]
-Ecosystem = Literal["python", "node"]
+Ecosystem = Literal["python", "node", "dotnet"]
 
 _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
 _IGNORED_KINDS = frozenset({"vcs", "path", "workspace"})
@@ -112,6 +113,7 @@ class SecurityService:
         ecosystems = [
             await self._python_report(repo_path, refresh=refresh),
             await self._node_report(repo_path, refresh=refresh),
+            await self._dotnet_report(repo_path, refresh=refresh),
         ]
         secrets = await self._secrets_report(
             repo_path,
@@ -251,6 +253,37 @@ class SecurityService:
             report.error = "; ".join(parsed.errors)
         return report
 
+    async def _dotnet_report(
+        self, repo_path: str, *, refresh: bool
+    ) -> SecurityEcosystemReport:
+        discovered = discover_manifests(
+            repo_path,
+            max_depth=self._manifest_max_depth,
+        )
+        parsed = parse_dotnet_manifests(discovered)
+        if not parsed.manifest_found:
+            return _empty("dotnet", "*.csproj", "no_manifest")
+        if not parsed.packages and parsed.errors:
+            return _empty(
+                "dotnet",
+                parsed.manifest_label or "*.csproj",
+                "parse_error",
+                error="; ".join(parsed.errors),
+                manifests=parsed.manifests,
+            )
+        report = await self._check(
+            parsed.packages,
+            ecosystem="dotnet",
+            manifest=parsed.manifest_label or "*.csproj",
+            manifests=parsed.manifests,
+            osv_ecosystem="NuGet",
+            cache_prefix="nuget",
+            refresh=refresh,
+        )
+        if parsed.errors:
+            report.error = "; ".join(parsed.errors)
+        return report
+
     async def _check(
         self,
         requirements: list[ParsedRequirement],
@@ -275,7 +308,11 @@ class SecurityService:
                     unknown.append(
                         SecurityUnknownPackage(
                             name=requirement.name,
-                            reason="unresolved_range",
+                            reason=(
+                                "unresolved_version"
+                                if ecosystem == "dotnet"
+                                else "unresolved_range"
+                            ),
                         )
                     )
                 continue
@@ -521,7 +558,8 @@ def _empty(
 
 
 def _cache_key(prefix: str, candidate: _Candidate) -> str:
-    return f"osv:{prefix}:{candidate.name}:{candidate.version}"
+    name = candidate.name.lower() if prefix == "nuget" else candidate.name
+    return f"osv:{prefix}:{name}:{candidate.version}"
 
 
 def _serialize(vulns: Sequence[OsvVulnerability]) -> dict[str, Any]:

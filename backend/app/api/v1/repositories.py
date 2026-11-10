@@ -335,7 +335,9 @@ async def repository_dependencies(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     refresh: Annotated[bool, Query()] = False,
-    ecosystem: Annotated[Literal["python", "node", "all"] | None, Query()] = None,
+    ecosystem: Annotated[
+        Literal["python", "node", "dotnet", "all"] | None, Query()
+    ] = None,
 ) -> DependencyReport:
     repository = await _get_repository(session, repository_id)
     return await _dependency_service(request).get_report(

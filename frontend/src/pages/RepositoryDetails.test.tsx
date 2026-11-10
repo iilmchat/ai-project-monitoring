@@ -456,6 +456,71 @@ describe('RepositoryDetails actions', () => {
     expect(screen.getByText('1 устарели')).toBeInTheDocument()
   })
 
+  it('switches to .NET dependencies and shows CPM badge', async () => {
+    vi.mocked(getDependencies).mockResolvedValue({
+      repository_id: 1,
+      checked_at: '2026-11-11T10:00:00Z',
+      ecosystems: [
+        dependenciesNoManifest.ecosystems[0],
+        {
+          ecosystem: 'node',
+          manifest: 'package.json',
+          status: 'no_manifest',
+          source: 'none',
+          total: 0,
+          outdated: 0,
+          up_to_date: 0,
+          unknown: 0,
+          ignored: 0,
+          packages: [],
+          error: null,
+        },
+        {
+          ecosystem: 'dotnet',
+          manifest: 'Demo.csproj',
+          manifests: ['Demo.csproj', 'Directory.Packages.props'],
+          status: 'ok',
+          source: 'registry',
+          total: 1,
+          outdated: 1,
+          up_to_date: 0,
+          unknown: 0,
+          ignored: 0,
+          packages: [
+            {
+              name: 'Newtonsoft.Json',
+              declared: '13.0.1',
+              current: '13.0.1',
+              latest: '13.0.3',
+              status: 'outdated',
+              kind: 'exact',
+              severity: 'patch',
+              manifest_line: 4,
+              manifest_section: 'PackageReference',
+              manifest_path: 'Demo.csproj',
+              is_dev: false,
+            },
+          ],
+          error: null,
+        },
+      ],
+      summary: { total: 1, outdated: 1, up_to_date: 0, unknown: 0, ignored: 0 },
+    })
+
+    renderDetails()
+
+    expect(
+      await screen.findByRole('button', { name: 'C# / .NET' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('link', { name: 'Newtonsoft.Json' })).toHaveAttribute(
+      'href',
+      'https://www.nuget.org/packages/Newtonsoft.Json',
+    )
+    expect(screen.getByTestId('central-packages-badge')).toHaveTextContent(
+      'Central Package Management',
+    )
+  })
+
   it('renders Python dependency counters and outdated packages', async () => {
     vi.mocked(getDependencies).mockResolvedValue({
       repository_id: 1,

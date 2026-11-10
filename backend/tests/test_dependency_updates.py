@@ -36,6 +36,24 @@ class HybridRunner:
         return self.result
 
 
+class DotnetRunner:
+    """Real ``git``; deterministic ``dotnet list`` and ``dotnet add``."""
+
+    def __init__(self, list_output: str) -> None:
+        self.list_output = list_output
+        self.calls: list[list[str]] = []
+
+    async def __call__(
+        self, args: Sequence[str], cwd: str, timeout: float
+    ) -> CommandResult:
+        if args and args[0] == "git":
+            return await run_command(args, cwd, timeout)
+        self.calls.append(list(args))
+        if len(args) > 1 and args[1] == "list":
+            return CommandResult(ok=True, exit_code=0, stdout=self.list_output)
+        return CommandResult(ok=True, exit_code=0, stdout="updated")
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -249,6 +267,84 @@ async def test_output_is_capped_and_credentials_redacted(
     assert "user:secret" not in entry.output
     assert "https://****@example.com" in entry.output
     assert len(entry.output) <= 1000 + len("\n… (truncated)")
+
+
+async def test_dotnet_lists_outdated_and_adds_packages(
+    session_factory: async_sessionmaker[AsyncSession],
+    make_repo: Callable[[Path], Path],
+    tmp_path: Path,
+) -> None:
+    repo = _clean_repo(
+        make_repo,
+        tmp_path / "dotnet",
+        {
+            "Demo.csproj": (
+                '<Project><ItemGroup>'
+                '<PackageReference Include="Newtonsoft.Json" Version="13.0.1" />'
+                "</ItemGroup></Project>"
+            )
+        },
+    )
+    repository_id = await _create_repository(session_factory, repo)
+    runner = DotnetRunner(
+        "\n".join(
+            [
+                "Project 'Demo' has the following updates:",
+                "   [net8.0]:",
+                "   > Newtonsoft.Json   13.0.1   13.0.1   13.0.3",
+                "   > Serilog           3.0.0    3.0.0    3.1.1",
+            ]
+        )
+    )
+    service = DependencyUpdateService(session_factory, runner=runner)
+
+    async with session_factory() as session:
+        repository = await session.get(Repository, repository_id)
+        assert repository is not None
+        entry = await service.update(session, repository, "dotnet", confirm=True)
+
+    assert entry.status == "success"
+    assert entry.action == "update-dependencies"
+    assert runner.calls[0] == [
+        "dotnet",
+        "list",
+        "Demo.csproj",
+        "package",
+        "--outdated",
+        "--no-restore",
+    ]
+    assert runner.calls[1] == [
+        "dotnet",
+        "add",
+        "Demo.csproj",
+        "package",
+        "Newtonsoft.Json",
+        "--no-restore",
+    ]
+    assert runner.calls[2][4] == "Serilog"
+    assert entry.command == "dotnet add package --no-restore"
+
+
+async def test_dotnet_missing_project_is_rejected(
+    session_factory: async_sessionmaker[AsyncSession],
+    make_repo: Callable[[Path], Path],
+    tmp_path: Path,
+) -> None:
+    repo = _clean_repo(make_repo, tmp_path / "dotnet-empty", {"README.md": "x\n"})
+    repository_id = await _create_repository(session_factory, repo)
+    service = DependencyUpdateService(
+        session_factory, runner=HybridRunner(CommandResult(True, 0))
+    )
+
+    async with session_factory() as session:
+        repository = await session.get(Repository, repository_id)
+        assert repository is not None
+        try:
+            await service.update(session, repository, "dotnet", confirm=True)
+        except DependencyUpdateError as exc:
+            assert exc.message == "no_manifest"
+        else:  # pragma: no cover - safety net
+            raise AssertionError("missing .NET project must be rejected")
 
 
 async def test_update_api_and_dirty_conflict(

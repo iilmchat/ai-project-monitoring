@@ -82,6 +82,9 @@ export const repository = {
   'repo.dependencies.noData': 'No dependency data.',
   'repo.dependencies.packageJsonMissing': 'package.json not found.',
   'repo.dependencies.requirementsMissing': 'requirements.txt not found.',
+  'repo.dependencies.dotnetMissing': '.NET project files (*.csproj) not found.',
+  'repo.dependencies.centralPackages': 'Central Package Management',
+  'repo.dependencies.dev': 'dev',
   'repo.dependencies.parseError': 'Failed to parse {manifest}.',
   'repo.dependencies.manifestFallback': 'the manifest',
   'repo.dependencies.outdated': 'Outdated',
@@ -97,7 +100,7 @@ export const repository = {
   'repo.dependencyStatus.outdated': '{count} outdated',
   'repo.dependencyStatus.current': 'Up to date',
   'repo.dependencySource.cache': 'cache',
-  'repo.dependencySource.mixed': 'PyPI + cache',
+  'repo.dependencySource.mixed': 'registry + cache',
   'repo.dependencySource.staleCache': 'stale cache',
   'repo.dependencyError.rateLimited':
     'PyPI rate-limited the request. Cached data is shown when available.',

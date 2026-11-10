@@ -199,10 +199,11 @@ export interface DependencyPackage {
   manifest_line: number | null
   manifest_section: string | null
   manifest_path?: string | null
+  is_dev?: boolean
 }
 
 export interface DependencyEcosystemReport {
-  ecosystem: 'python' | 'node'
+  ecosystem: 'python' | 'node' | 'dotnet'
   manifest: string | null
   manifests?: string[]
   status: 'ok' | 'no_manifest' | 'parse_error' | 'unavailable'
@@ -256,13 +257,14 @@ export interface SecurityUnknownPackage {
   name: string
   reason:
     | 'unresolved_range'
+    | 'unresolved_version'
     | 'unsupported_kind'
     | 'registry_missing'
     | 'osv_unavailable'
 }
 
 export interface SecurityEcosystemReport {
-  ecosystem: 'python' | 'node'
+  ecosystem: 'python' | 'node' | 'dotnet'
   manifest: string
   manifests?: string[]
   status: SecurityEcosystemStatus

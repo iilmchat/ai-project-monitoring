@@ -1,8 +1,9 @@
-"""Safe discovery and merging of dependency manifests (S35-001).
+"""Safe discovery and merging of dependency manifests (S35-001, S57-001).
 
 The service walks a repository only to locate known manifest files. It never
 executes package managers and never follows symlinks. Ignored directories are
-pruned early so ``node_modules`` and virtualenvs do not affect performance.
+pruned early so ``node_modules``, ``bin``/``obj`` and virtualenvs do not affect
+performance.
 """
 
 from __future__ import annotations
@@ -16,6 +17,13 @@ from app.services.dependency_parser import (
     ParsedRequirement,
     RequirementsParseResult,
     parse_requirements,
+)
+from app.services.dotnet_parser import (
+    PROJECT_SUFFIXES,
+    DotnetParseResult,
+    is_dotnet_manifest,
+    parse_dotnet_manifest,
+    to_requirement,
 )
 from app.services.node_parser import NodeParseResult, parse_package_json
 
@@ -36,6 +44,10 @@ DEFAULT_IGNORED_DIRS = frozenset(
         "dist",
         "build",
         "target",
+        "bin",
+        "obj",
+        ".vs",
+        "packages",
         "vendor",
         "coverage",
         "htmlcov",
@@ -53,6 +65,7 @@ DEFAULT_IGNORED_DIRS = frozenset(
 MANIFEST_ECOSYSTEMS: dict[str, tuple[str, str]] = {
     "requirements.txt": ("python", "python"),
     "package.json": ("node", "node"),
+    "packages.config": ("dotnet", "dotnet"),
 }
 
 
@@ -63,17 +76,20 @@ class DiscoveredManifests:
     root: Path
     python: tuple[Path, ...] = ()
     node: tuple[Path, ...] = ()
+    dotnet: tuple[Path, ...] = ()
 
     def for_ecosystem(self, ecosystem: str) -> tuple[Path, ...]:
         if ecosystem == "python":
             return self.python
         if ecosystem == "node":
             return self.node
+        if ecosystem == "dotnet":
+            return self.dotnet
         return ()
 
     @property
     def all_paths(self) -> tuple[Path, ...]:
-        return self.python + self.node
+        return self.python + self.node + self.dotnet
 
 
 def discover_manifests(
@@ -96,7 +112,7 @@ def discover_manifests(
         for item in (ignored_dirs or ())
         if item.strip()
     }
-    found: dict[str, list[Path]] = {"python": [], "node": []}
+    found: dict[str, list[Path]] = {"python": [], "node": [], "dotnet": []}
     stack: list[tuple[Path, int]] = [(root, 0)]
 
     while stack:
@@ -115,6 +131,10 @@ def discover_manifests(
             mapping = MANIFEST_ECOSYSTEMS.get(entry.name.lower())
             if mapping is not None:
                 found[mapping[0]].append(Path(entry.path))
+            elif is_dotnet_manifest(Path(entry.path)) and entry.name.lower().endswith(
+                PROJECT_SUFFIXES
+            ):
+                found["dotnet"].append(Path(entry.path))
 
         if level >= max_depth:
             continue
@@ -134,6 +154,7 @@ def discover_manifests(
         root=root,
         python=tuple(sorted(found["python"], key=_sort_key)),
         node=tuple(sorted(found["node"], key=_sort_key)),
+        dotnet=tuple(sorted(found["dotnet"], key=_sort_key)),
     )
 
 
@@ -171,9 +192,10 @@ def merge_requirements(
     """
     merged: dict[str, ParsedRequirement] = {}
     for requirement in requirements:
-        current = merged.get(requirement.name)
+        key = requirement.name.lower()
+        current = merged.get(key)
         if current is None:
-            merged[requirement.name] = requirement
+            merged[key] = requirement
             continue
         new_rank = _KIND_RANK.get(requirement.kind, 0)
         old_rank = _KIND_RANK.get(current.kind, 0)
@@ -182,7 +204,7 @@ def merge_requirements(
             and requirement.current is not None
             and current.current is None
         ):
-            merged[requirement.name] = requirement
+            merged[key] = requirement
     return list(merged.values())
 
 
@@ -254,12 +276,44 @@ def parse_node_manifests(discovered: DiscoveredManifests) -> CombinedParseResult
     )
 
 
+def parse_dotnet_manifests(discovered: DiscoveredManifests) -> CombinedParseResult:
+    """Parse all discovered .NET projects and merge packages.
+
+    ``Directory.Packages.props`` is resolved per project (nearest ancestor), so
+    Central Package Management versions are applied without MSBuild. The props
+    file is added to ``manifests`` so the UI can show the CPM badge.
+    """
+    packages: list[ParsedRequirement] = []
+    manifests: list[str] = []
+    errors: list[str] = []
+    for path in discovered.dotnet:
+        parsed: DotnetParseResult = parse_dotnet_manifest(
+            discovered.root,
+            manifest_path=path,
+        )
+        if not parsed.manifest_found:
+            continue
+        manifests.append(relative_path(discovered.root, path))
+        if parsed.central_packages_file is not None:
+            manifests.append(parsed.central_packages_file)
+        if parsed.error is not None:
+            errors.append(parsed.error)
+        packages.extend(to_requirement(item) for item in parsed.packages)
+    return CombinedParseResult(
+        packages=merge_requirements(packages),
+        manifests=list(dict.fromkeys(manifests)),
+        errors=errors,
+        manifest_found=bool(manifests),
+    )
+
+
 __all__ = [
     "DEFAULT_IGNORED_DIRS",
     "CombinedParseResult",
     "DiscoveredManifests",
     "discover_manifests",
     "merge_requirements",
+    "parse_dotnet_manifests",
     "parse_node_manifests",
     "parse_python_manifests",
     "relative_path",

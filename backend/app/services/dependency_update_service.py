@@ -1,4 +1,4 @@
-"""Explicit, preflight-checked dependency updates (S34-001)."""
+"""Explicit, preflight-checked dependency updates (S34-001, S57-003)."""
 
 from __future__ import annotations
 
@@ -22,10 +22,15 @@ from app.models.entities import ActionLog, Repository
 
 logger = structlog.get_logger(__name__)
 
-Ecosystem = Literal["python", "node"]
+Ecosystem = Literal["python", "node", "dotnet"]
 MAX_OUTPUT_CHARS = 10000
 DEFAULT_TIMEOUT_SECONDS = 180
 _BULK_CONCURRENCY = 2
+_MAX_DOTNET_PROJECTS = 20
+_DOTNET_PROJECT_SUFFIXES = (".csproj", ".fsproj", ".vbproj")
+_DOTNET_IGNORED_DIRS = frozenset(
+    {"bin", "obj", ".vs", ".git", "node_modules", ".venv", "packages"}
+)
 _URL_CREDENTIALS = re.compile(r"(https?://)[^/\s@]+@")
 
 
@@ -128,11 +133,17 @@ class DependencyUpdateService:
             raise DependencyUpdateError(
                 "confirmation_required", status_code=400
             )
-        if ecosystem not in {"python", "node"}:
+        if ecosystem not in {"python", "node", "dotnet"}:
             raise DependencyUpdateError("unsupported ecosystem", status_code=400)
 
+        dotnet_projects: list[str] | None = None
         try:
-            command, args = self._command(repository.path, ecosystem)
+            if ecosystem == "dotnet":
+                dotnet_projects = self._dotnet_projects(repository.path)
+                command = "dotnet add package --no-restore"
+                args: list[str] = []
+            else:
+                command, args = self._command(repository.path, ecosystem)
         except DependencyUpdateError as exc:
             await self._log(
                 session,
@@ -175,7 +186,29 @@ class DependencyUpdateService:
             )
             raise DependencyUpdateError("Worktree must be clean")
 
-        result = await self._runner(args, str(Path(repository.path)), self._timeout)
+        result = (
+            await self._run_dotnet(dotnet_projects or [], str(Path(repository.path)))
+            if ecosystem == "dotnet"
+            else await self._runner(
+                args, str(Path(repository.path)), self._timeout
+            )
+        )
+        if (
+            ecosystem == "dotnet"
+            and not result.ok
+            and (result.error == "dotnet_unavailable" or _is_missing_executable(result))
+        ):
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            await self._log(
+                session,
+                repository,
+                command,
+                status="error",
+                error="dotnet_unavailable",
+                duration_ms=duration_ms,
+                actor=actor,
+            )
+            raise DependencyUpdateError("dotnet_unavailable")
         duration_ms = int((time.perf_counter() - started) * 1000)
         output = _format_output(result, self._max_output_chars)
         entry = await self._log(
@@ -236,6 +269,118 @@ class DependencyUpdateService:
         results = await asyncio.gather(*(one(repository_id) for repository_id in ids))
         return [entry for entry in results if entry is not None]
 
+    def _dotnet_projects(self, repo_path: str) -> list[str]:
+        root = Path(repo_path)
+        projects: list[str] = []
+        stack: list[tuple[Path, int]] = [(root, 0)]
+        while stack:
+            current, level = stack.pop()
+            try:
+                entries = list(current.iterdir())
+            except OSError:
+                continue
+            for entry in entries:
+                try:
+                    if entry.is_symlink():
+                        continue
+                    if entry.is_file() and entry.suffix.lower() in _DOTNET_PROJECT_SUFFIXES:
+                        projects.append(entry.relative_to(root).as_posix())
+                except OSError:
+                    continue
+            if level >= 3:
+                continue
+            for entry in entries:
+                try:
+                    if not entry.is_dir() or entry.is_symlink():
+                        continue
+                except OSError:
+                    continue
+                if entry.name.lower() in _DOTNET_IGNORED_DIRS or entry.name.startswith("."):
+                    continue
+                stack.append((entry, level + 1))
+        projects.sort()
+        if not projects:
+            raise DependencyUpdateError("no_manifest")
+        return projects[:_MAX_DOTNET_PROJECTS]
+
+    async def _run_dotnet(
+        self, projects: Sequence[str], cwd: str
+    ) -> CommandResult:
+        """Run ``dotnet list --outdated`` then ``dotnet add`` for each package."""
+        outputs: list[str] = []
+        errors: list[str] = []
+        ok = True
+        timed_out = False
+        exit_code = 0
+
+        for project in projects:
+            listed = await self._runner(
+                [
+                    "dotnet",
+                    "list",
+                    project,
+                    "package",
+                    "--outdated",
+                    "--no-restore",
+                ],
+                cwd,
+                self._timeout,
+            )
+            outputs.extend(part for part in (listed.stdout, listed.stderr) if part.strip())
+            timed_out = timed_out or listed.timed_out
+            if not listed.ok:
+                ok = False
+                exit_code = listed.exit_code or -1
+                if _is_missing_executable(listed):
+                    return CommandResult(
+                        ok=False,
+                        exit_code=-1,
+                        stdout="\n".join(outputs),
+                        stderr="\n".join(errors),
+                        error="dotnet_unavailable",
+                    )
+                errors.append(listed.error or "dotnet_list_failed")
+                continue
+
+            for package in _parse_outdated_packages(listed.stdout):
+                added = await self._runner(
+                    [
+                        "dotnet",
+                        "add",
+                        project,
+                        "package",
+                        package,
+                        "--no-restore",
+                    ],
+                    cwd,
+                    self._timeout,
+                )
+                outputs.extend(
+                    part for part in (added.stdout, added.stderr) if part.strip()
+                )
+                timed_out = timed_out or added.timed_out
+                if not added.ok:
+                    ok = False
+                    exit_code = added.exit_code or -1
+                    if _is_missing_executable(added):
+                        return CommandResult(
+                            ok=False,
+                            exit_code=-1,
+                            stdout="\n".join(outputs),
+                            stderr="\n".join(errors),
+                            error="dotnet_unavailable",
+                        )
+                    errors.append(added.error or "dotnet_add_failed")
+
+        return CommandResult(
+            ok=ok,
+            exit_code=0 if ok else exit_code,
+            stdout="\n".join(outputs),
+            stderr="\n".join(errors),
+            timed_out=timed_out,
+            error=None if ok else (errors[0] if errors else "command_failed"),
+        )
+
     def _command(self, repo_path: str, ecosystem: Ecosystem) -> tuple[str, list[str]]:
         root = Path(repo_path)
         if ecosystem == "python":
@@ -253,6 +398,8 @@ class DependencyUpdateService:
                     "--upgrade",
                 ],
             )
+        if ecosystem == "dotnet":
+            raise DependencyUpdateError("unsupported ecosystem", status_code=400)
         if not (root / "package.json").is_file():
             raise DependencyUpdateError("no_manifest")
         if (root / "pnpm-lock.yaml").is_file():
@@ -295,6 +442,41 @@ def _format_output(result: CommandResult, max_chars: int) -> str | None:
     if not parts:
         return None
     return _redact("\n".join(parts), max_chars)
+
+
+def _parse_outdated_packages(output: str) -> list[str]:
+    """Extract package ids from ``dotnet list package --outdated`` output."""
+    packages: list[str] = []
+    seen: set[str] = set()
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(">"):
+            continue
+        parts = stripped[1:].split()
+        if not parts:
+            continue
+        name = parts[0]
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        packages.append(name)
+    return packages
+
+
+def _is_missing_executable(result: CommandResult) -> bool:
+    if result.exit_code != -1:
+        return False
+    message = (result.error or result.stderr or "").lower()
+    return any(
+        marker in message
+        for marker in (
+            "no such file",
+            "not found",
+            "winerror 2",
+            "cannot find",
+        )
+    )
 
 
 def _redact(value: str, max_chars: int) -> str:

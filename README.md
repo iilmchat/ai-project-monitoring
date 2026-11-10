@@ -27,7 +27,7 @@
 - **Продуктивность и UI** — тёмная тема, интерактивные графики распределения статусов, страница настроек (токены хранятся в БД с маскировкой), массовые операции (Fetch All / Sync Mirrors) и миграция на GitFlic.
 - **UX и продвинутый мониторинг** — Command Palette (`Ctrl+K`), продвинутая таблица с чекбоксами и контекстным меню, сохранённые представления (Saved Views), Telegram-уведомления, менеджер конфликтов и график активности (Heatmap).
 - **Docker-интеграция** — read-only статус контейнеров проекта (running/stopped, порты, health) через Docker SDK/DooD.
-- **Управление зависимостями** — аудит устаревших Python (`requirements.txt` / PyPI) и Node (`package.json` / npm) пакетов с TTL-кэшем 24 ч, табами Python/Node и объединённым отчётом; вложенные манифесты (`backend/`, `frontend/`) находятся автоматически.
+- **Управление зависимостями** — аудит устаревших Python (`requirements.txt` / PyPI), Node (`package.json` / npm) и C#/.NET (`*.csproj` / `Directory.Packages.props` / NuGet) пакетов с TTL-кэшем 24 ч, табами Python/Node/C#/.NET и объединённым отчётом; вложенные манифесты (`backend/`, `frontend/`, `src/`) находятся автоматически.
 - **README и документация** — название и версия проекта из README, модальный просмотр Markdown с переходами по внутренним ссылкам и историей «Назад» (read-only).
 - **Действенный дашборд** — кликабельные карточки сводки («9 требуют внимания» → отфильтрованный список), сворачиваемые фильтры/аналитика и человеческие подписи состояний.
 - **Мультиязычный интерфейс (RU/EN)** — переключатель языка рядом с темой, выбор сохраняется; даты и числа локализованы через `Intl`.
@@ -39,7 +39,7 @@
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
 - **Conversational RAG** — чат с кодовой базой на `/search`: pgvector-поиск по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
-- **Безопасность** — CVE-сканер зависимостей через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
+- **Безопасность** — CVE-сканер зависимостей Python/Node/.NET через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
 - **AI-ассистент** — локальный LLM (Ollama/LM Studio) для черновика commit message, объяснения CVE, AI-дайджеста на дашборде, задач для DSH/OpenCode и проверки соединения из настроек; профили OpenAI-совместимых провайдеров (local/DeepSeek/OpenRouter/Yandex/…), активный профиль переключается без перезапуска; remote endpoint только по opt-in.
@@ -268,9 +268,9 @@ pnpm --dir frontend exec playwright install chromium
 |------------|----------|
 | Версия | **v1.2.0** (2026-11-09) |
 | Статус | **v1.2.0 «AI Analytics & Cross-Platform»** |
-| Спринты | 1–55 |
-| Тесты backend | **276** (275 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **58** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Спринты | 1–57 |
+| Тесты backend | **301** (300 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **59** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **87.93 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
@@ -361,7 +361,7 @@ pnpm --dir frontend exec playwright install chromium
 **v1.3.0 «.NET, Team Edition & SAST»** — в разработке
 ([`TODO_V1.3.0.md`](TODO_V1.3.0.md)):
 
-- **Sprint 57 — .NET Ecosystem Support (NuGet):** парсер `.csproj` и
+- **Sprint 57 — .NET Ecosystem Support (NuGet):** ✅ парсер `.csproj` и
   `Directory.Packages.props` (включая Central Package Management), NuGet
   V3 flat-container, CVE через OSV (`NuGet`), третья вкладка «C# / .NET»,
   `dotnet list --outdated`/`dotnet add --no-restore` и `.cs`/`.csproj` в

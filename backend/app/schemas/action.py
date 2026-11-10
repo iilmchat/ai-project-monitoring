@@ -26,14 +26,14 @@ class DependencyUpdateRequest(BaseModel):
     """Explicit confirmed dependency update for one repository."""
 
     confirm: bool = False
-    ecosystem: Literal["python", "node"]
+    ecosystem: Literal["python", "node", "dotnet"]
 
 
 class BulkDependencyUpdateRequest(BaseModel):
     """Explicit confirmed dependency update for many repositories."""
 
     confirm: bool = False
-    ecosystem: Literal["python", "node"]
+    ecosystem: Literal["python", "node", "dotnet"]
     repo_ids: list[int] | None = None
 
 

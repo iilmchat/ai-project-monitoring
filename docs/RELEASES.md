@@ -4,6 +4,34 @@
 
 ---
 
+## Спринт 57: .NET Ecosystem Support (v1.3.0)
+
+**Дата:** 2026-11-11 · **Статус:** ✅ завершён
+
+- [x] **S57-001. .NET-парсер:** `.csproj`/`.fsproj`/`.vbproj`,
+  `Directory.Packages.props` (CPM + `VersionOverride`), `packages.config`;
+  `is_dev` для `PrivateAssets="all"`; безопасный XML без DTD/XXE; лимиты;
+  неразрешимые MSBuild-свойства/conditions — `unknown` (KI-025).
+- [x] **S57-002. NuGet и сервисы:** `NuGetClient` (flat container, stable
+  SemVer, TTL-кэш 24 ч), `ecosystem="dotnet"` в `DependencyService`,
+  OSV `ecosystem="NuGet"` в `SecurityService`, `is_dev` в схеме.
+- [x] **S57-003. Обновление и инсайты:** `dotnet list package --outdated
+  --no-restore` + `dotnet add <project> package <id> --no-restore` (только
+  `confirm=true`, чистый worktree, `action_log`); `.cs`/`.fs`/`.csproj` в
+  hotspots и RAG.
+- [x] **S57-004. UI:** вкладка «C# / .NET», текущая/последняя версия, статус,
+  ссылка на nuget.org, бейдж «Central Package Management».
+- [x] **S57-005. Тесты и документация:** `test_dotnet_parser.py`, тесты
+  зависимостей/обновлений/UI; SPEC §3.15/§3.15.1, ARCHITECTURE §29,
+  CHANGELOG/RELEASES, ADR-0018.
+- **Проверки:** backend 301 (300 passed, 1 skipped), frontend 59 unit,
+  `ruff`, `mypy`, `pnpm typecheck/lint/test/build`, entry bundle
+  87.93 kB gzip (budget 90 kB).
+- **Ограничение:** MSBuild не вычисляется, приватные фиды и транзитивные
+  зависимости вне scope; `dotnet` CLI нужен только для обновления пакетов.
+
+---
+
 ## Релиз v1.2.0 — «AI Analytics & Cross-Platform»
 
 **Дата:** 2026-11-09 · **Тег:** `v1.2.0`
