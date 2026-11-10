@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-11
+
+.NET Ecosystem Support, Team Edition & Advanced Security.
+
 ### Добавлено
+
+- feat(sast): `SastService` — bandit (Python), semgrep с локальными правилами и eslint-fallback; нормализация High/Medium/Low, дедупликация, timeout 120 с, лимит 500 находок; `GET /api/v1/repositories/{id}/sast` с `refresh`, `tools`, `min_severity`; кэш `sast_cache` 24 ч; отсутствие инструментов → `partial/unavailable`, HTTP 200 (S59-001).
+- feat(ai): `POST /api/v1/repositories/{id}/ai/sast-explain` — объяснение находки через локальную LLM и `ai_cache` (S59-001).
+- feat(automation): `AutomationService` и `POST /api/v1/repositories/{id}/automation/generate` — Dependabot YAML / Renovate JSON по найденным Python/Node/.NET-манифестам; только возврат текста, без записи и commit/push (S59-002).
+- feat(ui): lazy-блок «Безопасность кода (SAST)» с severity, `file:line`, сниппетом и кнопкой «Исправить с AI»; lazy-модалка «Автоматизация» с предпросмотром и копированием (S59-003).
+- test: `test_sast.py`, `test_automation.py`; обновлён `RepositoryDetails.test.tsx` (S59-004).
+- chore(release): версии `1.3.0` во всех манифестах; `sast_cache` миграция 014; ADR-0020/0021 (S59-004).
+- docs: SPEC §3.32/§3.33, ARCHITECTURE §30/§32, CHANGELOG/RELEASES/README.
+
+### .NET / Team Edition (спринты 57–58)
 
 - feat(dotnet): `backend/app/services/dotnet_parser.py` — безопасный разбор `*.csproj`/`*.fsproj`/`*.vbproj`, `Directory.Packages.props` (Central Package Management, `VersionOverride`) и legacy `packages.config`; приоритет версий, `is_dev` (`PrivateAssets="all"`), лимиты XML, запрет DTD/XXE; `$(Property)`/`Condition` → `unknown` (S57-001, KI-025).
 - feat(dotnet): `backend/app/providers/nuget_client.py` — NuGet V3 flat container, lower-case id, выбор максимальной stable SemVer, 404/429/5xx/timeout, общий `dependency_cache` (`nuget:<lower-id>`, 24 ч) (S57-002).

@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.2.0 · **v1.3.0 в разработке** · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.3.0 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -41,6 +41,8 @@
 - **Conversational RAG** — чат с кодовой базой на `/search`: pgvector-поиск по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
 - **Командная работа (v1.3.0)** — роли `Admin`/`Auditor`, приглашение пользователей с временным паролем, смена ролей и append-only журнал аудита действий с admin-страницами `/admin/users` и `/admin/audit`.
 - **Безопасность** — CVE-сканер зависимостей Python/Node/.NET через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
+- **SAST** — статический анализ кода bandit/semgrep (eslint-fallback): command injection, SQL/инъекции, XSS; severity, `file:line`, кэш 24 ч и объяснение находки локальной LLM.
+- **Автоматические PR** — генерация `.github/dependabot.yml` или `renovate.json` для Python/Node/.NET с предпросмотром и копированием; приложение не коммитит и не пушит.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
 - **AI-ассистент** — локальный LLM (Ollama/LM Studio) для черновика commit message, объяснения CVE, AI-дайджеста на дашборде, задач для DSH/OpenCode и проверки соединения из настроек; профили OpenAI-совместимых провайдеров (local/DeepSeek/OpenRouter/Yandex/…), активный профиль переключается без перезапуска; remote endpoint только по opt-in.
@@ -267,12 +269,12 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.2.0** (2026-11-09) |
-| Статус | **v1.2.0 «AI Analytics & Cross-Platform»** |
-| Спринты | 1–58 |
-| Тесты backend | **310** (309 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **59** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **88.28 kB gzip** (+ lazy charts 100.9 kB, admin 1.8/3.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
+| Версия | **v1.3.0** (2026-11-11) |
+| Статус | **v1.3.0 «.NET, Team Edition & SAST»** |
+| Спринты | 1–59 |
+| Тесты backend | **321** (320 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **60** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **88.33 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -359,7 +361,7 @@ pnpm --dir frontend exec playwright install chromium
 - **Sprint 55 — Conversational RAG & Release v1.2.0:** ✅ чат с базой знаний на
   `/search` (pgvector + LLM), цитаты на файлы и финальный релиз.
 
-**v1.3.0 «.NET, Team Edition & SAST»** — в разработке
+**v1.3.0 «.NET, Team Edition & SAST»** — релиз 2026-11-11
 ([`TODO_V1.3.0.md`](TODO_V1.3.0.md)):
 
 - **Sprint 57 — .NET Ecosystem Support (NuGet):** ✅ парсер `.csproj` и
@@ -371,10 +373,10 @@ pnpm --dir frontend exec playwright install chromium
   `Auditor` (только чтение), серверная проверка прав на Actions, append-only
   `audit_log` (кто, когда, какой репозиторий, какой скан), страницы
   `/admin/users` и `/admin/audit` с фильтрами и приглашением пользователей.
-- **Sprint 59 — Advanced Security (SAST) & Automated PRs:** `bandit` для
-  Python и `semgrep` для Python/JS/TS/C# в блоке «Безопасность», генерация
-  конфигураций Dependabot/Renovate через UI с предпросмотром и явным
-  применением (без autopush), финальный аудит и релиз `v1.3.0`.
+- **Sprint 59 — Advanced Security (SAST) & Automated PRs:** ✅ `bandit`,
+  `semgrep` (локальные правила) и eslint-fallback в блоке «Безопасность кода
+  (SAST)», объяснение находки через LLM; генерация Dependabot/Renovate с
+  предпросмотром и копированием (без записи, commit и push).
 - **Ограничение:** как и раньше, приложение не делает `git push`, не создаёт
   PR и не исполняет код проверяемых проектов; MSBuild-выражения в .NET не
   вычисляются (KI-025).

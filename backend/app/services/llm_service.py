@@ -304,6 +304,29 @@ class LLMService:
             max_chars=MAX_EXPLANATION_CHARS,
         )
 
+    async def explain_sast(
+        self, rule_id: str, message: str, snippet: str
+    ) -> str | None:
+        """Explain a SAST finding and suggest a safe fix."""
+        rule = rule_id.strip()
+        description = message.strip()
+        if not rule or not description:
+            return None
+        code = snippet.strip()
+        prompt = (
+            "Ты — эксперт по безопасности приложений. Объясни разработчику "
+            f"находку {rule}: {description}."
+        )
+        if code:
+            prompt += f"\nФрагмент кода:\n{code[:3000]}"
+        prompt += "\nОтветь кратко (2-4 предложения) и предложи безопасное исправление."
+        return await self._complete(
+            SECURITY_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=384,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
     async def advise_unification(
         self,
         package: str,

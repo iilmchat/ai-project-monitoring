@@ -85,6 +85,7 @@ from app.schemas.repository import (
     RepositoryStatusResponse,
     RepositoryTagsResponse,
 )
+from app.schemas.sast import SastExplainRequest, SastExplanation
 from app.schemas.security import SecurityReport
 from app.services.action_service import (
     ActionNotAllowedError,
@@ -1285,6 +1286,103 @@ async def explain_repository_cve(
 
     response.headers["X-AI-Cache"] = "miss"
     return CveExplanation(
+        explanation=explanation,
+        cached=False,
+        model=config.model,
+        generated_at=utcnow(),
+    )
+
+
+@router.post(
+    "/repositories/{repository_id}/ai/sast-explain",
+    response_model=SastExplanation,
+)
+async def explain_repository_sast(
+    repository_id: int,
+    payload: SastExplainRequest,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> SastExplanation:
+    await _get_repository(session, repository_id)
+    service = _llm_service(request)
+    ok, error = await service.availability()
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error or "llm_disabled",
+        )
+    config = await service.resolve()
+    scope = f"{payload.file}:{payload.line}:{payload.rule_id}"
+    state = {
+        "rule_id": payload.rule_id,
+        "message": payload.message,
+        "snippet": payload.snippet,
+    }
+    cache_key = build_cache_key(
+        "sast-explain",
+        scope,
+        state,
+        config.model,
+        request.app.state.settings.ai_prompt_version,
+    )
+    ttl = int(request.app.state.settings.ai_cache_ttl_seconds)
+
+    async def cached_response() -> SastExplanation | None:
+        row = await session.get(AICache, cache_key)
+        if row is None or not cache_is_fresh(row.checked_at, ttl):
+            return None
+        explanation = (
+            row.payload.get("explanation")
+            if isinstance(row.payload, dict)
+            else None
+        )
+        if not isinstance(explanation, str) or not explanation:
+            return None
+        observe_ai_cache("sast_explain", hit=True)
+        response.headers["X-AI-Cache"] = "hit"
+        return SastExplanation(
+            explanation=explanation,
+            cached=True,
+            model=row.model,
+            generated_at=utcnow(),
+        )
+
+    hit = await cached_response()
+    if hit is not None:
+        return hit
+
+    lock = cache_lock(cache_key)
+    async with lock:
+        hit = await cached_response()
+        if hit is not None:
+            return hit
+        observe_ai_cache("sast_explain", hit=False)
+        explanation = await service.explain_sast(
+            payload.rule_id,
+            payload.message,
+            payload.snippet,
+        )
+        observe_llm_call(
+            "sast_explain",
+            config.provider,
+            "ok" if explanation is not None else "error",
+        )
+        if explanation is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="llm_unavailable",
+            )
+        row = await session.get(AICache, cache_key)
+        if row is None:
+            row = AICache(key=cache_key, kind="sast_explain", model=config.model)
+            session.add(row)
+        row.payload = {"explanation": explanation}
+        row.checked_at = utcnow()
+        await session.commit()
+
+    response.headers["X-AI-Cache"] = "miss"
+    return SastExplanation(
         explanation=explanation,
         cached=False,
         model=config.model,

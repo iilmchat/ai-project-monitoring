@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     insights_git_timeout_seconds: float = 10.0
     insights_hotspots_limit: int = 5
     insights_hotspots_days: int = 90
+    sast_enabled: bool = True
+    sast_timeout_seconds: float = 120.0
+    sast_max_findings: int = 500
+    sast_max_output_bytes: int = 8 * 1024 * 1024
+    sast_cache_ttl_seconds: int = 86400
+    sast_semgrep_config: str = ""
     llm_enabled: bool = False
     llm_base_url: str = "http://127.0.0.1:1234/v1"
     llm_model: str = "qwen2.5-coder-7b-instruct"
@@ -123,7 +129,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.2.0"
+    app_version: str = "1.3.0"
 
     @property
     def scan_root_paths(self) -> list[str]:

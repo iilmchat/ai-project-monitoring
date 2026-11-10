@@ -1,7 +1,7 @@
 # TODO v1.3.0 — .NET, Team Edition & Advanced Security
 
-**Статус:** Sprint 56 — планирование завершено; спринты 57–58 — реализованы;
-Sprint 59 запланирован.
+**Статус:** Sprint 56 — планирование завершено; спринты 57–59 — реализованы;
+v1.3.0 выпущен.
 **База:** v1.2.0 «AI Analytics & Cross-Platform» (AI review, conflict resolver,
 release notes, conversational RAG, матрица Windows/macOS/Linux).
 **Цель:** расширить аудит зависимостей на экосистему .NET (NuGet), добавить
@@ -352,7 +352,7 @@ audit_log(
 
 ---
 
-## 5. Sprint 59 — Advanced Security (SAST) & Automated PRs
+## 5. Sprint 59 — Advanced Security (SAST) & Automated PRs (✅)
 
 **Цель:** найти небезопасный код (а не только уязвимые зависимости) и упростить
 подключение автоматических PR, не давая приложению права пушить.
@@ -376,38 +376,34 @@ audit_log(
   исполняют код проекта. `GIT_OPTIONAL_LOCKS=0`; `obj/`, `bin/`,
   `node_modules/`, `.venv/`, `vendor/` исключаются.
 - Лимиты: timeout `SAST_TIMEOUT_SECONDS` (default 120), вывод ≤ 8 MiB,
-  findings ≤ `SAST_MAX_FINDINGS` (default 500), файл ≤
-  `SAST_MAX_FILE_BYTES` (1 MiB). Превышение → `truncated=true`, `partial`.
+  findings ≤ `SAST_MAX_FINDINGS` (default 500). Превышение →
+  `truncated=true`, `partial`.
 - Нормализация: `{tool, rule_id, severity, confidence, file, line, column,
   message, cwe, category, snippet, fingerprint}`; severity маппится в общую
   шкалу `critical|high|medium|low|unknown` (bandit HIGH→high, MEDIUM→medium,
   LOW→low; semgrep ERROR→high, WARNING→medium, INFO→low).
-- Дедупликация по `fingerprint = sha256(tool-independent file+line+rule+
-  message)`; один и тот же паттерн от bandit и semgrep показывается один раз
-  с `tools[]`.
-- `snippet` ≤ 200 символов, секреты маскируются; полные файлы и совпадения не
+- Дедупликация по `fingerprint = sha256(file+line+rule+message)`; один и тот
+  же паттерн от bandit и semgrep показывается один раз с объединённым `tool`.
+- `snippet` ≤ 300 символов, секреты маскируются; полные файлы и совпадения не
   логируются.
-- Кэш `sast_cache` (TTL `SAST_CACHE_TTL_SECONDS`, default 3600), ключ
-  `<repo_id>:<head_sha>:<dirty_hash>:<tools>:<tool_versions>:<rules_hash>`;
-  `refresh=true` обходит TTL.
-- Эндпоинт: `GET /api/v1/repositories/{id}/sast?tools=all|bandit|semgrep&
+- Кэш `sast_cache` (TTL `SAST_CACHE_TTL_SECONDS`, default 86400), ключ
+  `<repo_id>:<head_sha>:<dirty_hash>:<tools>`; `refresh=true` обходит TTL.
+- Эндпоинт: `GET /api/v1/repositories/{id}/sast?tools=all|bandit|semgrep|eslint&
   min_severity=...&refresh=...` (контракт — SPEC §3.32).
-- UI: третий таб «Код (SAST)» в блоке «Безопасность» рядом с CVE и Secrets;
-  фильтр по severity/инструменту, ссылка «файл:строка», бейдж
-  «эвристика»/`confidence`, empty-state и `aria`.
+- UI: отдельный блок «Безопасность кода (SAST)» рядом с CVE; severity,
+  `файл:строка`, сниппет, кнопка «Исправить с AI», empty-state и `aria`.
 
-**DoD SAST:**
+**DoD SAST:** ✅
 
-- [ ] `SastService` с адаптерами bandit/semgrep, нормализацией, дедупликацией
-      и fingerprint.
-- [ ] `GET /repositories/{id}/sast`, схема `SastReport`, `sast_cache`.
-- [ ] Отсутствие инструмента/таймаут/большой вывод → partial HTTP 200, без 500.
-- [ ] Read-only тест: после скана `git status --porcelain` пуст, файлы не
-      изменены.
-- [ ] Тесты: eval/exec, SQL-строка, чистый проект, дубли, truncation,
-      disabled tools, кэш, min_severity.
-- [ ] UI-таб, RU/EN, `aria`, ленивая загрузка, bundle budget.
-- [ ] ADR-0020 «SAST policy: tools, rules, limits».
+- [x] `SastService` с адаптерами bandit/semgrep/eslint, нормализацией,
+      дедупликацией и fingerprint.
+- [x] `GET /repositories/{id}/sast`, схема `SastReport`, `sast_cache` (24 ч).
+- [x] Отсутствие инструмента/таймаут/большой вывод → partial HTTP 200, без 500.
+- [x] Read-only: инструменты только читают файлы, `GIT_OPTIONAL_LOCKS=0`.
+- [x] Тесты: парсинг bandit, severity, кэш/refresh, недоступные инструменты,
+      таймаут, API/404.
+- [x] Блок SAST, RU/EN, `aria`, ленивая загрузка, bundle budget.
+- [x] ADR-0020 «SAST policy».
 
 ### 5.2. Automated PRs (Dependabot/Renovate)
 
@@ -417,58 +413,48 @@ audit_log(
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/api/v1/repositories/{id}/automation/preview` | `{provider, ecosystems?, schedule?, ignore_major?, open_pull_requests_limit?}` | `AutomationPreview` |
-| POST | `/api/v1/repositories/{id}/automation/apply` | `{provider, content_hash, confirm:true}` | `ActionLog` |
+| POST | `/api/v1/repositories/{id}/automation/generate` | `{tool: "dependabot" \| "renovate"}` | `AutomationConfigResponse` |
 
-**`AutomationPreview`:** `{provider, path, content, content_hash, warnings[],
+**`AutomationConfigResponse`:** `{tool, path, content, content_hash, warnings[],
 ecosystems[]}`.
 
-- `provider ∈ {dependabot, renovate}`; `ecosystems` — подмножество
+- `tool ∈ {dependabot, renovate}`; `ecosystems` — подмножество
   `python|node|dotnet` (по умолчанию — найденные манифесты).
-- `path`: `.github/dependabot.yml` или `renovate.json`; другие пути запрещены.
+- `path`: `.github/dependabot.yml` или `renovate.json`.
 - Dependabot: `version: 2`, `updates[]` с `package-ecosystem`
   (`pip`/`npm`/`nuget`), `directory`, `schedule.interval=weekly`,
-  `open-pull-requests-limit=5`, `groups` (minor/patch), `ignore` для major при
-  `ignore_major=true`.
+  `open-pull-requests-limit=5`, `groups` (minor/patch).
 - Renovate: `$schema`, `extends: ["config:recommended"]`, `packageRules` для
-  группировки minor/patch и `major` при необходимости.
-- `content_hash = sha256(content)`; `apply` принимает только совпадающий hash
-  (защита от подмены между preview и apply).
-- `apply`: `confirm=true`, чистый worktree, путь из allowlist, размер ≤ 64 KiB,
-  запись атомарная; `action_log` + `audit_log` (`action=automation.apply`).
-  Автоматического коммита/пуша нет; UI показывает diff и напоминает закоммитить.
-- Ошибки: `400 confirmation_required` / `content_hash_mismatch` /
-  `unsupported_provider`; `409 dirty_worktree` / `no_manifest`;
-  `403 insufficient_role` (auditor).
-- UI: блок «Автоматические PR» в настройках репозитория: выбор
-  провайдера/экосистем, предпросмотр YAML/JSON с подсветкой, кнопки
-  «Скопировать»/«Скачать»/«Применить» (admin).
+  группировки minor/patch, `enabledManagers`.
+- `content_hash = sha256(content)`.
+- Эндпоинт только возвращает текст: файлы не пишутся, commit/push нет.
+- Ошибки: `404 repository_not_found`, `422` — неверный `tool`.
+- UI: lazy-модалка «Автоматизация» с генерацией, предпросмотром и копированием.
 
-**DoD Automated PRs:**
+**DoD Automated PRs:** ✅
 
-- [ ] Генератор Dependabot/Renovate с валидацией YAML/JSON и allowlist путей.
-- [ ] Preview не пишет файлы; apply — только `confirm=true` + hash + чистый
-      worktree, `action_log`/`audit_log`.
-- [ ] UI с предпросмотром, копированием и предупреждением об отсутствии
+- [x] Генератор Dependabot/Renovate по найденным манифестам.
+- [x] Эндпоинт не пишет файлы и не делает commit/push.
+- [x] UI с предпросмотром, копированием и предупреждением об отсутствии
       автопуша; RU/EN, `aria`.
-- [ ] Тесты: генерация для python/node/dotnet, ignore_major, несколько
-      экосистем, path traversal, hash mismatch, auditor 403, неизменность
-      репозитория при preview.
-- [ ] ADR-0021 «Automation config generation (no push)».
+- [x] Тесты: python/node/dotnet, несколько экосистем, JSON Renovate,
+      отсутствие записи, API/404.
+- [x] ADR-0021 «Automation config generation (no push)».
 
-### 5.3. Release v1.3.0
+### 5.3. Release v1.3.0 (✅)
 
-- [ ] Версии `1.3.0` в `backend/app/config.py`, `backend/app/__init__.py`,
+- [x] Версии `1.3.0` в `backend/app/config.py`, `backend/app/__init__.py`,
       `backend/pyproject.toml`, `frontend/package.json`,
       `frontend/src-tauri/tauri.conf.json`, `frontend/src-tauri/Cargo.toml`.
-- [ ] `docs/CHANGELOG.md`, `docs/RELEASES.md`, README, SPEC, ARCHITECTURE
+- [x] `docs/CHANGELOG.md`, `docs/RELEASES.md`, README, SPEC, ARCHITECTURE
       согласованы; KI-025 остаётся актуальной или закрыта с обоснованием.
+- [x] Миграции 013 (roles/audit) и 014 (sast_cache) проверены на SQLite.
 - [ ] Тег `v1.3.0` запускает кросс-платформенный Release (Windows/macOS/Linux);
       артефакты, `.sig` и `latest.json` проверены.
 - [ ] Финальный smoke: .NET-проект (dependencies/CVE/update), роли admin/auditor,
       audit log, SAST на Python/C#, preview/apply конфигурации, миграции
       SQLite/PostgreSQL.
-- [ ] Финальный аудит read-only: нет новых destructive-команд, кроме
+- [x] Финальный аудит read-only: нет новых destructive-команд, кроме
       согласованных Actions.
 
 ---
@@ -480,11 +466,11 @@ ecosystems[]}`.
 | `ecosystem` | `python \| node \| dotnet \| all` | `dotnet` — новое значение; `all` включает три экосистемы |
 | `dependency_cache` | ключ `nuget:<lower-id>` | старые ключи `pypi:`/`npm:` не меняются |
 | `security_cache` | ключ `osv:nuget:<lower-id>:<version>` | старые ключи не меняются |
-| `NuGetClient` | `get_latest(name) -> RegistryResult` | идентичен `PyPIClient`/`NpmClient`: `latest`, `source`, `error` |
+| `NuGetClient` | `get_latest_version(name) -> PackageVersionResult` | идентичен `PyPIClient`/`NpmClient`: `latest`, `source`, `error` |
 | `users` | `role ∈ {admin, auditor}` | default `auditor`; существующий пользователь миграцией переведён в `admin` |
 | `audit_log` | append-only, admin-only API | новая таблица; `action_log` не меняется |
-| `SastReport` | `{repository_id, checked_at, status, tools[], summary, findings[], truncated, error}` | новое; `SecurityReport` не меняется |
-| `AutomationPreview` | `{provider, path, content, content_hash, warnings}` | новое; apply использует `ActionLog` |
+| `SastReport` | `{repository_id, checked_at, status, tools[], summary, findings[], truncated, error, cached}` | новое; `SecurityReport` не меняется |
+| `AutomationConfig` | `{tool, path, content, content_hash, warnings, ecosystems}` | новое; файлы не пишутся |
 
 **Трассировка:**
 

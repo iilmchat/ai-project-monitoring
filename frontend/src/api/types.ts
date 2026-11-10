@@ -314,6 +314,71 @@ export interface SecurityReport {
   error: string | null
 }
 
+export type SastSeverity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+export type SastStatus = 'ok' | 'partial' | 'unavailable'
+
+export interface SastFinding {
+  tool: string
+  rule_id: string
+  severity: SastSeverity
+  confidence: string | null
+  category: string | null
+  cwe: string | null
+  file: string
+  line: number
+  column: number | null
+  message: string
+  snippet: string | null
+  fingerprint: string
+}
+
+export interface SastToolReport {
+  name: string
+  status: 'ok' | 'unavailable' | 'error'
+  version: string | null
+  duration_ms: number
+  error: string | null
+}
+
+export interface SastSummary {
+  total: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unknown: number
+}
+
+export interface SastReport {
+  repository_id: number
+  checked_at: string
+  status: SastStatus
+  tools: SastToolReport[]
+  summary: SastSummary
+  findings: SastFinding[]
+  truncated: boolean
+  error: string | null
+  cached: boolean
+}
+
+export interface SastExplanation {
+  explanation: string
+  cached: boolean
+  model: string | null
+  generated_at: string
+}
+
+export type AutomationTool = 'dependabot' | 'renovate'
+
+export interface AutomationConfig {
+  tool: AutomationTool
+  path: string
+  content: string
+  content_hash: string
+  ecosystems: string[]
+  warnings: string[]
+}
+
 export type InsightsStatus =
   | 'ok'
   | 'partial'

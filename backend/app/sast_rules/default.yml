@@ -1,0 +1,27 @@
+rules:
+  - id: iiruchating-js-eval
+    languages: [javascript, typescript]
+    message: Avoid eval() on untrusted input (code injection).
+    severity: ERROR
+    metadata:
+      cwe: "CWE-95"
+    pattern: eval(...)
+
+  - id: iiruchating-js-child-process-shell
+    languages: [javascript, typescript]
+    message: child_process with shell=true may allow command injection.
+    severity: WARNING
+    metadata:
+      cwe: "CWE-78"
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec(...)
+          - pattern: exec(...)
+
+  - id: iiruchating-js-inner-html
+    languages: [javascript, typescript]
+    message: Assigning untrusted data to innerHTML can lead to XSS.
+    severity: WARNING
+    metadata:
+      cwe: "CWE-79"
+    pattern: $EL.innerHTML = $VALUE

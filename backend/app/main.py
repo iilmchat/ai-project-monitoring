@@ -26,6 +26,7 @@ from app.services.agent_task_service import AgentTaskService
 from app.services.ai_provider_service import AIProviderService
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
+from app.services.automation_service import AutomationService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
 from app.services.code_search_service import CodeSearchService
@@ -43,6 +44,7 @@ from app.services.mirror_scheduler import MirrorScheduler
 from app.services.mirror_service import MirrorService
 from app.services.notification_service import NotificationService
 from app.services.remote_service import RemoteService
+from app.services.sast_service import SastService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.services.status_service import StatusCache, StatusService
@@ -139,6 +141,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hotspots_limit=resolved.insights_hotspots_limit,
         hotspots_days=resolved.insights_hotspots_days,
     )
+    sast_service = SastService(
+        session_factory,
+        enabled=resolved.sast_enabled,
+        cache_ttl_seconds=resolved.sast_cache_ttl_seconds,
+        timeout_seconds=resolved.sast_timeout_seconds,
+        max_findings=resolved.sast_max_findings,
+        max_output_bytes=resolved.sast_max_output_bytes,
+        semgrep_config=resolved.sast_semgrep_config,
+    )
+    automation_service = AutomationService()
     ai_provider_service = AIProviderService(session_factory)
     gigachat_provider = GigaChatProvider(resolved, session_factory=session_factory)
     llm_service = LLMService(
@@ -246,6 +258,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.dependency_service = dependency_service
     application.state.osv_client = osv_client
     application.state.security_service = security_service
+    application.state.sast_service = sast_service
+    application.state.automation_service = automation_service
     application.state.insights_service = insights_service
     application.state.llm_service = llm_service
     application.state.gigachat_provider = gigachat_provider

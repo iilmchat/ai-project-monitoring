@@ -1798,9 +1798,10 @@ class NuGetClient:
 
 ---
 
-## 30. SastService (v1.3.0, Sprint 59 — план)
+## 30. SastService (v1.3.0, Sprint 59 — реализовано)
 
-> **Статус:** план Sprint 59; контракт — SPEC §3.32.
+> **Статус:** реализовано в Sprint 59 (`app/services/sast_service.py`);
+> контракт — SPEC §3.32.
 
 **Задача.** Найти небезопасный код, не исполняя его, и показать результат
 рядом с CVE/секретами.
@@ -1808,10 +1809,10 @@ class NuGetClient:
 ### 30.1. Поток
 
 ```
-GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
+GET /repositories/{id}/sast?tools=all&min_severity=all&refresh=false
   → SastService
-      ├─ cache lookup (sast_cache: repo + head + dirty_hash + tools + versions + rules_hash)
-      ├─ adapters: BanditAdapter | SemgrepAdapter
+      ├─ cache lookup (sast_cache: repo + head + dirty_hash + tools, TTL 24 ч)
+      ├─ adapters: bandit | semgrep | eslint fallback
       │    asyncio.create_subprocess_exec(...), timeout 120 с, output cap 8 MiB
       ├─ normalize → {tool, rule_id, severity, confidence, cwe, file, line, message}
       ├─ dedupe by fingerprint; filter min_severity
@@ -1820,16 +1821,19 @@ GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
 
 ### 30.2. Адаптеры
 
-- `BanditAdapter`: `bandit -f json -q -r <repo>`; парсит `results[]`
-  (`test_id`, `test_name`, `issue_severity`, `issue_confidence`, `filename`,
-  `line_number`, `code`).
+- `BanditAdapter`: `bandit -f json -q -r <repo>` (бинарник или
+  `python -m bandit`); парсит `results[]` (`test_id`, `test_name`,
+  `issue_severity`, `issue_confidence`, `filename`, `line_number`, `code`).
 - `SemgrepAdapter`: `semgrep --json --config <local> --metrics=off
   --disable-version-check <repo>`; парсит `results[]` (`check_id`, `path`,
   `start.line`, `extra.severity`, `extra.message`, `extra.metadata.cwe`).
-- Оба — внешние опциональные бинарники; версия определяется один раз и
-  участвует в ключе кэша. Отсутствие → `tool.status=unavailable`,
-  `SastReport.status=partial` (или `unavailable`, если нет ни одного).
-- Сеть запрещена: только локальные правила semgrep; `--config auto` не
+- `EslintAdapter` (fallback, если semgrep недоступен): локальный
+  `node_modules/.bin/eslint . --format json`; error→high, warning→medium.
+- Все инструменты — внешние опциональные; версия не запрашивается. Отсутствие
+  → `tool.status=unavailable`, `SastReport.status=partial` (или `unavailable`,
+  если нет ни одного).
+- Сеть запрещена: только локальные правила semgrep
+  (`SAST_SEMGREP_CONFIG`/`app/sast_rules/default.yml`); `--config auto` не
   используется. `bandit` офлайн.
 
 ### 30.3. Нормализация и лимиты
@@ -1838,11 +1842,11 @@ GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
   `findings[]`, но `summary` считается по полному набору.
 - `fingerprint = sha256(file + line + rule_id + normalized_message)`;
   дубли между инструментами схлопываются, `tools[]` перечисляет источники.
-- `snippet` ≤ 200 символов, секреты маскируются; `confidence` сохраняется.
-- Timeout 120 с (kill процесса), output ≤ 8 MiB, findings ≤ 500, файл ≤ 1 MiB;
-  превышение → `truncated=true`, `status=partial`.
-- Кэш `sast_cache` TTL 1 ч; `refresh=true` обходит TTL. In-memory слой — для
-  повторных запросов в рамках одного процесса.
+- `snippet` ≤ 300 символов, секреты маскируются; `confidence` сохраняется.
+- Timeout 120 с (kill процесса), output ≤ 8 MiB, findings ≤ 500; превышение →
+  `truncated=true`, `status=partial`.
+- Кэш `sast_cache` TTL 24 ч; `refresh=true` обходит TTL. Недоступный результат
+  не кэшируется.
 
 ### 30.4. Безопасность и read-only
 
@@ -1852,8 +1856,9 @@ GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
   symlink'и не разыменовываются.
 - Полные файлы, совпадения и пути вне репозитория не логируются; ошибки
   инструментов редактируются.
-- UI: таб «Код (SAST)» в блоке «Безопасность», фильтры severity/инструмент,
-  `file:line`, `aria`, RU/EN; ленивая загрузка.
+- UI: отдельный блок «Безопасность кода (SAST)» рядом с CVE, `file:line`,
+  severity, сниппет, кнопка «Исправить с AI» (`ai_cache`), `aria`, RU/EN;
+  ленивая загрузка.
 
 ---
 
@@ -1906,48 +1911,42 @@ GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
 
 ---
 
-## 32. Automation config generation (v1.3.0, Sprint 59 — план)
+## 32. Automation config generation (v1.3.0, Sprint 59 — реализовано)
 
-> **Статус:** план Sprint 59; контракт — SPEC §3.33. Приложение не делает
-> commit/push и не создаёт PR.
+> **Статус:** реализовано в Sprint 59 (`app/services/automation_service.py`,
+> `POST /repositories/{id}/automation/generate`); контракт — SPEC §3.33.
+> Приложение не делает commit/push и не создаёт PR.
 
 ### 32.1. Поток
 
 ```
-POST /repositories/{id}/automation/preview {provider, ecosystems?, ...}
+POST /repositories/{id}/automation/generate {tool}
   → AutomationService
-      ├─ ManifestDiscovery → найденные ecosystems (python/node/dotnet)
+      ├─ ManifestDiscovery → ecosystems (python/node/dotnet) + directories
       ├─ generate Dependabot YAML | Renovate JSON
-      ├─ validate (YAML/JSON parse, schema allowlist)
-      └─ AutomationPreview {path, content, content_hash, warnings}
-
-POST /repositories/{id}/automation/apply {provider, content_hash, confirm}
-  → preflight: confirm, admin role, чистый worktree, hash совпадает
-  → atomic write в .github/dependabot.yml | renovate.json
-  → action_log + audit_log; никакого git add/commit/push
+      └─ AutomationConfig {tool, path, content, content_hash, ecosystems, warnings}
 ```
 
 ### 32.2. Генерация
 
 - Dependabot: `version: 2`; `updates[]` для `pip`/`npm`/`nuget`,
-  `directory` из расположения манифеста, `schedule.interval` (default
-  `weekly`), `open-pull-requests-limit` (default 5), `groups` для
-  minor/patch, `ignore` major при `ignore_major=true`.
-- Renovate: `$schema`, `extends: ["config:recommended"]`, `packageRules` с
-  группировкой minor/patch и `major` по флагу.
-- `content_hash = sha256(content)`; `apply` принимает только точный hash.
-- Пути — allowlist (`.github/dependabot.yml`, `renovate.json`), размер ≤
-  64 KiB, запись атомарная (temp + rename) внутри корня репозитория.
-- Автоматического commit/push нет: пользователь коммитит сам, после чего
-  GitHub/GitLab создаёт PR.
+  `directory` из расположения манифеста (`/`, `/backend`, …),
+  `schedule.interval=weekly`, `open-pull-requests-limit=5`, `groups` для
+  minor/patch.
+- Renovate: `$schema`, `extends: ["config:recommended"]`,
+  `schedule`, `packageRules` с группировкой minor/patch и `enabledManagers`
+  по найденным экосистемам (`pip_requirements`, `npm`, `nuget`).
+- `content_hash = sha256(content)`; `path` — только
+  `.github/dependabot.yml` или `renovate.json`.
+- Если манифестов нет — `warnings=["no_manifests"]`; конфигурация всё равно
+  возвращается.
+- Автоматического commit/push нет: пользователь копирует контент и коммитит
+  сам, после чего GitHub/GitLab создаёт PR.
 
 ### 32.3. Безопасность
 
-- `preview` не пишет файлы; `apply` требует `confirm=true`, роль `admin`,
-  чистый worktree и совпадающий hash.
-- Path traversal, абсолютные пути, symlink и запись вне allowlist
-  отклоняются (`400 invalid_path`).
-- Ошибка записи → `ActionLog.status=error`, HTTP 409, без 500; аудит
-  фиксирует `denied`/`error`.
+- Эндпоинт только читает манифесты и возвращает текст; файлы не создаются.
+- Пути конфигураций фиксированы, path traversal и запись исключены.
 - Сгенерированный контент не содержит токенов и приватных URL; секреты не
   логируются.
+- UI: lazy-модалка «Автоматизация» с предпросмотром и кнопкой «Скопировать».

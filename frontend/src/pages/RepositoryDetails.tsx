@@ -82,6 +82,8 @@ const CodeReviewModal = lazy(() => import('../components/CodeReviewModal'))
 const ConflictResolverModal = lazy(() => import('../components/ConflictResolverModal'))
 const ReleaseNotesModal = lazy(() => import('../components/ReleaseNotesModal'))
 const InsightsSparkline = lazy(() => import('../components/InsightsSparkline'))
+const SastBlock = lazy(() => import('../components/SastBlock'))
+const AutomationModal = lazy(() => import('../components/AutomationModal'))
 
 interface ActionPrompt {
   kind: 'local' | 'mirror'
@@ -185,6 +187,7 @@ function RepositoryDetailsContent() {
   const [codeReviewOpen, setCodeReviewOpen] = useState(false)
   const [conflictFile, setConflictFile] = useState<string | null>(null)
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
+  const [automationOpen, setAutomationOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitMessage, setCommitMessage] = useState('')
@@ -863,6 +866,13 @@ function RepositoryDetailsContent() {
                 </button>
               </>
             )}
+          <button
+            type="button"
+            onClick={() => setAutomationOpen(true)}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {t('repo.automation.open')}
+          </button>
           <button
             type="button"
             onClick={() => void handleRefresh()}
@@ -1644,6 +1654,10 @@ function RepositoryDetailsContent() {
             </div>
           </div>
 
+          <Suspense fallback={null}>
+            <SastBlock repositoryId={repositoryId} llmEnabled={llmEnabled} />
+          </Suspense>
+
           <div
             data-testid="hotspots-block"
             className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
@@ -2310,6 +2324,16 @@ function RepositoryDetailsContent() {
           <ReleaseNotesModal
             repositoryId={repositoryId}
             onClose={() => setReleaseNotesOpen(false)}
+          />
+        </Suspense>
+      )}
+
+      {automationOpen && (
+        <Suspense fallback={null}>
+          <AutomationModal
+            repositoryId={repositoryId}
+            open={automationOpen}
+            onClose={() => setAutomationOpen(false)}
           />
         </Suspense>
       )}

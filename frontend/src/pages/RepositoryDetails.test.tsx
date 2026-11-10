@@ -18,6 +18,7 @@ import {
   getRecommendations,
   getRepositories,
   getSecurity,
+  getSast,
   getSettings,
   getStatus,
   generateCommitMessage,
@@ -34,6 +35,7 @@ import type {
   InsightsReport,
   MirrorStatus,
   RepositoryStatus,
+  SastReport,
   SecurityReport,
 } from '../api/types'
 import { ThemeProvider } from '../theme/ThemeContext'
@@ -53,9 +55,12 @@ vi.mock('../api/client', () => ({
   getRecommendations: vi.fn(),
   getRepositories: vi.fn(),
   getSecurity: vi.fn(),
+  getSast: vi.fn(),
   getSettings: vi.fn(),
   getStatus: vi.fn(),
   generateCommitMessage: vi.fn(),
+  generateAutomation: vi.fn(),
+  explainSast: vi.fn(),
   explainCve: vi.fn(),
   refreshMirror: vi.fn(),
   refreshRepository: vi.fn(),
@@ -197,6 +202,18 @@ const cleanSecurity: SecurityReport = {
   error: null,
 }
 
+const cleanSast: SastReport = {
+  repository_id: 1,
+  checked_at: '2026-11-11T10:00:00Z',
+  status: 'ok',
+  tools: [{ name: 'bandit', status: 'ok', version: null, duration_ms: 20, error: null }],
+  summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+  findings: [],
+  truncated: false,
+  error: null,
+  cached: false,
+}
+
 const cleanInsights: InsightsReport = {
   repository_id: 1,
   checked_at: '2026-11-06T10:00:00Z',
@@ -288,6 +305,7 @@ describe('RepositoryDetails actions', () => {
       error: null,
     })
     vi.mocked(getSecurity).mockResolvedValue(cleanSecurity)
+    vi.mocked(getSast).mockResolvedValue(cleanSast)
     vi.mocked(getInsights).mockResolvedValue(cleanInsights)
     vi.mocked(getSettings).mockResolvedValue(appSettings)
     vi.mocked(refreshRepository).mockResolvedValue(status)
@@ -573,6 +591,37 @@ describe('RepositoryDetails actions', () => {
     expect(screen.getByText('requests')).toBeInTheDocument()
     expect(screen.getByText(/2.32.0/)).toBeInTheDocument()
     expect(screen.getByText('minor')).toBeInTheDocument()
+  })
+
+  it('renders SAST findings', async () => {
+    vi.mocked(getSast).mockResolvedValue({
+      ...cleanSast,
+      status: 'partial',
+      summary: { total: 1, critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      findings: [
+        {
+          tool: 'bandit',
+          rule_id: 'B602',
+          severity: 'high',
+          confidence: 'high',
+          category: 'security',
+          cwe: 'CWE-78',
+          file: 'app/utils.py',
+          line: 42,
+          column: null,
+          message: 'subprocess call with shell=True',
+          snippet: 'subprocess.run(cmd, shell=True)',
+          fingerprint: 'abc',
+        },
+      ],
+    })
+
+    renderDetails()
+
+    expect(await screen.findByTestId('sast-block')).toBeInTheDocument()
+    expect(await screen.findByText('subprocess call with shell=True')).toBeInTheDocument()
+    expect(screen.getByText('B602')).toBeInTheDocument()
+    expect(screen.getByText('high')).toBeInTheDocument()
   })
 
   it('renders CVE details in the security block', async () => {

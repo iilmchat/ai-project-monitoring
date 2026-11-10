@@ -7,6 +7,8 @@ import type {
   AppSettings,
   AuditLogPage,
   AuthUser,
+  AutomationConfig,
+  AutomationTool,
   CIStatus,
   CodeIndexJob,
   CodeIndexStatus,
@@ -46,6 +48,8 @@ import type {
   ScanStarted,
   ScanStatus,
   SecurityReport,
+  SastExplanation,
+  SastReport,
   SettingsStatus,
   SettingsUpdate,
   GigaChatAuthResponse,
@@ -354,6 +358,41 @@ export async function getSecurity(
   return request<SecurityReport>(`/repositories/${repositoryId}/security`, {
     query: { refresh, min_severity: minSeverity },
   })
+}
+
+export async function getSast(
+  repositoryId: number,
+  refresh = false,
+): Promise<SastReport> {
+  return request<SastReport>(`/repositories/${repositoryId}/sast`, {
+    query: { refresh },
+  })
+}
+
+export async function explainSast(
+  repositoryId: number,
+  payload: {
+    rule_id: string
+    message: string
+    file: string
+    line: number
+    snippet: string
+  },
+): Promise<SastExplanation> {
+  return request<SastExplanation>(
+    `/repositories/${repositoryId}/ai/sast-explain`,
+    { method: 'POST', body: payload },
+  )
+}
+
+export async function generateAutomation(
+  repositoryId: number,
+  tool: AutomationTool,
+): Promise<AutomationConfig> {
+  return request<AutomationConfig>(
+    `/repositories/${repositoryId}/automation/generate`,
+    { method: 'POST', body: { tool } },
+  )
 }
 
 export async function getInsights(

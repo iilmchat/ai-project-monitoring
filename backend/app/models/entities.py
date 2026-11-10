@@ -265,6 +265,26 @@ class SecurityCache(Base):
         )
 
 
+class SastCache(Base):
+    """TTL cache for SAST reports (v1.3.0, Sprint 59)."""
+
+    __tablename__ = "sast_cache"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"SastCache(key={self.key!r}, repository_id={self.repository_id!r})"
+
+
 class AIProviderProfile(Base):
     """AI provider profile (S39-001, GigaChat OAuth in S43-002)."""
 

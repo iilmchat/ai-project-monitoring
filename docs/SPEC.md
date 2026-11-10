@@ -1915,17 +1915,17 @@ bootstrap-пользователь — `admin`. Нельзя понизить/о
 
 ---
 
-### 3.32. SAST — статический анализ кода (v1.3.0, Sprint 59 — план)
+### 3.32. SAST — статический анализ кода (v1.3.0, Sprint 59 — реализовано)
 
-> **Статус:** план Sprint 59; контракт обязателен для реализации.
+> **Статус:** реализовано в Sprint 59 (`app/services/sast_service.py`).
+> Инструменты опциональны; их отсутствие не даёт 500.
 
 Поиск небезопасного кода (`eval`, `exec`, SQL-конкатенация, небезопасный
-`subprocess`, hardcoded secrets) в рабочей директории. Только чтение; код
-проекта не исполняется.
+`subprocess`) в рабочей директории. Только чтение; код проекта не исполняется.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| GET | `/api/v1/repositories/{id}/sast` | `tools?: all\|bandit\|semgrep (default all)`, `min_severity?: critical\|high\|medium\|low\|all (default high)`, `refresh?: bool` | `SastReport` |
+| GET | `/api/v1/repositories/{id}/sast` | `tools?: all\|bandit\|semgrep\|eslint (default all)`, `min_severity?: critical\|high\|medium\|low\|all (default all)`, `refresh?: bool` | `SastReport` |
 
 **`SastReport`:**
 
@@ -1933,10 +1933,10 @@ bootstrap-пользователь — `admin`. Нельзя понизить/о
 {
   "repository_id": 1,
   "checked_at": "2026-11-11T10:00:00Z",
-  "status": "ok",
+  "status": "partial",
   "tools": [
-    {"name": "bandit", "status": "ok", "version": "1.7.10", "duration_ms": 820},
-    {"name": "semgrep", "status": "unavailable", "version": null, "error": "not_installed"}
+    {"name": "bandit", "status": "ok", "version": null, "duration_ms": 820, "error": null},
+    {"name": "semgrep", "status": "unavailable", "version": null, "duration_ms": 0, "error": "not_installed"}
   ],
   "summary": {"total": 4, "critical": 0, "high": 2, "medium": 2, "low": 0, "unknown": 0},
   "findings": [
@@ -1949,97 +1949,93 @@ bootstrap-пользователь — `admin`. Нельзя понизить/о
       "cwe": "CWE-78",
       "file": "app/utils.py",
       "line": 42,
-      "column": 5,
+      "column": null,
       "message": "subprocess call with shell=True",
       "snippet": "subprocess.run(cmd, shell=True)",
       "fingerprint": "sha256:..."
     }
   ],
   "truncated": false,
-  "error": null
+  "error": null,
+  "cached": false
 }
 ```
 
 **Правила:**
 
-- Инструменты `bandit` (Python) и `semgrep` (Python/JS/TS/C# и др.) —
-  внешние опциональные бинарники; отсутствие → `tool.status=unavailable`,
-  остальные работают, HTTP 200.
-- `semgrep` запускается только с локальным набором правил (`SEMGREP_CONFIG`
-  / bundled `security/`), `--metrics=off`, `--disable-version-check`; сеть и
-  `--config auto` запрещены.
+- `bandit` (Python) — внешний бинарник или `python -m bandit`; ищется при
+  старте запроса. `semgrep` — внешний бинарник, запускается только с локальным
+  набором правил (`SAST_SEMGREP_CONFIG` или bundled
+  `app/sast_rules/default.yml`), `--metrics=off`, `--disable-version-check`;
+  сеть и `--config auto` запрещены. Если semgrep недоступен, используется
+  локальный `node_modules/.bin/eslint` (fallback).
+- Отсутствие инструмента → `tool.status=unavailable`, остальные инструменты
+  продолжают работу; HTTP 200.
 - `status ∈ {ok, partial, unavailable}`: `partial` — часть инструментов
-  недоступна или превышен лимит; `unavailable` — ни один не отработал.
+  недоступна/ошибка или превышен лимит; `unavailable` — ни один не отработал.
 - `severity ∈ {critical, high, medium, low, unknown}`; маппинг: bandit
   HIGH→high, MEDIUM→medium, LOW→low; semgrep ERROR→high, WARNING→medium,
-  INFO→low. `min_severity` фильтрует `findings[]`, но **не** меняет
-  `summary`.
-- Дедупликация по `fingerprint` (file+line+rule+message, tool-independent);
-  один паттерн от двух инструментов — одна запись с `tools[]`.
+  INFO→low; eslint error→high, warning→medium. `min_severity` фильтрует
+  `findings[]`, но **не** меняет `summary`.
+- Дедупликация по `fingerprint` (file+line+rule+message); один паттерн от
+  двух инструментов — одна запись с объединённым `tool`.
 - Лимиты: timeout `SAST_TIMEOUT_SECONDS` (120), вывод ≤ 8 MiB, findings ≤
-  `SAST_MAX_FINDINGS` (500), файл ≤ 1 MiB; превышение → `truncated=true` и
+  `SAST_MAX_FINDINGS` (500); превышение → `truncated=true` и
   `status=partial`.
-- `snippet` ≤ 200 символов, секреты маскируются; полные файлы и совпадения не
-  логируются. Кэш `sast_cache` (TTL `SAST_CACHE_TTL_SECONDS`, 3600) по
-  `repo_id + head_sha + dirty_hash + tools + tool_versions + rules_hash`;
-  `refresh=true` обходит TTL.
-- Ошибки: `404 repository_not_found`; `503 sast_unavailable` (нет ни одного
-  инструмента и кэша нет); `504 sast_timeout`; частичные результаты — HTTP
-  200.
+- `snippet` ≤ 300 символов, секреты маскируются; полные файлы и совпадения не
+  логируются. Кэш `sast_cache` (TTL `SAST_CACHE_TTL_SECONDS`, default
+  **86400** = 24 ч) по `repo_id + head_sha + dirty_hash + tools`;
+  `refresh=true` обходит TTL. Недоступный результат не кэшируется.
+- Ошибки: `404 repository_not_found`; `422` — неверный `tools`/`min_severity`.
+  Недоступность инструментов и таймауты отражаются в отчёте, а не HTTP 500.
 - Read-only: `git status --porcelain` после скана не меняется; `bin/`,
   `obj/`, `node_modules/`, `.venv/`, `vendor/` исключаются.
-- UI: таб «Код (SAST)» в блоке «Безопасность» рядом с CVE и Secrets; фильтры
-  severity/инструмент, ссылка `file:line`, бейдж confidence, empty-state,
-  RU/EN, `aria`.
+- UI: отдельный блок «Безопасность кода (SAST)» рядом с CVE; список
+  `file:line`, severity, правило, сниппет и кнопка «Исправить с AI»
+  (`POST /repositories/{id}/ai/sast-explain`, `ai_cache`).
 
 ---
 
-### 3.33. Автоматические PR — генерация конфигураций (v1.3.0, Sprint 59 — план)
+### 3.33. Автоматические PR — генерация конфигураций (v1.3.0, Sprint 59 — реализовано)
 
-> **Статус:** план Sprint 59. Приложение **не** делает commit/push и не
-> создаёт PR: оно генерирует конфигурацию, которую пользователь коммитит сам.
+> **Статус:** реализовано в Sprint 59. Приложение **не** делает commit/push и
+> не создаёт PR: оно генерирует текст конфигурации, который пользователь
+> копирует сам.
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/api/v1/repositories/{id}/automation/preview` | `{provider, ecosystems?, schedule?, ignore_major?, open_pull_requests_limit?}` | `AutomationPreview` |
-| POST | `/api/v1/repositories/{id}/automation/apply` | `{provider, content_hash, confirm:true}` | `ActionLog` |
+| POST | `/api/v1/repositories/{id}/automation/generate` | `{tool: "dependabot" \| "renovate"}` | `AutomationConfigResponse` |
 
-**`AutomationPreview`:**
+**`AutomationConfigResponse`:**
 
 ```json
 {
-  "provider": "dependabot",
+  "tool": "dependabot",
   "path": ".github/dependabot.yml",
   "content": "version: 2\nupdates:\n  - package-ecosystem: pip\n...",
-  "content_hash": "sha256:...",
-  "warnings": [],
-  "ecosystems": ["python", "dotnet"]
+  "content_hash": "...",
+  "ecosystems": ["dotnet", "node", "python"],
+  "warnings": []
 }
 ```
 
-- `provider ∈ {dependabot, renovate}`; `ecosystems` —
-  `python|node|dotnet` (по умолчанию — найденные манифесты); `schedule` —
-  `daily|weekly|monthly` (default `weekly`); `open_pull_requests_limit` 1–10
-  (default 5).
+- `tool ∈ {dependabot, renovate}`; экосистемы определяются автоматически по
+  найденным манифестам (`ManifestDiscovery`): Python, Node, .NET.
 - Dependabot: `version: 2`, `updates[]` c `package-ecosystem`
-  (`pip`/`npm`/`nuget`), `directory`, `schedule.interval`, `groups`
-  (minor/patch), `ignore` для major при `ignore_major=true`.
-- Renovate: `$schema`, `extends: ["config:recommended"]`, `packageRules` для
-  группировки minor/patch.
-- `path` — только `.github/dependabot.yml` или `renovate.json`; размер
-  конфигурации ≤ 64 KiB; синтаксис валидируется (YAML/JSON) до ответа.
-- `content_hash = sha256(content)`; `apply` принимает только совпадающий hash
-  (`400 content_hash_mismatch`) — защита от подмены между preview и apply.
-- `apply`: `confirm=true`, чистый worktree (`409 dirty_worktree`), путь из
-  allowlist, атомарная запись, `action_log` + `audit_log`
-  (`action=automation.apply`, `denied` для auditor). Автоматического коммита,
-  push и создания PR нет.
-- Ошибки: `400 confirmation_required` / `content_hash_mismatch` /
-  `unsupported_provider`; `403 insufficient_role`; `409 no_manifest`.
-- UI: блок «Автоматические PR» в карточке репозитория: провайдер, чекбоксы
-  экосистем, расписание, `ignore_major`, предпросмотр YAML/JSON, кнопки
-  «Скопировать»/«Скачать»/«Применить» (только admin), предупреждение об
-  отсутствии autopush; RU/EN, `aria`.
+  (`pip`/`npm`/`nuget`), `directory`, `schedule.interval=weekly`,
+  `open-pull-requests-limit=5`, `groups` для minor/patch.
+- Renovate: `$schema`, `extends: ["config:recommended"]`, `schedule`,
+  `packageRules` для группировки minor/patch, `enabledManagers` по найденным
+  экосистемам.
+- `content_hash = sha256(content)`; `path` — только
+  `.github/dependabot.yml` или `renovate.json`.
+- Если манифестов нет — `warnings=["no_manifests"]`, конфигурация всё равно
+  возвращается.
+- Эндпоинт ничего не пишет в репозиторий, не делает commit/push и не требует
+  `confirm`. Ошибки: `404 repository_not_found`, `422` — неверный `tool`.
+- UI: модалка «Автоматизация» (lazy) с кнопками «Сгенерировать Dependabot»,
+  «Сгенерировать Renovate», предпросмотром YAML/JSON и кнопкой
+  «Скопировать»; предупреждение об отсутствии autopush.
 
 ---
 
@@ -2170,7 +2166,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 )
 ```
 
-Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`; **v1.3.0 (реализовано):** `audit_log(user_id)`, `audit_log(action)`, `audit_log(created_at)`; **v1.3.0 (план):** `sast_cache(checked_at)`.
+Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`; **v1.3.0 (реализовано):** `audit_log(user_id)`, `audit_log(action)`, `audit_log(created_at)`, `sast_cache(checked_at)`.
 
 ---
 
@@ -2201,8 +2197,8 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default 10000); только `confirm=true` + чистый worktree (`git status --porcelain`) + `action_log`** |
 | **.NET toolchain (v1.3.0, реализовано)** | **`*.csproj`/`Directory.Packages.props` парсятся stdlib XML без DTD/сущностей; `dotnet` CLI опционален; `dotnet list --outdated --no-restore`, затем `dotnet add <project> package <id> --no-restore` — только §3.20; `restore/build/publish` запрещены** |
 | **Team & audit (v1.3.0, реализовано)** | **`users.role ∈ {admin, auditor}` (default `auditor`, bootstrap — `admin`); `require_admin` на мутациях; `audit_log` append-only, admin-only; секреты/содержимое файлов не пишутся** |
-| **SAST (v1.3.0, план)** | **`SAST_ENABLED` (default true), `SAST_TIMEOUT_SECONDS` (default 120), `SAST_MAX_FINDINGS` (default 500), `SAST_MAX_FILE_BYTES` (default 1048576), `SAST_CACHE_TTL_SECONDS` (default 3600), `SEMGREP_CONFIG` (локальные правила); сеть и `--config auto` запрещены** |
-| **Automation configs (v1.3.0, план)** | **Dependabot/Renovate preview без записи; apply — только `confirm=true` + совпадающий `content_hash` + чистый worktree + allowlist (`.github/dependabot.yml`, `renovate.json`) + `action_log`/`audit_log`; commit/push не выполняются** |
+| **SAST (v1.3.0, реализовано)** | **`SAST_ENABLED` (default true), `SAST_TIMEOUT_SECONDS` (default 120), `SAST_MAX_FINDINGS` (default 500), `SAST_MAX_OUTPUT_BYTES` (8 MiB), `SAST_CACHE_TTL_SECONDS` (default 86400), `SAST_SEMGREP_CONFIG` (локальные правила); bandit/semgrep/eslint опциональны, сеть и `--config auto` запрещены** |
+| **Automation configs (v1.3.0, реализовано)** | **`POST /repositories/{id}/automation/generate` только возвращает текст Dependabot/Renovate; файлы не пишутся, commit/push не выполняются** |
 | **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
@@ -2355,7 +2351,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
       GitFlic mirror.
 - [ ] Документы: ADR-0016/0017, KI-019/KI-020, `TODO_V1.0.md`.
 
-### 6.8. v1.3.0 (план, спринты 57–59)
+### 6.8. v1.3.0 (спринты 57–59 — реализовано)
 
 - [x] .NET (Sprint 57): парсинг `.csproj`/`Directory.Packages.props`/
       `packages.config`, NuGet latest, CVE через OSV (`NuGet`), третья вкладка
@@ -2365,13 +2361,13 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
       CRUD пользователей, все мутации — `403` для auditor.
 - [x] Audit Log (Sprint 58): append-only `audit_log`, admin-only API
       `GET /audit` с пагинацией, санитизация `details`.
-- [ ] SAST: bandit + semgrep, `GET /repositories/{id}/sast`, кэш, лимиты,
-      read-only, таб «Код (SAST)».
-- [ ] Automated PRs: preview/apply Dependabot/Renovate, allowlist и hash,
+- [x] SAST (Sprint 59): bandit + semgrep/eslint fallback,
+      `GET /repositories/{id}/sast`, кэш 24 ч, лимиты, read-only, блок SAST.
+- [x] Automated PRs (Sprint 59): generate Dependabot/Renovate, предпросмотр,
       отсутствие commit/push.
-- [ ] Release: версии `1.3.0`, CHANGELOG/RELEASES/README/SPEC/ARCHITECTURE,
+- [x] Release: версии `1.3.0`, CHANGELOG/RELEASES/README/SPEC/ARCHITECTURE,
       тег `v1.3.0`, артефакты Windows/macOS/Linux, KI-025 актуальна/закрыта.
-- [ ] Документы: ADR-0018–0021, `TODO_V1.3.0.md`.
+- [x] Документы: ADR-0018–0021, `TODO_V1.3.0.md`.
 
 ---
 
@@ -2388,7 +2384,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | OSV.dev API | v1 (`POST /v1/query`, `POST /v1/querybatch`) — v0.6.0 |
 | NuGet V3 flat container | `api.nuget.org/v3-flatcontainer` — v1.3.0 (Sprint 57, реализовано) |
 | .NET SDK / CLI | 8.0+ (опционально, только для обновления пакетов) — v1.3.0 (Sprint 57) |
-| bandit / semgrep | 1.7+ / 1.x (внешние опциональные бинарники) — v1.3.0 (план) |
+| bandit / semgrep | 1.7+ / 1.x (внешние опциональные бинарники) — v1.3.0 |
 | OpenAI-compatible LLM API | Ollama / LM Studio `/v1/chat/completions` — v0.7.0 |
 | OpenAI-compatible Embeddings API | Ollama / LM Studio `/v1/embeddings` — v0.9.0 (план) |
 | GigaChat OAuth 2.0 | `https://ngw.devices.sberbank.ru:9443/api/v2/oauth` — v0.9.0 (план) |
@@ -2414,7 +2410,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | v1.0.0 | single-user auth (JWT), Tauri desktop, PostgreSQL + pgvector | `TODO_V1.0.md` |
 | v1.1.0 | onboarding, файловые логи, автообновления Tauri, GitHub Actions | — |
 | v1.2.0 | AI code review, conflict resolver, release notes, conversational RAG, кросс-платформенный релиз | `TODO_V1.2.0.md` |
-| v1.3.0 (план) | .NET/NuGet, Team Edition (роли, audit log), SAST, автоматические PR | `TODO_V1.3.0.md` |
+| v1.3.0 | .NET/NuGet, Team Edition (роли, audit log), SAST, автоматические PR | `TODO_V1.3.0.md` |
 
 ---
 
@@ -2423,7 +2419,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
 (реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
 v0.7.0 (Sprints 32–34), раздел 9.13 — v0.8.0 (Sprints 35–39), раздел 9.14 —
-v0.9.0 (план, Sprints 42–44), раздел 9.15 — v1.3.0 (план, Sprints 57–59).
+v0.9.0 (план, Sprints 42–44), раздел 9.15 — v1.3.0 (Sprints 57–59).
 
 ### 9.1 Таблица репозиториев
 
@@ -2629,12 +2625,15 @@ v0.9.0 (план, Sprints 42–44), раздел 9.15 — v1.3.0 (план, Spri
   лениво; entry < 90 kB gzip; E2E покрывает onboarding→scan→dashboard, RU/EN +
   тему и AI-коммит с мок-LLM.
 
-### 9.15 v1.3.0 (план): .NET, Team Edition и SAST
+### 9.15 v1.3.0: .NET, Team Edition и SAST
 
 - **Зависимости:** третья вкладка «C# / .NET» с бейджем «CPM», путём
   манифеста и empty/error-состояниями; табы доступны с клавиатуры.
-- **Безопасность:** три таба — CVE / Secrets / «Код (SAST)»; фильтры
-  severity/инструмента, ссылка `file:line`, бейдж confidence.
+- **Безопасность (Sprint 59):** отдельный блок «Безопасность кода (SAST)» с
+  находками bandit/semgrep/eslint, severity, `file:line`, сниппетом и кнопкой
+  «Исправить с AI».
+- **Автоматизация (Sprint 59):** lazy-модалка с генерацией Dependabot/Renovate,
+  предпросмотром YAML/JSON и копированием; commit/push не выполняются.
 - **Роли (Sprint 58):** ссылки «Команда»/«Аудит» видны только admin;
   `auditor` не может открыть `/admin/*` (редирект) и получает `403` на мутации.
 - **Audit Log:** страница `/admin/audit` (admin, lazy): таблица

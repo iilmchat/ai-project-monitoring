@@ -10,6 +10,7 @@ Usage (from ``backend/``):
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -78,6 +79,10 @@ def main() -> int:
         "bcrypt",
         "--collect-all",
         "certifi",
+        "--collect-all",
+        "bandit",
+        "--add-data",
+        f"{backend / 'app' / 'sast_rules'}{os.pathsep}app/sast_rules",
         "--collect-submodules",
         "app",
         "--hidden-import",

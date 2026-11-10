@@ -9,10 +9,12 @@ from app.api.v1 import (
     admin,
     ai_providers,
     auth,
+    automation,
     dashboard,
     health,
     metrics,
     repositories,
+    sast,
     scan,
     search,
     settings,
@@ -28,6 +30,8 @@ api_router.include_router(scan.router)
 api_router.include_router(settings.router)
 api_router.include_router(ai_providers.router)
 api_router.include_router(repositories.router)
+api_router.include_router(sast.router)
+api_router.include_router(automation.router)
 api_router.include_router(search.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(activity.router)

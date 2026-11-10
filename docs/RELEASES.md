@@ -1,6 +1,45 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.2.0 (2026-11-09)
+**Текущая версия:** v1.3.0 (2026-11-11)
+
+---
+
+## Релиз v1.3.0 — «.NET, Team Edition & SAST»
+
+**Дата:** 2026-11-11 · **Тег:** `v1.3.0`
+
+Итоги спринтов 57–59:
+
+- **S57 — .NET Ecosystem Support:** парсер `.csproj`/`Directory.Packages.props`/
+  `packages.config`, NuGet V3, CVE через OSV (`NuGet`), третья вкладка,
+  `dotnet`-обновление, `.cs`/`.csproj` в hotspots/RAG.
+- **S58 — Team Edition & Audit Log:** роли `admin`/`auditor`, `require_admin`,
+  append-only `audit_log`, admin-страницы `/admin/users` и `/admin/audit`.
+- **S59 — Advanced Security & Automated PRs:** `SastService` (bandit/semgrep/
+  eslint fallback), кэш `sast_cache` 24 ч, блок SAST с AI-объяснением,
+  генерация Dependabot/Renovate без записи и commit/push.
+- **Проверки:** backend 321 (320 passed, 1 skipped), frontend 60 unit,
+  `ruff`, `mypy`, `pnpm typecheck/lint/test/build`, entry bundle
+  88.33 kB gzip (budget 90 kB).
+- **Миграции:** 013 (roles/audit) и 014 (sast_cache).
+
+---
+
+## Спринт 59: Advanced Security & Automated PRs (v1.3.0)
+
+**Дата:** 2026-11-11 · **Статус:** ✅ завершён
+
+- [x] **S59-001. SAST:** `SastService`, bandit + semgrep + eslint fallback,
+  нормализация severity, дедупликация, таймауты/лимиты, `sast_cache` 24 ч,
+  `GET /api/v1/repositories/{id}/sast`, AI-объяснение находки.
+- [x] **S59-002. Automated PRs:** `AutomationService` и
+  `POST /automation/generate` для Dependabot/Renovate; только текст конфига,
+  без записи, commit и push.
+- [x] **S59-003. UI:** lazy-блок SAST и lazy-модалка «Автоматизация».
+- [x] **S59-004. Release:** версии `1.3.0`, миграция 014, ADR-0020/0021,
+  CHANGELOG/RELEASES/README/SPEC/ARCHITECTURE, тег `v1.3.0`.
+- **Проверки:** backend 321 (320 passed, 1 skipped), frontend 60 unit,
+  `ruff`/`mypy`, `pnpm build` и budget-check — ✅.
 
 ---
 
