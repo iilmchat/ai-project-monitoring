@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v0.8.0 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.2.0 · **v1.3.0 в разработке** · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -357,6 +357,26 @@ pnpm --dir frontend exec playwright install chromium
   `<<<<<<<`-конфликтов без записи файла и генерация CHANGELOG между тегами.
 - **Sprint 55 — Conversational RAG & Release v1.2.0:** ✅ чат с базой знаний на
   `/search` (pgvector + LLM), цитаты на файлы и финальный релиз.
+
+**v1.3.0 «.NET, Team Edition & SAST»** — в разработке
+([`TODO_V1.3.0.md`](TODO_V1.3.0.md)):
+
+- **Sprint 57 — .NET Ecosystem Support (NuGet):** парсер `.csproj` и
+  `Directory.Packages.props` (включая Central Package Management), NuGet
+  V3 flat-container, CVE через OSV (`NuGet`), третья вкладка «C# / .NET»,
+  `dotnet list --outdated`/`dotnet add --no-restore` и `.cs`/`.csproj` в
+  hotspots/RAG.
+- **Sprint 58 — Team Edition & Audit Log:** роли `Admin` (полный доступ) и
+  `Auditor` (только чтение), серверная проверка прав на Actions, append-only
+  `audit_log` (кто, когда, какой репозиторий, какой скан) и admin-страница
+  `/audit` с фильтрами и CSV-экспортом.
+- **Sprint 59 — Advanced Security (SAST) & Automated PRs:** `bandit` для
+  Python и `semgrep` для Python/JS/TS/C# в блоке «Безопасность», генерация
+  конфигураций Dependabot/Renovate через UI с предпросмотром и явным
+  применением (без autopush), финальный аудит и релиз `v1.3.0`.
+- **Ограничение:** как и раньше, приложение не делает `git push`, не создаёт
+  PR и не исполняет код проверяемых проектов; MSBuild-выражения в .NET не
+  вычисляются (KI-025).
 
 ---
 

@@ -1,8 +1,8 @@
 # KNOWN_ISSUES — Реестр известных проблем
 
-**Последнее обновление:** 2026-11-09
+**Последнее обновление:** 2026-11-11
 
-**Всего проблем:** 22 (активных: 16, решено: 6; KI-015/016 не заводились)
+**Всего проблем:** 23 (активных: 17, решено: 6; KI-015/016 не заводились)
 
 ---
 
@@ -316,3 +316,33 @@ checksum из GitHub Release.
 `APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`),
 публиковать подписанный/нотаризованный `.dmg`; до этого явно указывать
 ограничение в README/GETTING_STARTED.
+
+---
+
+## KI-025 · Accepted · High · dependencies/dotnet · XML-парсинг .NET может быть сложным из-за множества форматов
+
+**Описание:** .NET-проекты описывают зависимости не одним способом:
+`*.csproj`/`*.fsproj`/`*.vbproj` с `PackageReference`, Central Package
+Management через `Directory.Packages.props` (`PackageVersion`,
+`VersionOverride`), legacy `packages.config`, а также `Directory.Build.props`,
+`Directory.Build.targets` и `Import`. Версии могут задаваться MSBuild-
+свойствами (`$(SomeVersion)`), условиями (`Condition`) и вычисляться во время
+сборки. Без запуска MSBuild (`dotnet restore`/`msbuild`) часть версий
+принципиально неразрешима.
+
+**Влияние:** пакет может отсутствовать в отчёте, получить `unknown` или
+неверную версию; CVE-сканер в таком случае честно не считает его проверенным
+(`unknown_packages`), но пользователь может воспринять это как «уязвимостей
+нет». Разные форматы также повышают риск ошибок парсинга и пропуска
+вложенных проектов solutions (`.sln`).
+
+**Workaround:** для проектов с `$(...)`/conditions использовать
+`Directory.Packages.props` с литеральными версиями или `dotnet list package
+--outdated --no-restore` вручную; трактовать `unknown` как «требует ручной
+проверки», а не как «чисто».
+
+**План (Sprint 57):** приоритет источников `VersionOverride` → `Version` →
+CPM → `packages.config`; безопасный XML без DTD/сущностей; лимиты размера и
+глубины; причины `msbuild_property`/`conditional`/`parse_error` в отчёте;
+тесты на реальных .NET-проектах; MSBuild-evaluation и приватные фиды — вне
+scope v1.3.0. Документировать ограничение в UI (бейдж «не вычислено»).

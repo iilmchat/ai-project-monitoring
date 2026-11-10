@@ -550,7 +550,7 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 
 ---
 
-## 11. Dependency Management (v0.5.0, Sprint 25–26)
+## 11. Dependency Management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57 — план)
 
 **Задача.** Показать, какие объявленные зависимости устарели, не изменяя
 репозиторий и не запуская пакетные менеджеры.
@@ -558,17 +558,20 @@ SDK устанавливается из `requirements.txt`. Тесты испо�
 **Статус:** Python (`requirements.txt`, PyPI, кэш) реализован в Sprint 25;
 Node (`package.json`, npm) — в Sprint 26. В v0.8.0 (Sprint 35) добавлен
 рекурсивный поиск вложенных манифестов (`backend/`, `frontend/`, `apps/*`).
-`ecosystem=all` объединяет отчёты.
+`ecosystem=all` объединяет отчёты. В v1.3.0 (Sprint 57 — план) добавляется
+C#/.NET: `*.csproj`, `Directory.Packages.props`, `packages.config`, NuGet;
+детали — §29.
 
 ### 11.1. Поток
 
 ```
 GET /repositories/{id}/dependencies
   → DependencyService
-      ├─ ManifestDiscovery: requirements.txt, package.json до depth 3
+      ├─ ManifestDiscovery: requirements.txt, package.json,
+      │                     *.csproj, Directory.Packages.props (depth 3)
       ├─ parser → [{name, declared, kind, line, section, manifest_path}]
       ├─ cache lookup (dependency_cache, 24 ч)
-      ├─ registry fetch (PyPI / npm) для miss/stale, concurrency 4
+      ├─ registry fetch (PyPI / npm / NuGet) для miss/stale, concurrency 4
       └─ normalize → DependencyReport
 ```
 
@@ -578,6 +581,7 @@ GET /repositories/{id}/dependencies
 |------|------------|------------|
 | `requirements.txt` | `==`, `~=`, `>=`, `>`, `<=`, `<`; extras; markers; `-r` include (глубина ≤ 3) | `-e`, VCS, local paths, URL, hashes (для сравнения) |
 | `package.json` | `dependencies`, `devDependencies`; `^`, `~`, exact | `workspace:`, `file:`, `link:`, `git+`, `http(s):`, `npm:` aliases |
+| `*.csproj` / `Directory.Packages.props` / `packages.config` | `PackageReference` (`Version`, `VersionOverride`), `PackageVersion` (CPM), `package id/version` | `ProjectReference`, `Reference`, local paths, `$(Property)`, `Condition`, `Import` (→ `unknown`) |
 
 - Include-файлы `requirements.txt` разрешены только внутри корня репозитория;
   циклы, path traversal и выход за корень пропускаются. `-c`/constraints и
@@ -593,7 +597,8 @@ GET /repositories/{id}/dependencies
 
 - Таблица `dependency_cache(key*, ecosystem, package, latest_version, etag,
   payload, checked_at)`.
-- Ключ `pypi:<normalized-name>` / `npm:<normalized-name>`.
+- Ключ `pypi:<normalized-name>` / `npm:<normalized-name>` /
+  `nuget:<lower-id>`.
 - TTL `DEPENDENCY_CACHE_TTL_SECONDS=86400` (24 ч); кэш переживает перезапуск.
 - `DependencyService` использует `session_factory`: чтение/запись кэша идут в
   отдельных коротких сессиях, поэтому пакеты можно проверять конкурентно.
@@ -610,6 +615,12 @@ GET /repositories/{id}/dependencies
   имя URL-encode.
 - npm: `GET https://registry.npmjs.org/{name}/latest`; scoped-имя кодируется
   (`@scope%2Fname`), latest = `version`.
+- NuGet (v1.3.0 — план): `GET
+  https://api.nuget.org/v3-flatcontainer/{id-lower}/index.json`; latest —
+  максимальная stable-версия SemVer 2.0.0, prerelease игнорируются.
+- Все три клиента реализуют общий контракт `get_latest(name) ->
+  RegistryResult` и используют один HTTP-layer/cache; `DependencyService`
+  не зависит от формата конкретного реестра.
 - Timeout `DEPENDENCY_HTTP_TIMEOUT=5`; User-Agent `IIRuchating/0.5`.
 - 429/5xx — backoff 0.5/1/2 с, максимум 3 попытки; 404 — `not_found`
   (пакет получает `status=unknown`).
@@ -623,15 +634,18 @@ GET /repositories/{id}/dependencies
 - Ошибка одного пакета не скрывает остальные: пакет получает `unknown`/`latest=null`.
 - Если реестр недоступен и кэша нет — `ecosystem.status=unavailable`,
   `error` (`rate_limited`, `registry_unavailable`, `timeout`), HTTP 200.
-- Один ecosystem не влияет на другой: Python может быть `ok`, Node — `unavailable`.
+- Один ecosystem не влияет на другой: Python может быть `ok`, Node —
+  `unavailable`, .NET — `parse_error`.
 - `source` и `error` позволяют UI показать stale/частичное состояние.
 
 ### 11.6. Read-only и безопасность
 
 - Читаются только фиксированные имена в корне репозитория (+ относительные
-  include для `requirements.txt`); произвольные пути запрещены.
-- `pip`/`npm`/`pnpm` не запускаются в этой проверке; shell не используется.
-  Обновление пакетов — только §17 (v0.7.0).
+  include для `requirements.txt`, `.csproj`/props в подкаталогах); произвольные
+  пути запрещены.
+- `pip`/`npm`/`pnpm`/`dotnet restore|build` не запускаются в этой проверке;
+  shell не используется. Обновление пакетов — только §17 (v0.7.0), .NET —
+  §29.
 - Имена пакетов URL-encode; URL из манифеста не используются как адрес запроса.
 - Приватные registry и токены — вне scope v0.5.0.
 - Запись — только в `dependency_cache`; рабочая директория репозитория не меняется.
@@ -676,7 +690,7 @@ GET /repositories/{id}/security
 
 - Клиент `app/providers/osv_client.py`: `POST /v1/querybatch` с массивом
   `queries: [{package: {name, ecosystem}, version}]`, батчи по 100 запросов.
-- Ecosystem: `PyPI` / `npm`.
+- Ecosystem: `PyPI` / `npm` / `NuGet` (v1.3.0 — план; имена case-insensitive).
 - Timeout 10 с, concurrency ≤ 4, backoff 0.5/1/2 с на 429/5xx (max 3 попытки).
 - Ответ нормализуется в `{osv_id, aliases, summary, severity, cvss, fixed}`
   сразу на границе провайдера; сервис не работает с сырым JSON OSV.
@@ -1095,6 +1109,11 @@ POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
   (запускается как `python -m pip ...`). `pip` меняет окружение backend.
 - Node: `pnpm-lock.yaml` → `pnpm update`; иначе `package.json` → `npm update`.
   Команда может изменить lockfile/`package.json`.
+- .NET (v1.3.0 — план): `dotnet add <project> package <id> --version <version>
+  --no-restore`; `restore`/`build`/`publish` не запускаются. Read-only
+  подсказка `dotnet list package --outdated --no-restore` — только при наличии
+  `dotnet` и `obj/project.assets.json`; иначе используется NuGet-отчёт.
+  Нет CLI → `409 dotnet_unavailable`.
 - Запрещены `--force`, `--legacy-peer-deps`, удаление lock-файлов и любые
   Git-мутации.
 - Bulk: `update_dependencies_all` — concurrency 2, `actor=bulk`, один упавший
@@ -1118,9 +1137,10 @@ POST /repositories/{id}/actions/update-dependencies {confirm:true, ecosystem}
 ## 18. Manifest discovery, README & safe document access (v0.8.0, Sprint 35)
 
 `ManifestDiscovery` (`app/services/manifest_discovery.py`) обходит репозиторий
-до `DEPENDENCY_MANIFEST_MAX_DEPTH` (default 3), находит `requirements.txt` и
-`package.json`, игнорирует `node_modules`, `.venv`, `venv`, `dist`, `build`,
-`target`, `vendor`, `.git` и кэши. `DependencyService` и `SecurityService`
+до `DEPENDENCY_MANIFEST_MAX_DEPTH` (default 3), находит `requirements.txt`,
+`package.json`, `*.csproj`/`*.fsproj`/`*.vbproj`, `Directory.Packages.props` и
+`packages.config`, игнорирует `node_modules`, `.venv`, `venv`, `dist`, `build`,
+`target`, `vendor`, `bin`, `obj`, `.vs`, `packages`, `.git` и кэши. `DependencyService` и `SecurityService`
 используют один слой, поэтому CVE-сканер видит те же пакеты, что и аудит
 зависимостей. Пакеты из нескольких манифестов дедуплицируются по имени
 (exact > range с версией > range), провенанс сохраняется в `manifest_path`.
@@ -1188,9 +1208,9 @@ tracked-репозиториев (в текущем демо — 34 проект
 POST /api/v1/search/code/index {repository_ids?, force?}
   → CodeSearchService.index()
       ├─ tracked repositories (PostgreSQL; на SQLite — 503 rag_unavailable)
-      ├─ FileWalker: README*, docs/**/*.md, src/**/*.{py,ts,tsx,js,jsx,...}
+      ├─ FileWalker: README*, docs/**/*.md, src/**/*.{py,ts,tsx,js,jsx,cs,csproj,...}
       │    ignore: .git, node_modules, .venv, dist, build, target, vendor,
-      │            .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
+      │            bin, obj, .vs, .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
       ├─ Chunker: Markdown — заголовки + окно; код — функции/классы + окно
       │    RAG_CHUNK_CHARS (1000), RAG_CHUNK_OVERLAP (150), start/end line
       ├─ content_hash = sha256(нормализованный чанк)
@@ -1207,7 +1227,9 @@ POST /api/v1/search/code/index {repository_ids?, force?}
 `code_chunks` (PostgreSQL + `pgvector`):
 
 - `id`, `repository_id` (FK), `path`, `chunk_index`, `start_line`, `end_line`;
-- `language` — по расширению (не угадывается по содержимому);
+- `language` — по расширению (не угадывается по содержимому): `.py` →
+  `python`, `.cs` → `csharp`, `.csproj`/`.fsproj`/`.props` → `xml`,
+  `.ts/.tsx` → `typescript/tsx`, `.md` → `markdown`;
 - `content`, `content_hash` (sha256), `embedding vector(1536)`,
   `embedding_model`, `indexed_at`;
 - `UNIQUE(repository_id, path, chunk_index, content_hash)` — защита от дублей;
@@ -1681,4 +1703,247 @@ POST /api/v1/search/chat {query, history?, repository_ids?, limit?, min_score?}
   → `503 llm_unavailable`/`504 llm_timeout`.
 - Кэш в v1.2.0 не используется: чат интерактивный, история влияет на ответ.
 - Rate-limit — локальный, как у остальных AI-эндпоинтов; запросы/ответы не
+  логируются.
+
+---
+
+## 29. .NET manifests & NuGetClient (v1.3.0, Sprint 57 — план)
+
+> **Статус:** план Sprint 57. Контракт — SPEC §3.15.1; ограничения — KI-025.
+
+### 29.1. Поток
+
+```
+GET /repositories/{id}/dependencies?ecosystem=dotnet
+  → DependencyService
+      ├─ ManifestDiscovery: *.csproj, *.fsproj, *.vbproj,
+      │                     Directory.Packages.props, packages.config (depth 3)
+      ├─ DotnetParser: XML → [{name, declared, kind, line, section, manifest_path}]
+      │    VersionOverride > Version > PackageVersion (CPM) > packages.config
+      │    $(Property)/Condition/Import → unknown (без MSBuild-evaluation)
+      ├─ cache lookup (dependency_cache, ключ nuget:<lower-id>, 24 ч)
+      ├─ NuGetClient.get_latest(id) для miss/stale, concurrency 4
+      └─ normalize → DependencyEcosystemReport(ecosystem="dotnet")
+```
+
+### 29.2. Безопасный XML
+
+- `xml.etree.ElementTree` с `XMLParser` без DTD/внешних сущностей; строки
+  `<!DOCTYPE`/`<!ENTITY` отвергаются до разбора.
+- Namespace MSBuild
+  (`http://schemas.microsoft.com/developer/msbuild/2003`) снимается; имена
+  элементов сравниваются локально.
+- Лимиты: файл ≤ 256 KiB, глубина ≤ 64, `PackageReference`/`PackageVersion`
+  ≤ 2000 на файл. Превышение → `parse_error` для этого манифеста, остальные
+  обрабатываются.
+- `Condition`/`Import`/`Choose`/`$(...)` не вычисляются: пакет получает
+  `unknown`, причина (`conditional`, `msbuild_property`) — в `ecosystem.error`
+  и UI-бейдже.
+- Discovery не следует по symlink'ам; `bin/`, `obj/`, `.vs/`, `packages/`
+  игнорируются.
+
+### 29.3. NuGetClient
+
+`app/providers/nuget_client.py` реализует тот же контракт, что
+`pypi_client.py`/`npm_client.py`:
+
+```python
+class NuGetClient:
+    async def get_latest(self, name: str) -> RegistryResult: ...
+```
+
+- URL: `https://api.nuget.org/v3-flatcontainer/{id-lower}/index.json`;
+  `id` — lower-case + URL-encode.
+- `latest` — максимальная stable-версия по SemVer 2.0.0; prerelease
+  отбрасываются. Только prerelease → `latest=None`, `status=unknown`.
+- 404 → `not_found`; 429/5xx → backoff 0.5/1/2 с (max 3), затем
+  `registry_unavailable`; timeout 5 с.
+- Общий HTTP-layer, `DEPENDENCY_CHECK_CONCURRENCY=4`, User-Agent
+  `IIRuchating/1.3`.
+- Кэш `dependency_cache`, ключ `nuget:<lower-id>`, TTL 24 ч, single-flight,
+  stale-while-revalidate — как в §11.3.
+- Приватные фиды/`NuGet.config` credentials — вне scope v1.3.0.
+
+### 29.4. CVE и обновления
+
+- OSV: `ecosystem="NuGet"`, имена case-insensitive, ключ кэша
+  `osv:nuget:<lower-id>:<version>`.
+- `version_source`: `exact` для литерала/`[x.y.z]`, `lower_bound` для
+  диапазона. Неразрешимые версии — `unknown_packages`.
+- Обновление — §17: `dotnet list --outdated --no-restore` (подсказка),
+  `dotnet add --version --no-restore` (мутация), только `confirm=true`,
+  чистый worktree, `action_log`/`audit_log`. Нет CLI → `409 dotnet_unavailable`.
+
+### 29.5. Hotspots и RAG
+
+- Hotspots учитывают `.cs`, `.csproj`, `.fsproj`, `.vbproj`, `.props`,
+  `.targets`; `bin/`, `obj/`, `.vs/`, `packages.lock.json`,
+  `project.assets.json` фильтруются.
+- RAG: `.cs` → `csharp`, XML-манифесты → `xml`; чанкинг C# — по
+  классам/методам (эвристика по отступам и `{}`), fallback — окно
+  `RAG_CHUNK_CHARS`/`RAG_CHUNK_OVERLAP`.
+- Строки подключения (`Password=`, `AccountKey=`) маскируются;
+  `appsettings.*.json` с секретами не индексируются.
+
+### 29.6. Инварианты
+
+- В режиме аудита не запускаются `dotnet restore/build/publish`; MSBuild не
+  вычисляется.
+- Ошибка одного манифеста не скрывает остальные; отсутствие .NET-файлов —
+  `no_manifest`, а не 500.
+- `bin/`/`obj/` не читаются; symlink'и не разыменовываются.
+- Формат ответа `DependencyReport`/`SecurityReport` не ломается: `dotnet` —
+  дополнительный элемент `ecosystems[]`.
+
+---
+
+## 30. SastService (v1.3.0, Sprint 59 — план)
+
+> **Статус:** план Sprint 59; контракт — SPEC §3.32.
+
+**Задача.** Найти небезопасный код, не исполняя его, и показать результат
+рядом с CVE/секретами.
+
+### 30.1. Поток
+
+```
+GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
+  → SastService
+      ├─ cache lookup (sast_cache: repo + head + dirty_hash + tools + versions + rules_hash)
+      ├─ adapters: BanditAdapter | SemgrepAdapter
+      │    asyncio.create_subprocess_exec(...), timeout 120 с, output cap 8 MiB
+      ├─ normalize → {tool, rule_id, severity, confidence, cwe, file, line, message}
+      ├─ dedupe by fingerprint; filter min_severity
+      └─ SastReport + write sast_cache
+```
+
+### 30.2. Адаптеры
+
+- `BanditAdapter`: `bandit -f json -q -r <repo>`; парсит `results[]`
+  (`test_id`, `test_name`, `issue_severity`, `issue_confidence`, `filename`,
+  `line_number`, `code`).
+- `SemgrepAdapter`: `semgrep --json --config <local> --metrics=off
+  --disable-version-check <repo>`; парсит `results[]` (`check_id`, `path`,
+  `start.line`, `extra.severity`, `extra.message`, `extra.metadata.cwe`).
+- Оба — внешние опциональные бинарники; версия определяется один раз и
+  участвует в ключе кэша. Отсутствие → `tool.status=unavailable`,
+  `SastReport.status=partial` (или `unavailable`, если нет ни одного).
+- Сеть запрещена: только локальные правила semgrep; `--config auto` не
+  используется. `bandit` офлайн.
+
+### 30.3. Нормализация и лимиты
+
+- Общая шкала `critical|high|medium|low|unknown`; `min_severity` фильтрует
+  `findings[]`, но `summary` считается по полному набору.
+- `fingerprint = sha256(file + line + rule_id + normalized_message)`;
+  дубли между инструментами схлопываются, `tools[]` перечисляет источники.
+- `snippet` ≤ 200 символов, секреты маскируются; `confidence` сохраняется.
+- Timeout 120 с (kill процесса), output ≤ 8 MiB, findings ≤ 500, файл ≤ 1 MiB;
+  превышение → `truncated=true`, `status=partial`.
+- Кэш `sast_cache` TTL 1 ч; `refresh=true` обходит TTL. In-memory слой — для
+  повторных запросов в рамках одного процесса.
+
+### 30.4. Безопасность и read-only
+
+- Код проекта не исполняется; инструменты только читают файлы.
+- `GIT_OPTIONAL_LOCKS=0`; `git status --porcelain` после скана не меняется.
+- `bin/`, `obj/`, `node_modules/`, `.venv/`, `vendor/`, `.git/` исключаются;
+  symlink'и не разыменовываются.
+- Полные файлы, совпадения и пути вне репозитория не логируются; ошибки
+  инструментов редактируются.
+- UI: таб «Код (SAST)» в блоке «Безопасность», фильтры severity/инструмент,
+  `file:line`, `aria`, RU/EN; ленивая загрузка.
+
+---
+
+## 31. Team edition — роли и audit trail (v1.3.0, Sprint 58 — план)
+
+> **Статус:** план Sprint 58; контракт — SPEC §3.31.
+
+### 31.1. Роли
+
+- `users.role ∈ {admin, auditor}` (default `admin`); bootstrap-пользователь —
+  `admin`. `AUTH_ENABLED=false` → неявный локальный `admin`.
+- JWT содержит только `sub`; роль читается из БД при каждом запросе, поэтому
+  изменение роли действует без перелогина и не подделывается токеном.
+- FastAPI-зависимость `require_role("admin")` навешивается на все мутации
+  (actions, update-dependencies, settings, users, audit, automation.apply,
+  scan/SAST/index) и возвращает `403 insufficient_role`.
+- `auditor` имеет доступ только к read-only эндпоинтам; экспорт workspace и
+  Markdown разрешён, экспорт audit log — нет.
+- Защита от lockout: нельзя удалить/деактивировать последнего admin и
+  понизить себя (`409 last_admin`/`cannot_demote_self`).
+
+### 31.2. Audit trail
+
+- `audit_log` — append-only таблица; API только чтение/экспорт.
+- Пишутся security-relevant действия: login/login_failed, users, settings,
+  scan, actions, update-dependencies, SAST, automation.apply, audit.export.
+- `status ∈ {success, error, denied}`; для мутаций запись создаётся до
+  выполнения (`denied` при отказе) и после (`success`/`error`).
+- `details` — allowlist метаданных (экосистема, число пакетов, путь
+  конфигурации); токены, пароли, секреты, diff и содержимое файлов
+  запрещены.
+- Fail-closed: если запись аудита не удалась, мутация отклоняется
+  (`503 audit_unavailable`).
+- Retention `AUDIT_LOG_RETENTION_DAYS=90`; очистка — admin-операция/cron.
+- `action_log` остаётся журналом вывода команд; связь — `request_id`.
+- Индексы: `created_at`, `actor_id`, `action`, `repository_id`; UI `/audit`
+  с фильтрами, пагинацией и CSV-экспортом.
+
+### 31.3. Инварианты
+
+- Ни один read-only эндпоинт не требует `admin`.
+- Ни одна мутация не доступна `auditor` — это проверяется тестами по списку
+  роутов, а не только UI.
+- Секреты не попадают в `audit_log`, CSV, логи и ответы.
+- Роль и `is_active` проверяются на каждом запросе; отключённый пользователь
+  получает `403 user_disabled`.
+
+---
+
+## 32. Automation config generation (v1.3.0, Sprint 59 — план)
+
+> **Статус:** план Sprint 59; контракт — SPEC §3.33. Приложение не делает
+> commit/push и не создаёт PR.
+
+### 32.1. Поток
+
+```
+POST /repositories/{id}/automation/preview {provider, ecosystems?, ...}
+  → AutomationService
+      ├─ ManifestDiscovery → найденные ecosystems (python/node/dotnet)
+      ├─ generate Dependabot YAML | Renovate JSON
+      ├─ validate (YAML/JSON parse, schema allowlist)
+      └─ AutomationPreview {path, content, content_hash, warnings}
+
+POST /repositories/{id}/automation/apply {provider, content_hash, confirm}
+  → preflight: confirm, admin role, чистый worktree, hash совпадает
+  → atomic write в .github/dependabot.yml | renovate.json
+  → action_log + audit_log; никакого git add/commit/push
+```
+
+### 32.2. Генерация
+
+- Dependabot: `version: 2`; `updates[]` для `pip`/`npm`/`nuget`,
+  `directory` из расположения манифеста, `schedule.interval` (default
+  `weekly`), `open-pull-requests-limit` (default 5), `groups` для
+  minor/patch, `ignore` major при `ignore_major=true`.
+- Renovate: `$schema`, `extends: ["config:recommended"]`, `packageRules` с
+  группировкой minor/patch и `major` по флагу.
+- `content_hash = sha256(content)`; `apply` принимает только точный hash.
+- Пути — allowlist (`.github/dependabot.yml`, `renovate.json`), размер ≤
+  64 KiB, запись атомарная (temp + rename) внутри корня репозитория.
+- Автоматического commit/push нет: пользователь коммитит сам, после чего
+  GitHub/GitLab создаёт PR.
+
+### 32.3. Безопасность
+
+- `preview` не пишет файлы; `apply` требует `confirm=true`, роль `admin`,
+  чистый worktree и совпадающий hash.
+- Path traversal, абсолютные пути, symlink и запись вне allowlist
+  отклоняются (`400 invalid_path`).
+- Ошибка записи → `ActionLog.status=error`, HTTP 409, без 500; аудит
+  фиксирует `denied`/`error`.
+- Сгенерированный контент не содержит токенов и приватных URL; секреты не
   логируются.

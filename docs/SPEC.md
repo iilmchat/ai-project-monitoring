@@ -463,20 +463,23 @@ Docker API наружу не отдаётся, только нормализов
 
 ---
 
-### 3.15. Dependency management (v0.5.0, Sprint 25–26)
+### 3.15. Dependency management (v0.5.0, Sprint 25–26; .NET — v1.3.0, Sprint 57 — план)
 
 Проверка объявленных зависимостей по манифестам в корне и вложенных
-каталогах репозитория (`backend/requirements.txt`, `frontend/package.json`).
-Файлы только читаются; в рамках проверки зависимостей `pip`/`npm`/`pnpm`
-не запускаются (обновление пакетов — отдельное действие §3.20).
+каталогах репозитория (`backend/requirements.txt`, `frontend/package.json`,
+`*.csproj`, `Directory.Packages.props`).
+Файлы только читаются; в рамках проверки зависимостей `pip`/`npm`/`pnpm`/
+`dotnet` не запускаются (обновление пакетов — отдельное действие §3.20).
 
 **Статус реализации:** Python (`requirements.txt`, PyPI) — Sprint 25;
-Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутствие
-параметра) возвращает объединённый отчёт.
+Node (`package.json`, npm) — Sprint 26; C#/.NET (`*.csproj`,
+`Directory.Packages.props`, `packages.config`, NuGet) — **план Sprint 57**
+(контракт ниже — §3.15.1). `ecosystem=all` (или отсутствие параметра)
+возвращает объединённый отчёт по всем найденным экосистемам.
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| GET | `/repositories/{id}/dependencies` | `refresh?: bool`, `ecosystem?: python\|node\|all` | `DependencyReport` |
+| GET | `/repositories/{id}/dependencies` | `refresh?: bool`, `ecosystem?: python\|node\|dotnet\|all` | `DependencyReport` |
 
 `DependencyReport`:
 
@@ -534,12 +537,13 @@ Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутст
 
 **Инварианты отчёта:**
 
-- `ecosystems` содержит запрошенные ecosystem (по умолчанию оба); отсутствующий
-  манифест — запись `status=no_manifest`, а не 404/500.
+- `ecosystems` содержит запрошенные ecosystem (по умолчанию все три);
+  отсутствующий манифест — запись `status=no_manifest`, а не 404/500.
 - Манифесты ищутся до `DEPENDENCY_MANIFEST_MAX_DEPTH` (default 3) ниже корня;
-  `node_modules`, `.venv`, `venv`, `dist`, `build`, `target`, `vendor`, `.git`
-  и кэши игнорируются. `manifests` — относительные POSIX-пути; `manifest` —
-  первый путь для обратной совместимости.
+  `node_modules`, `.venv`, `venv`, `dist`, `build`, `target`, `vendor`, `.git`,
+  `bin`, `obj`, `.vs`, `packages` (legacy NuGet restore) и кэши игнорируются.
+  `manifests` — относительные POSIX-пути; `manifest` — первый путь для
+  обратной совместимости.
 - Пакеты из нескольких манифестов дедуплицируются по имени: `exact` важнее
   диапазона, диапазон с версией — важнее диапазона без версии. Провенанс
   сохраняется в `manifest_path`.
@@ -560,20 +564,25 @@ Node (`package.json`, npm) — Sprint 26. `ecosystem=all` (или отсутст
 - Node: `1.2.3` → `exact`; `^`, `~`, `>=`, `*`, `latest` →
   `range`/`unknown`. `workspace:`, `file:`, `link:`, `portal:`, `git+`,
   `github:`, `http(s):`, `npm:` → `ignored`.
+- .NET (план): `1.2.3` и `[1.2.3]` → `exact`; `[1.0,2.0)`, `1.*`, `1.2.*`,
+  `*` → `range`; `ProjectReference`, `Reference`, локальные пути и
+  `PackageReference` без версии при отсутствии CPM → `ignored`;
+  `Version="$(Property)"` и `Condition` → `unknown` (причина в §3.15.1).
 - `declared` сохраняет исходное объявление; extras, environment markers и hashes
   не участвуют в сравнении.
-- `manifest_line` — 1-based строка для `requirements.txt`; для `package.json`
-  `null`. `manifest_section` — `dependencies`/`devDependencies` для Node, иначе
-  `null`.
+- `manifest_line` — 1-based строка для `requirements.txt` и XML-элемента
+  `.csproj`/`Directory.Packages.props`; для `package.json` — `null`.
+  `manifest_section` — `dependencies`/`devDependencies` для Node,
+  `PackageReference`/`PackageVersion`/`packages.config` для .NET, иначе `null`.
 - `severity` считается по первой различающейся части версии (major/minor/patch)
   от `current` к `latest`.
 - Транзитивные зависимости и lock-файлы **не** анализируются.
 
 **Кэш:** `DEPENDENCY_CACHE_TTL_SECONDS` (default 86400 = 24 ч), ключ
-`<registry>:<normalized-name>`, таблица `dependency_cache` (переживает
-перезапуск). `refresh=true` обходит TTL для запрошенного репозитория и
-обновляет кэш. При ошибке реестра отдаётся stale-кэш с `source=stale_cache`,
-если он есть.
+`<registry>:<normalized-name>` (`pypi:`, `npm:`, `nuget:`), таблица
+`dependency_cache` (переживает перезапуск). `refresh=true` обходит TTL для
+запрошенного репозитория и обновляет кэш. При ошибке реестра отдаётся
+stale-кэш с `source=stale_cache`, если он есть.
 
 **Rate limits и ошибки:** concurrency ≤ `DEPENDENCY_CHECK_CONCURRENCY` (default 4),
 timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 с).
@@ -582,6 +591,95 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 `parse_error` — сообщение. Пакет, отсутствующий в реестре (404), получает
 `latest=null`, `status=unknown`. При недоступном реестре и отсутствии кэша —
 `ecosystem.status=unavailable`, HTTP 200 (частичный отчёт).
+
+#### 3.15.1. .NET / NuGet (v1.3.0, Sprint 57 — план)
+
+> **Статус:** контракт планируемого поведения. Реализация — Sprint 57,
+> см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md). Ограничения парсинга — KI-025.
+
+**Манифесты:**
+
+| Файл | Что читаем | Приоритет версии |
+|------|------------|------------------|
+| `*.csproj`, `*.fsproj`, `*.vbproj` | `PackageReference Include="..." Version="..."` / `VersionOverride="..."` | 1 |
+| `Directory.Packages.props` | `PackageVersion Include="..." Version="..."` (Central Package Management) | 2 |
+| `packages.config` | `<package id="..." version="..." />` (legacy, best effort) | 3 |
+| `Directory.Build.props` | `PackageVersion` (если есть) | 2 |
+
+- `PackageReference` без `Version` разрешается через ближайший
+  `Directory.Packages.props` (поиск вверх до корня репозитория); если CPM нет —
+  `ignored`.
+- `VersionOverride` важнее `Version` и центральной версии
+  (`CentralPackageVersionOverrideEnabled`).
+- XML-парсинг — `xml.etree.ElementTree` с запретом DTD/внешних сущностей;
+  namespace MSBuild снимается. Лимиты: файл ≤ 256 KiB, глубина ≤ 64,
+  элементов `PackageReference`/`PackageVersion` ≤ 2000 на файл. Превышение или
+  битый XML → `ecosystem.status=parse_error`, `error` содержит путь и причину.
+- MSBuild-выражения (`$(...)`), `Condition`, `Import`, `Choose/When` **не
+  вычисляются**: пакет получает `status=unknown`, `current=null`, а причина
+  отражается в `ecosystem.error` и UI-бейдже (`msbuild_property`,
+  `conditional`, `unresolved_version`); схема пакета не расширяется. Это
+  осознанный отказ от «угадывания» (KI-025).
+- Несколько `TargetFrameworks` не дублируют пакеты; дедупликация по имени,
+  `exact` важнее `range`. Провенанс — `manifest_path`.
+- `bin/`, `obj/`, `.vs/`, `packages/` и `.git` при discovery игнорируются.
+
+**NuGet-клиент:**
+
+- `GET https://api.nuget.org/v3-flatcontainer/{id-lower}/index.json`
+  (`id` — нижний регистр, URL-encode) → список версий.
+- `latest` — максимальная stable-версия по SemVer 2.0.0; prerelease
+  игнорируются. Если stable-версий нет — `latest=null`, `status=unknown`.
+- 404 → `latest=null`, `status=unknown` (не ошибка экосистемы); 429/5xx —
+  backoff 0.5/1/2 с (max 3 попытки), затем `registry_unavailable`.
+- Timeout `DEPENDENCY_HTTP_TIMEOUT` (5 с), concurrency
+  `DEPENDENCY_CHECK_CONCURRENCY` (4), User-Agent `IIRuchating/1.3`.
+- Кэш `dependency_cache`, ключ `nuget:<lower-id>`, TTL 24 ч; stale-while-
+  revalidate и single-flight — как для PyPI/npm.
+- Приватные фиды, `NuGet.config` credentials и аутентификация — вне scope
+  v1.3.0.
+
+**Пример записи ecosystem:**
+
+```json
+{
+  "ecosystem": "dotnet",
+  "manifest": "src/Demo.Api/Demo.Api.csproj",
+  "manifests": ["src/Demo.Api/Demo.Api.csproj", "Directory.Packages.props"],
+  "status": "ok",
+  "source": "registry",
+  "total": 3,
+  "outdated": 1,
+  "up_to_date": 2,
+  "unknown": 0,
+  "ignored": 0,
+  "packages": [
+    {
+      "name": "Newtonsoft.Json",
+      "declared": "13.0.3",
+      "current": "13.0.3",
+      "latest": "13.0.4",
+      "status": "outdated",
+      "kind": "exact",
+      "severity": "patch",
+      "manifest_line": 18,
+      "manifest_section": "PackageReference",
+      "manifest_path": "src/Demo.Api/Demo.Api.csproj"
+    }
+  ],
+  "error": null
+}
+```
+
+**CVE (§3.16):** для .NET в OSV передаётся `ecosystem="NuGet"`; имена пакетов
+case-insensitive; `version_source=exact` для литерала/`[x.y.z]`,
+`lower_bound` — для диапазона. Неразрешимые версии попадают в
+`unknown_packages` с причиной `unresolved_version` и не считаются
+проверенными.
+
+**Read-only:** `dotnet restore/build/publish/list` в рамках аудита не
+запускаются; MSBuild не вычисляется. `dotnet list`/`dotnet add` допускаются
+только в §3.20 по явному подтверждению.
 
 ---
 
@@ -594,7 +692,8 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 **Статус реализации:** Sprint 28 — реализовано (`SecurityService`,
 `OsvClient`, `SecretScanner`). С v0.8.0 CVE-сканер использует общий
 `ManifestDiscovery` и проверяет вложенные `requirements.txt`/`package.json`;
-`manifests[]` перечисляет источники.
+`manifests[]` перечисляет источники. С v1.3.0 (Sprint 57 — план) добавляется
+экосистема .NET: `ecosystem="dotnet"`, в OSV — `NuGet` (§3.15.1).
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
@@ -686,13 +785,14 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
   (`ignored`-пакеты не входят); `packages_checked + unknown ≤ total`, разница —
   пакеты, которые не удалось проверить (OSV недоступен и кэша нет).
 - `version_source ∈ {exact, lower_bound}`:
-  - `exact` — версия из `==` / точного `package.json`;
-  - `lower_bound` — нижняя граница диапазона (`>=`, `^`, `~` и т.п.);
-    результат считается приблизительным и помечается в UI.
+  - `exact` — версия из `==` / точного `package.json` / литерала `1.2.3` или
+    `[1.2.3]` в .NET;
+  - `lower_bound` — нижняя граница диапазона (`>=`, `^`, `~`, `[1.0,2.0)` и
+    т.п.); результат считается приблизительным и помечается в UI.
 - Пакеты, для которых версию извлечь нельзя, попадают в `unknown_packages`
-  (`reason ∈ {unresolved_range, unsupported_kind, registry_missing,
-  osv_unavailable}`) и **не** считаются проверенными. `summary.unknown` — их
-  количество.
+  (`reason ∈ {unresolved_range, unresolved_version, unsupported_kind,
+  registry_missing, osv_unavailable}`) и **не** считаются проверенными.
+  `summary.unknown` — их количество.
 - `severity ∈ {critical, high, medium, low, unknown}`:
   CVSS v3 ≥ 9.0 → `critical`, 7.0–8.9 → `high`, 4.0–6.9 → `medium`,
   < 4.0 → `low`; при отсутствии CVSS используется severity из OSV, иначе
@@ -709,7 +809,8 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 #### 3.16.2. Кэш и лимиты
 
-- `security_cache`: ключ `osv:<ecosystem>:<package>:<version>`, TTL
+- `security_cache`: ключ `osv:<ecosystem>:<package>:<version>`
+  (`osv:pypi:`, `osv:npm:`, `osv:nuget:`), TTL
   `SECURITY_CACHE_TTL_SECONDS` (default **21600** = 6 ч), переживает перезапуск.
 - `refresh=true` обходит TTL для запрошенного репозитория и обновляет кэш.
 - Concurrency ≤ `SECURITY_CHECK_CONCURRENCY` (default 4), timeout
@@ -798,10 +899,11 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
   - удалённые/отсутствующие в рабочей директории файлы;
   - документация `*.md`;
   - lock-файлы (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`,
-    `poetry.lock`, `uv.lock`, `Cargo.lock`, `go.sum`, `*-lock.json`, `*.lock`);
+    `poetry.lock`, `uv.lock`, `Cargo.lock`, `go.sum`, `packages.lock.json`,
+    `project.assets.json`, `*-lock.json`, `*.lock`);
   - generated/minified (`*.min.js`, `*.min.css`, `*.map`, `*.snap`);
   - каталоги `node_modules`, `.venv`, `venv`, `vendor`, `dist`, `build`,
-    `target`, `__pycache__`, `.git`.
+    `target`, `bin`, `obj`, `.vs`, `__pycache__`, `.git`.
 - Переименования не отслеживаются (без rename detection): churn до переезда
   остаётся на старом пути.
 - Нет коммитов в окне или всё отфильтровано → `hotspots=[]`, `status=ok`.
@@ -1011,7 +1113,7 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 ---
 
-### 3.20. Automated dependency updates (v0.7.0, Sprint 34)
+### 3.20. Automated dependency updates (v0.7.0, Sprint 34; .NET — v1.3.0, Sprint 57 — план)
 
 Явная мутация: обновление пакетов выбранного репозитория. Только при
 `confirm=true`, на чистом worktree и с аудитом. Вне этого действия система
@@ -1019,8 +1121,18 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem: python\|node}` | `ActionLog` |
-| POST | `/repositories/actions/update_dependencies_all` | `{confirm:true, ecosystem: python\|node, repo_ids?: int[]}` | `202 {status:"accepted"}` |
+| POST | `/repositories/{id}/actions/update-dependencies` | `{confirm:true, ecosystem: python\|node\|dotnet}` | `ActionLog` |
+| POST | `/repositories/actions/update_dependencies_all` | `{confirm:true, ecosystem: python\|node\|dotnet, repo_ids?: int[]}` | `202 {status:"accepted"}` |
+
+**.NET (v1.3.0 — план):**
+
+- Read-only подсказка: `dotnet list <project> package --outdated --no-restore`
+  запускается только при наличии `dotnet` в PATH и существующем
+  `obj/project.assets.json`; иначе используется отчёт NuGet-клиента (§3.15.1).
+- Мутация: `dotnet add <project> package <id> --version <version> --no-restore`.
+- `dotnet` отсутствует → `409 dotnet_unavailable`; нет проекта →
+  `409 no_manifest`. `restore`/`build`/`publish`, `--force` и удаление
+  `packages.lock.json` запрещены.
 
 **Preflight:**
 
@@ -1030,14 +1142,16 @@ timeout `DEPENDENCY_HTTP_TIMEOUT` (default 5 с), backoff на 429/5xx (0.5/1/2 
   пишется в `action_log` (`status=error`, `error=dirty_worktree`).
 - Ошибка `git status` → `409 git_unavailable`, тоже с записью в `action_log`.
 - Менеджер: Python — `requirements.txt` → `pip`; Node — `pnpm-lock.yaml` →
-  `pnpm`, иначе `package.json` → `npm`. Нет манифеста → `409 no_manifest`
-  (попытка логируется).
+  `pnpm`, иначе `package.json` → `npm`; .NET — `*.csproj`/`*.sln` → `dotnet`.
+  Нет манифеста → `409 no_manifest` (попытка логируется).
 
 **Команды:**
 
 - Python: `pip install -r requirements.txt --upgrade`
   (запускается как `python -m pip install ...`).
 - Node: `pnpm update` или `npm update`.
+- .NET: `dotnet add <project> package <id> --version <version> --no-restore`
+  (план v1.3.0); `dotnet restore/build/publish` не запускаются.
 - Выборочное обновление пакетов и флаги `--force`/`--legacy-peer-deps` не
   поддерживаются; `git`-мутации и удаление lock-файлов запрещены.
 
@@ -1278,7 +1392,8 @@ oauth_scope, oauth_expires_at}`.
 - `repository_ids` — опционально, только tracked-репозитории;
 - `limit` — 1–50 (default 5);
 - `min_score` — 0–1 (default 0.2), порог косинусной близости;
-- `language` — опционально (`python`, `typescript`, `markdown`, …).
+- `language` — опционально (`python`, `typescript`, `csharp`, `xml`,
+  `markdown`, …).
 
 **`CodeSearchResponse`:**
 
@@ -1399,7 +1514,8 @@ running, errors[]}`.
 
 > **Статус:** реализовано. При `AUTH_ENABLED=true` API защищён JWT; при
 > `false` остаётся локальный режим без входа. См. [`TODO_V1.0.md`](../TODO_V1.0.md)
-> и ADR-0016.
+> и ADR-0016. С v1.3.0 (Sprint 58 — план) добавляются роли `Admin`/`Auditor`
+> и audit log — §3.31.
 
 Один пользователь без регистрации, ролей и мультитенантности. Auth включается
 флагом `AUTH_ENABLED`; при `true` все роуты, кроме перечисленных ниже, требуют
@@ -1708,6 +1824,228 @@ LLM-ответ с цитатами на источники. Использует
 
 ---
 
+### 3.31. Team edition — роли и Audit Log (v1.3.0, Sprint 58 — план)
+
+> **Статус:** план Sprint 58. Расширяет single-user auth §3.28; контракты ниже
+> обязательны для реализации, см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md).
+
+Две роли: `admin` (полный доступ) и `auditor` (только чтение). Роль хранится в
+БД и проверяется на каждом запросе; claim JWT не является источником прав.
+При `AUTH_ENABLED=false` действует неявный локальный `admin`.
+
+**`GET /api/v1/auth/me`:** `{id, username, role, is_active}`.
+
+**Матрица прав:**
+
+| Возможность | `admin` | `auditor` |
+|-------------|---------|-----------|
+| Чтение дашборда, репозиториев, зависимостей, CVE, insights, AI | ✅ | ✅ |
+| README/docs, экспорт workspace/Markdown | ✅ | ✅ |
+| `fetch`/`pull`/`push`/`stash`/`commit` | ✅ | ❌ `403` |
+| `update-dependencies`, bulk-actions, `automation/apply` | ✅ | ❌ `403` |
+| Настройки, токены, AI-профили | ✅ | ❌ `403` |
+| Пользователи и `audit_log` | ✅ | ❌ `403` |
+| Запуск scan/SAST/индексации | ✅ | ❌ `403` (просмотр отчётов — да) |
+
+**Пользователи (admin-only):**
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| GET | `/api/v1/users` | — | `{items: User[]}` |
+| POST | `/api/v1/users` | `{username, password, role}` | `201 User` |
+| PATCH | `/api/v1/users/{id}` | `{role?, is_active?, password?}` | `User` |
+| DELETE | `/api/v1/users/{id}` | — | `204` |
+
+`User`: `{id, username, role, is_active, created_at, last_login_at}`; hash
+пароля не отдаётся. Пароль — bcrypt cost ≥ 12, ≥ 8 символов.
+Ошибки: `400 validation_error`, `403 insufficient_role`,
+`404 user_not_found`, `409 username_exists`, `409 last_admin`,
+`409 cannot_demote_self`, `429 too_many_attempts`.
+
+**Audit Log API (admin-only):**
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/api/v1/audit-log` | `from?, to?, actor?, action?, repository_id?, status?, limit? (1..200, default 50), offset?` | `AuditLogPage` |
+| GET | `/api/v1/audit-log/export` | те же фильтры | `text/csv` |
+
+`AuditLogPage`:
+
+```json
+{
+  "items": [
+    {
+      "id": 1024,
+      "created_at": "2026-11-11T09:15:00Z",
+      "actor": {"id": 2, "username": "auditor"},
+      "action": "action.update_dependencies",
+      "status": "success",
+      "repository_id": 7,
+      "repository_name": "demo",
+      "method": "POST",
+      "path": "/api/v1/repositories/7/actions/update-dependencies",
+      "ip": "127.0.0.1",
+      "request_id": "req_...",
+      "details": {"ecosystem": "dotnet", "packages": 3}
+    }
+  ],
+  "total": 1240,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+- `status ∈ {success, error, denied}`; `action` — стабильный код
+  (`auth.login`, `auth.login_failed`, `user.create`, `user.update`,
+  `user.delete`, `settings.update`, `scan.start`, `action.fetch`,
+  `action.pull`, `action.push`, `action.stash`, `action.commit`,
+  `action.update_dependencies`, `sast.scan`, `automation.apply`,
+  `audit.export`).
+- `details` — только разрешённые метаданные; токены, пароли, секреты,
+  содержимое файлов и diff не пишутся. IP/user-agent можно отключить
+  (`AUDIT_LOG_STORE_CLIENT_INFO=false`).
+- Append-only: нет API изменения/удаления; retention
+  `AUDIT_LOG_RETENTION_DAYS` (default 90), очистка — admin-операция/cron.
+- Для мутаций пишется запись `denied`/`success`/`error`; при недоступности
+  аудита мутация отклоняется (`503 audit_unavailable`, fail-closed).
+- Сортировка `created_at` desc, `id` desc; `total` — по фильтру; неверный
+  диапазон → `400 invalid_range`.
+- UI: страница `/audit` только для admin, фильтры (период, пользователь,
+  действие, репозиторий, статус), пагинация, экспорт CSV, пустое состояние,
+  `aria`; для auditor пункт меню скрыт.
+- `action_log` не меняется и остаётся журналом вывода команд; связь с
+  `audit_log` — `request_id`.
+
+---
+
+### 3.32. SAST — статический анализ кода (v1.3.0, Sprint 59 — план)
+
+> **Статус:** план Sprint 59; контракт обязателен для реализации.
+
+Поиск небезопасного кода (`eval`, `exec`, SQL-конкатенация, небезопасный
+`subprocess`, hardcoded secrets) в рабочей директории. Только чтение; код
+проекта не исполняется.
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/api/v1/repositories/{id}/sast` | `tools?: all\|bandit\|semgrep (default all)`, `min_severity?: critical\|high\|medium\|low\|all (default high)`, `refresh?: bool` | `SastReport` |
+
+**`SastReport`:**
+
+```json
+{
+  "repository_id": 1,
+  "checked_at": "2026-11-11T10:00:00Z",
+  "status": "ok",
+  "tools": [
+    {"name": "bandit", "status": "ok", "version": "1.7.10", "duration_ms": 820},
+    {"name": "semgrep", "status": "unavailable", "version": null, "error": "not_installed"}
+  ],
+  "summary": {"total": 4, "critical": 0, "high": 2, "medium": 2, "low": 0, "unknown": 0},
+  "findings": [
+    {
+      "tool": "bandit",
+      "rule_id": "B602",
+      "severity": "high",
+      "confidence": "high",
+      "category": "security",
+      "cwe": "CWE-78",
+      "file": "app/utils.py",
+      "line": 42,
+      "column": 5,
+      "message": "subprocess call with shell=True",
+      "snippet": "subprocess.run(cmd, shell=True)",
+      "fingerprint": "sha256:..."
+    }
+  ],
+  "truncated": false,
+  "error": null
+}
+```
+
+**Правила:**
+
+- Инструменты `bandit` (Python) и `semgrep` (Python/JS/TS/C# и др.) —
+  внешние опциональные бинарники; отсутствие → `tool.status=unavailable`,
+  остальные работают, HTTP 200.
+- `semgrep` запускается только с локальным набором правил (`SEMGREP_CONFIG`
+  / bundled `security/`), `--metrics=off`, `--disable-version-check`; сеть и
+  `--config auto` запрещены.
+- `status ∈ {ok, partial, unavailable}`: `partial` — часть инструментов
+  недоступна или превышен лимит; `unavailable` — ни один не отработал.
+- `severity ∈ {critical, high, medium, low, unknown}`; маппинг: bandit
+  HIGH→high, MEDIUM→medium, LOW→low; semgrep ERROR→high, WARNING→medium,
+  INFO→low. `min_severity` фильтрует `findings[]`, но **не** меняет
+  `summary`.
+- Дедупликация по `fingerprint` (file+line+rule+message, tool-independent);
+  один паттерн от двух инструментов — одна запись с `tools[]`.
+- Лимиты: timeout `SAST_TIMEOUT_SECONDS` (120), вывод ≤ 8 MiB, findings ≤
+  `SAST_MAX_FINDINGS` (500), файл ≤ 1 MiB; превышение → `truncated=true` и
+  `status=partial`.
+- `snippet` ≤ 200 символов, секреты маскируются; полные файлы и совпадения не
+  логируются. Кэш `sast_cache` (TTL `SAST_CACHE_TTL_SECONDS`, 3600) по
+  `repo_id + head_sha + dirty_hash + tools + tool_versions + rules_hash`;
+  `refresh=true` обходит TTL.
+- Ошибки: `404 repository_not_found`; `503 sast_unavailable` (нет ни одного
+  инструмента и кэша нет); `504 sast_timeout`; частичные результаты — HTTP
+  200.
+- Read-only: `git status --porcelain` после скана не меняется; `bin/`,
+  `obj/`, `node_modules/`, `.venv/`, `vendor/` исключаются.
+- UI: таб «Код (SAST)» в блоке «Безопасность» рядом с CVE и Secrets; фильтры
+  severity/инструмент, ссылка `file:line`, бейдж confidence, empty-state,
+  RU/EN, `aria`.
+
+---
+
+### 3.33. Автоматические PR — генерация конфигураций (v1.3.0, Sprint 59 — план)
+
+> **Статус:** план Sprint 59. Приложение **не** делает commit/push и не
+> создаёт PR: оно генерирует конфигурацию, которую пользователь коммитит сам.
+
+| Метод | Путь | Тело | Ответ |
+|-------|------|------|-------|
+| POST | `/api/v1/repositories/{id}/automation/preview` | `{provider, ecosystems?, schedule?, ignore_major?, open_pull_requests_limit?}` | `AutomationPreview` |
+| POST | `/api/v1/repositories/{id}/automation/apply` | `{provider, content_hash, confirm:true}` | `ActionLog` |
+
+**`AutomationPreview`:**
+
+```json
+{
+  "provider": "dependabot",
+  "path": ".github/dependabot.yml",
+  "content": "version: 2\nupdates:\n  - package-ecosystem: pip\n...",
+  "content_hash": "sha256:...",
+  "warnings": [],
+  "ecosystems": ["python", "dotnet"]
+}
+```
+
+- `provider ∈ {dependabot, renovate}`; `ecosystems` —
+  `python|node|dotnet` (по умолчанию — найденные манифесты); `schedule` —
+  `daily|weekly|monthly` (default `weekly`); `open_pull_requests_limit` 1–10
+  (default 5).
+- Dependabot: `version: 2`, `updates[]` c `package-ecosystem`
+  (`pip`/`npm`/`nuget`), `directory`, `schedule.interval`, `groups`
+  (minor/patch), `ignore` для major при `ignore_major=true`.
+- Renovate: `$schema`, `extends: ["config:recommended"]`, `packageRules` для
+  группировки minor/patch.
+- `path` — только `.github/dependabot.yml` или `renovate.json`; размер
+  конфигурации ≤ 64 KiB; синтаксис валидируется (YAML/JSON) до ответа.
+- `content_hash = sha256(content)`; `apply` принимает только совпадающий hash
+  (`400 content_hash_mismatch`) — защита от подмены между preview и apply.
+- `apply`: `confirm=true`, чистый worktree (`409 dirty_worktree`), путь из
+  allowlist, атомарная запись, `action_log` + `audit_log`
+  (`action=automation.apply`, `denied` для auditor). Автоматического коммита,
+  push и создания PR нет.
+- Ошибки: `400 confirmation_required` / `content_hash_mismatch` /
+  `unsupported_provider`; `403 insufficient_role`; `409 no_manifest`.
+- UI: блок «Автоматические PR» в карточке репозитория: провайдер, чекбоксы
+  экосистем, расписание, `ignore_major`, предпросмотр YAML/JSON, кнопки
+  «Скопировать»/«Скачать»/«Применить» (только admin), предупреждение об
+  отсутствии autopush; RU/EN, `aria`.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
@@ -1723,8 +2061,9 @@ repositories(
   tags JSONB
 )
 
-users(                      -- v1.0.0 (Sprint 47)
+users(                      -- v1.0.0 (Sprint 47); role v1.3.0 (Sprint 58)
   id, username* UNIQUE, hashed_password, is_active BOOLEAN,
+  role TEXT NOT NULL DEFAULT 'admin',  -- admin | auditor
   created_at, last_login_at NULL
 )
 
@@ -1764,13 +2103,21 @@ action_log(                 -- S10-005
   output, error, duration_ms, exit_code, actor, created_at
 )
 
+audit_log(                  -- v1.3.0 (Sprint 58)
+  id, actor_id→users NULL, actor_username TEXT,
+  action TEXT, status TEXT,        -- success | error | denied
+  repository_id→repositories NULL,
+  method TEXT, path TEXT, ip TEXT NULL, user_agent TEXT NULL,
+  request_id TEXT NULL, details JSONB, created_at
+)
+
 app_settings(               -- S15-001
   key* TEXT PRIMARY KEY, value TEXT NULL, updated_at
 )
 
 dependency_cache(           -- v0.5.0
-  key* TEXT PRIMARY KEY,    -- "pypi:fastapi" | "npm:react"
-  ecosystem TEXT,           -- pypi | npm
+  key* TEXT PRIMARY KEY,    -- "pypi:fastapi" | "npm:react" | "nuget:newtonsoft.json"
+  ecosystem TEXT,           -- pypi | npm | nuget
   package TEXT,             -- нормализованное имя
   latest_version TEXT NULL,
   etag TEXT NULL,
@@ -1779,11 +2126,18 @@ dependency_cache(           -- v0.5.0
 )
 
 security_cache(             -- v0.6.0 (Sprint 28)
-  key* TEXT PRIMARY KEY,    -- "osv:pypi:requests:2.19.0"
-  ecosystem TEXT,           -- pypi | npm
+  key* TEXT PRIMARY KEY,    -- "osv:pypi:requests:2.19.0" | "osv:nuget:newtonsoft.json:13.0.3"
+  ecosystem TEXT,           -- pypi | npm | nuget
   package TEXT,
   version TEXT,             -- проверяемая версия (exact или lower_bound)
   payload JSONB,            -- нормализованный ответ OSV.dev
+  checked_at
+)
+
+sast_cache(                 -- v1.3.0 (Sprint 59)
+  key* TEXT PRIMARY KEY,    -- "<repo_id>:<head_sha>:<dirty_hash>:<tools>:<versions>:<rules_hash>"
+  repository_id→repositories,
+  payload JSONB,            -- нормализованный SastReport
   checked_at
 )
 
@@ -1821,7 +2175,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 )
 ```
 
-Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`.
+Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`; **v1.3.0 (план):** `audit_log(created_at)`, `audit_log(actor_id)`, `audit_log(action)`, `audit_log(repository_id)`, `sast_cache(checked_at)`.
 
 ---
 
@@ -1843,13 +2197,17 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **Webhook secret** | **`WEBHOOK_SECRET` (опционально, HMAC-валидация)** |
 | **Токены провайдеров** | **`GITHUB_TOKEN`, `GITFLIC_TOKEN` (обязательны для mirror; без них `mirror_status=unavailable`, `mirror_expected` не влияет на UI-шум)** |
 | **Docker** | **`DOCKER_ENABLED` (default true), `DOCKER_HOST` (SDK default: UDS/npipe; в compose — `unix:///var/run/docker.sock`), `DOCKER_PATH_MAP` (host→container, например `C:/Projects=/projects`), `DOCKER_STATUS_TTL_SECONDS` (default 30), `DOCKER_TIMEOUT_SECONDS` (default 3); только `GET`-операции** |
-| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25) и `package.json` (Node, Sprint 26) в корне (+ относительные `-r` include)** |
+| **Dependency checks** | **`DEPENDENCY_CACHE_TTL_SECONDS` (default 86400), `DEPENDENCY_CHECK_CONCURRENCY` (default 4), `DEPENDENCY_HTTP_TIMEOUT` (default 5 с); манифесты — `requirements.txt` (Python, Sprint 25), `package.json` (Node, Sprint 26) и `*.csproj`/`Directory.Packages.props`/`packages.config` (.NET, v1.3.0 — план) в корне (+ относительные `-r` include); MSBuild не вычисляется** |
 | **Security (v0.6.0)** | **`OSV_API_URL` (default `https://api.osv.dev`), `SECURITY_CACHE_TTL_SECONDS` (default 21600), `SECURITY_CHECK_CONCURRENCY` (default 4), `SECURITY_HTTP_TIMEOUT` (default 10 с); проверка только объявленных версий, `pip`/`npm` не запускаются** |
 | **Secret scanning (v0.6.0)** | **`SECRET_SCAN_ENABLED` (default true), `SECRET_SCAN_MAX_FILES` (default 5000), `SECRET_SCAN_MAX_FILE_BYTES` (default 1048576), `SECRET_SCAN_TTL_SECONDS` (default 300); только рабочая директория, история Git не сканируется** |
 | **Insights (v0.6.0)** | **`INSIGHTS_CACHE_TTL_SECONDS` (default 300), `INSIGHTS_GIT_TIMEOUT_SECONDS` (default 10), `INSIGHTS_HOTSPOTS_LIMIT` (default 5), `INSIGHTS_HOTSPOTS_DAYS` (default 90); только `git log`/`git rev-parse`, без fetch** |
 | **LLM / AI (v0.7.0)** | **`LLM_ENABLED` (default false), `LLM_BASE_URL` (default `http://127.0.0.1:1234/v1`), `LLM_MODEL` (default `qwen2.5-coder-7b-instruct`), `LLM_API_KEY` (опционально), `LLM_TIMEOUT_SECONDS` (default 30), `LLM_MAX_DIFF_CHARS` (default 10000), `LLM_ALLOW_REMOTE` (default false), `AI_CACHE_TTL_SECONDS` (default 604800); diff/промпты не логируются** |
 | **Global analytics (v0.7.0)** | **`GLOBAL_ANALYTICS_CACHE_TTL_SECONDS` (default 3600), `GLOBAL_ANALYTICS_LIMIT` (default 50), `GLOBAL_ANALYTICS_CONCURRENCY` (default 4); агрегация через `DependencyService` + `dependency_cache`, `refresh=true` обходит кэш** |
 | **Dependency updates (v0.7.0)** | **`DEPENDENCY_UPDATE_TIMEOUT_SECONDS` (default 180), `DEPENDENCY_UPDATE_MAX_OUTPUT_CHARS` (default 10000); только `confirm=true` + чистый worktree (`git status --porcelain`) + `action_log`** |
+| **.NET toolchain (v1.3.0, план)** | **`*.csproj`/`Directory.Packages.props` парсятся stdlib XML без DTD/сущностей; `dotnet` CLI опционален; `dotnet list --outdated --no-restore` — только подсказка, `dotnet add --version --no-restore` — только §3.20; `restore/build/publish` запрещены** |
+| **Team & audit (v1.3.0, план)** | **`users.role ∈ {admin, auditor}`; `AUDIT_LOG_RETENTION_DAYS` (default 90), `AUDIT_LOG_STORE_CLIENT_INFO` (default true); audit-запись fail-closed для мутаций; секреты/содержимое файлов не пишутся** |
+| **SAST (v1.3.0, план)** | **`SAST_ENABLED` (default true), `SAST_TIMEOUT_SECONDS` (default 120), `SAST_MAX_FINDINGS` (default 500), `SAST_MAX_FILE_BYTES` (default 1048576), `SAST_CACHE_TTL_SECONDS` (default 3600), `SEMGREP_CONFIG` (локальные правила); сеть и `--config auto` запрещены** |
+| **Automation configs (v1.3.0, план)** | **Dependabot/Renovate preview без записи; apply — только `confirm=true` + совпадающий `content_hash` + чистый worktree + allowlist (`.github/dependabot.yml`, `renovate.json`) + `action_log`/`audit_log`; commit/push не выполняются** |
 | **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
@@ -2002,6 +2360,23 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
       GitFlic mirror.
 - [ ] Документы: ADR-0016/0017, KI-019/KI-020, `TODO_V1.0.md`.
 
+### 6.8. v1.3.0 (план, спринты 57–59)
+
+- [ ] .NET: парсинг `.csproj`/`Directory.Packages.props`/`packages.config`,
+      NuGet latest, CVE через OSV (`NuGet`), третья вкладка UI, обновление
+      через `dotnet add --no-restore`, `.cs`/`.csproj` в hotspots и RAG.
+- [ ] Team: роли `admin`/`auditor`, серверная проверка прав, CRUD
+      пользователей, все мутации — `403` для auditor.
+- [ ] Audit Log: append-only `audit_log`, admin-only API с фильтрами и CSV,
+      retention, fail-closed, отсутствие секретов.
+- [ ] SAST: bandit + semgrep, `GET /repositories/{id}/sast`, кэш, лимиты,
+      read-only, таб «Код (SAST)».
+- [ ] Automated PRs: preview/apply Dependabot/Renovate, allowlist и hash,
+      отсутствие commit/push.
+- [ ] Release: версии `1.3.0`, CHANGELOG/RELEASES/README/SPEC/ARCHITECTURE,
+      тег `v1.3.0`, артефакты Windows/macOS/Linux, KI-025 актуальна/закрыта.
+- [ ] Документы: ADR-0018–0021, `TODO_V1.3.0.md`.
+
 ---
 
 ## 7. Совместимость и версии
@@ -2015,6 +2390,9 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | GitHub REST API | v3 (2022-11-28) — v0.2.0 |
 | GitFlic REST API | актуальная (см. docs.gitflic.ru) — v0.2.0 |
 | OSV.dev API | v1 (`POST /v1/query`, `POST /v1/querybatch`) — v0.6.0 |
+| NuGet V3 flat container | `api.nuget.org/v3-flatcontainer` — v1.3.0 (план) |
+| .NET SDK / CLI | 8.0+ (опционально, только для обновления пакетов) — v1.3.0 (план) |
+| bandit / semgrep | 1.7+ / 1.x (внешние опциональные бинарники) — v1.3.0 (план) |
 | OpenAI-compatible LLM API | Ollama / LM Studio `/v1/chat/completions` — v0.7.0 |
 | OpenAI-compatible Embeddings API | Ollama / LM Studio `/v1/embeddings` — v0.9.0 (план) |
 | GigaChat OAuth 2.0 | `https://ngw.devices.sberbank.ru:9443/api/v2/oauth` — v0.9.0 (план) |
@@ -2037,6 +2415,10 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | v0.8.0 | вложенные манифесты, README/docs, RU/EN, дубли, AI-рекомендации, профили провайдеров | `TODO_V0.8.md` |
 | v0.9.0 (план) | E2E Playwright, bundle < 90 kB gzip, GigaChat OAuth, smart AI cache, RAG на pgvector | `TODO_V0.9.md` |
 | v0.9.0+ | синхронизация представлений, история статусов, расширенные интеграции | `TODO.md` |
+| v1.0.0 | single-user auth (JWT), Tauri desktop, PostgreSQL + pgvector | `TODO_V1.0.md` |
+| v1.1.0 | onboarding, файловые логи, автообновления Tauri, GitHub Actions | — |
+| v1.2.0 | AI code review, conflict resolver, release notes, conversational RAG, кросс-платформенный релиз | `TODO_V1.2.0.md` |
+| v1.3.0 (план) | .NET/NuGet, Team Edition (роли, audit log), SAST, автоматические PR | `TODO_V1.3.0.md` |
 
 ---
 
@@ -2045,7 +2427,7 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 **Статус:** v0.4.0 — реализовано (спринты 18–21); разделы 9.8–9.9 — v0.5.0
 (реализовано), разделы 9.10–9.11 — v0.6.0 (реализовано), раздел 9.12 —
 v0.7.0 (Sprints 32–34), раздел 9.13 — v0.8.0 (Sprints 35–39), раздел 9.14 —
-v0.9.0 (план, Sprints 42–44).
+v0.9.0 (план, Sprints 42–44), раздел 9.15 — v1.3.0 (план, Sprints 57–59).
 
 ### 9.1 Таблица репозиториев
 
@@ -2250,3 +2632,17 @@ v0.9.0 (план, Sprints 42–44).
 - **Bundle:** `Settings` и `RepositoryDetails` грузят свои i18n-namespace
   лениво; entry < 90 kB gzip; E2E покрывает onboarding→scan→dashboard, RU/EN +
   тему и AI-коммит с мок-LLM.
+
+### 9.15 v1.3.0 (план): .NET, Team Edition и SAST
+
+- **Зависимости:** третья вкладка «C# / .NET» с бейджем «CPM», путём
+  манифеста и empty/error-состояниями; табы доступны с клавиатуры.
+- **Безопасность:** три таба — CVE / Secrets / «Код (SAST)»; фильтры
+  severity/инструмента, ссылка `file:line`, бейдж confidence.
+- **Роли:** в шапке — имя и роль; пункты меню настроек/аудита скрыты для
+  `auditor`; мутации для него недоступны (`403`), кнопки disabled с tooltip.
+- **Audit Log:** страница `/audit` (admin): фильтры, пагинация, экспорт CSV,
+  `aria`, пустое состояние.
+- **Автоматические PR:** блок в карточке репозитория с предпросмотром
+  YAML/JSON, копированием и явным «Применить» (admin); предупреждение, что
+  commit/push не выполняются.
