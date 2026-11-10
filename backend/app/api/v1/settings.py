@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.api.deps import actor_id, require_admin
 from app.config import Settings
 from app.schemas.ai import LLMTestResponse
 from app.schemas.settings import (
@@ -86,7 +87,11 @@ async def test_llm(request: Request) -> LLMTestResponse:
     )
 
 
-@router.patch("/settings", response_model=SettingsResponse)
+@router.patch(
+    "/settings",
+    response_model=SettingsResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def update_settings(payload: SettingsUpdate, request: Request) -> SettingsResponse:
     try:
         values = await _service(request).update_settings(
@@ -96,6 +101,13 @@ async def update_settings(payload: SettingsUpdate, request: Request) -> Settings
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "settings_updated",
+        "settings",
+        None,
+        {"keys": sorted(payload.model_dump(exclude_none=True))},
+    )
     return _response(values)
 
 

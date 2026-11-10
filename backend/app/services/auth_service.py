@@ -52,6 +52,7 @@ class AuthService:
                     self._settings.admin_password or "admin"
                 ),
                 is_active=True,
+                role="admin",
             )
             session.add(user)
             await session.commit()
@@ -91,6 +92,7 @@ class AuthService:
         username: str,
         password: str,
         *,
+        role: str = "auditor",
         is_active: bool = True,
     ) -> User:
         async with self._session_factory() as session:
@@ -98,11 +100,49 @@ class AuthService:
                 username=username.strip(),
                 hashed_password=self.hash_password(password),
                 is_active=is_active,
+                role=role,
             )
             session.add(user)
             await session.commit()
             await session.refresh(user)
             return user
+
+    async def list_users(self) -> list[User]:
+        async with self._session_factory() as session:
+            rows = await session.scalars(select(User).order_by(User.id))
+            return list(rows.all())
+
+    async def update_user(
+        self,
+        user_id: int,
+        *,
+        role: str | None = None,
+        is_active: bool | None = None,
+        password: str | None = None,
+    ) -> User | None:
+        """Update a user after the API-level lockout checks."""
+        async with self._session_factory() as session:
+            user = await session.get(User, user_id)
+            if user is None:
+                return None
+            if role is not None:
+                user.role = role
+            if is_active is not None:
+                user.is_active = is_active
+            if password:
+                user.hashed_password = self.hash_password(password)
+            await session.commit()
+            await session.refresh(user)
+            return user
+
+    async def count_admins(self) -> int:
+        async with self._session_factory() as session:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == "admin", User.is_active.is_(True))
+            )
+            return int(count or 0)
 
     def create_access_token(self, user: User) -> tuple[str, datetime]:
         now = datetime.now(UTC)
@@ -111,6 +151,7 @@ class AuthService:
         )
         payload = {
             "sub": str(user.id),
+            "role": user.role,
             "iat": int(now.timestamp()),
             "exp": int(expires_at.timestamp()),
             "jti": secrets.token_hex(8),

@@ -59,7 +59,10 @@ async def login(
         user=UserRead(
             id=user.id,
             username=user.username,
+            role=user.role,
             is_active=user.is_active,
+            created_at=user.created_at,
+            last_login_at=user.last_login_at,
         ),
     )
 
@@ -68,7 +71,7 @@ async def login(
 async def me(request: Request) -> UserRead:
     settings = request.app.state.settings
     if not settings.auth_enabled:
-        return UserRead(id=0, username="local", is_active=True)
+        return UserRead(id=0, username="local", role="admin", is_active=True)
     user = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(
@@ -78,7 +81,10 @@ async def me(request: Request) -> UserRead:
     return UserRead(
         id=user.id,
         username=user.username,
+        role=user.role,
         is_active=user.is_active,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
     )
 
 

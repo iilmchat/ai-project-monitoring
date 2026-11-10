@@ -13,6 +13,7 @@ export default function AppLayout() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const logout = useAuthStore((state) => state.logout)
+  const user = useAuthStore((state) => state.user)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
@@ -84,6 +85,16 @@ export default function AppLayout() {
             >
               <span aria-hidden="true">⚙</span> {t('nav.settings')}
             </Link>
+            {user?.role === 'admin' && (
+              <>
+                <Link to="/admin/users" className="hover:text-primary">
+                  {t('nav.users')}
+                </Link>
+                <Link to="/admin/audit" className="hover:text-primary">
+                  {t('nav.audit')}
+                </Link>
+              </>
+            )}
             <LanguageToggle />
             <ThemeToggle />
             <button

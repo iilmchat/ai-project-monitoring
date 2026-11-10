@@ -14,6 +14,13 @@
 - test: `test_dotnet_parser.py` (CPM, `VersionOverride`, `packages.config`, DTD/XXE, NuGet client, OSV NuGet), обновлены тесты зависимостей/обновлений и `RepositoryDetails` (S57-005).
 - docs(adr): ADR-0018 «.NET manifests & NuGet client»; SPEC §3.15/§3.15.1, ARCHITECTURE §29 (S57-005).
 
+- feat(team): роли `admin`/`auditor`: `users.role` (default `auditor`, миграция 013 сохраняет существующего admin), claim `role` в JWT, зависимость `require_admin` (`403 insufficient_role`) на actions, track/untrack, refresh, settings, AI-профилях, scan, RAG-индексации, users/audit (S58-001).
+- feat(team): `AuditLog` + `AuditService`, append-only `audit_log` (`user_id`, `action`, `entity_type`, `entity_id`, `details`, `created_at`); логирование scan, actions (`repo_push`), `dep_update`, settings, users/roles; санитизация `details` (S58-002).
+- feat(api): `GET /api/v1/audit` (admin-only, `limit`/`offset`), `GET/POST/PATCH /api/v1/users` с временным паролем, сменой роли и защитой последнего admin (S58-002).
+- feat(ui): lazy-страницы `/admin/users` (таблица ролей, приглашение, временный пароль) и `/admin/audit` (журнал с пагинацией); ссылки в `AppLayout` только для admin; admin i18n namespace (S58-003).
+- test: `test_auth_roles.py` (auditor `403`, admin users), `test_audit_log.py` (settings/roles audit, pagination, sanitization) (S58-004).
+- docs(adr): ADR-0019 «Roles and audit trail»; SPEC §3.31, ARCHITECTURE §31 (S58-004).
+
 ## [1.2.0] - 2026-11-09
 
 AI Analytics & Cross-Platform: кросс-платформенные релизы, AI Code Review,

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { getSettingsStatus } from './api/client'
+import AdminRoute from './components/AdminRoute'
 import AppLayout from './components/AppLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -11,6 +12,8 @@ const Settings = lazy(() => import('./pages/Settings'))
 const CodeSearch = lazy(() => import('./pages/CodeSearch'))
 const Login = lazy(() => import('./pages/Login'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const AdminAudit = lazy(() => import('./pages/AdminAudit'))
 
 function OnboardingGate() {
   const location = useLocation()
@@ -61,6 +64,10 @@ export default function App() {
               <Route path="repo/:id" element={<RepositoryDetails />} />
               <Route path="search" element={<CodeSearch />} />
               <Route path="settings" element={<Settings />} />
+              <Route element={<AdminRoute />}>
+                <Route path="admin/users" element={<AdminUsers />} />
+                <Route path="admin/audit" element={<AdminAudit />} />
+              </Route>
             </Route>
           </Route>
         </Route>

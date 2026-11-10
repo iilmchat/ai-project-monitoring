@@ -32,6 +32,33 @@
 
 ---
 
+## Спринт 58: Team Edition & Audit Log (v1.3.0)
+
+**Дата:** 2026-11-11 · **Статус:** ✅ завершён
+
+- [x] **S58-001. Роли:** `users.role` (`admin`/`auditor`, default `auditor`),
+  миграция 013 сохраняет текущего admin; claim `role` в JWT;
+  `require_admin` (`403 insufficient_role`) на actions, track/untrack,
+  refresh, settings, AI-профилях, scan, RAG-индексации, users/audit.
+- [x] **S58-002. Audit Log:** `AuditLog` + `AuditService`, append-only
+  `audit_log`, логирование `scan_started`, `repo_push`/`repo_<action>`,
+  `dep_update`, `settings_updated`, `user_created`/`role_changed`;
+  `details` санитизируются (≤ 4000 символов). API `GET /api/v1/audit`,
+  `GET/POST/PATCH /api/v1/users`.
+- [x] **S58-003. UI:** lazy `/admin/users` (таблица, смена роли, приглашение с
+  временным паролем) и `/admin/audit` (журнал, пагинация); ссылки в шапке
+  только для admin.
+- [x] **S58-004. Тесты и документация:** `test_auth_roles.py` (auditor `403`),
+  `test_audit_log.py` (settings/roles, пагинация, санитизация), SPEC §3.31,
+  ARCHITECTURE §31, CHANGELOG/RELEASES, ADR-0019.
+- **Проверки:** backend 310 (309 passed, 1 skipped), frontend 59 unit,
+  `ruff`, `mypy`, `pnpm typecheck/lint/test/build`, entry bundle
+  88.28 kB gzip (budget 90 kB).
+- **Ограничение:** роль проверяется на сервере на каждом запросе; retention
+  audit log и гранулярные права на репозитории — кандидаты следующих версий.
+
+---
+
 ## Релиз v1.2.0 — «AI Analytics & Cross-Platform»
 
 **Дата:** 2026-11-09 · **Тег:** `v1.2.0`

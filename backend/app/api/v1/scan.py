@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.deps import actor_id, require_admin
 from app.config import Settings
 from app.db.base import utcnow
 from app.models.entities import ScanRun
@@ -51,7 +52,12 @@ async def _execute_scan(
         await _mark_failed(factory, scan_run_id, str(exc))
 
 
-@router.post("/scan", response_model=ScanStarted, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/scan",
+    response_model=ScanStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
+)
 async def start_scan(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -77,6 +83,13 @@ async def start_scan(
         await session.refresh(run)
 
     background_tasks.add_task(_execute_scan, factory, run.id, roots, depth, ignore)
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "scan_started",
+        "scan",
+        run.id,
+        {"roots": len(roots), "depth": depth},
+    )
     logger.info("scan_requested", scan_run_id=run.id, roots=roots, depth=depth)
     return ScanStarted(scan_id=run.id, started_at=run.started_at)
 

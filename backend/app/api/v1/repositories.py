@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.deps import actor_id, require_admin
 from app.core.metrics import observe_ai_cache, observe_llm_call
 from app.db.base import utcnow
 from app.db.session import get_session
@@ -1345,7 +1346,11 @@ async def list_repositories(
     )
 
 
-@router.post("/repositories/{repository_id}/track", response_model=RepositoryRead)
+@router.post(
+    "/repositories/{repository_id}/track",
+    response_model=RepositoryRead,
+    dependencies=[Depends(require_admin)],
+)
 async def track_repository(
     repository_id: int,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -1357,7 +1362,11 @@ async def track_repository(
     return RepositoryRead.model_validate(repository)
 
 
-@router.post("/repositories/{repository_id}/untrack", response_model=RepositoryRead)
+@router.post(
+    "/repositories/{repository_id}/untrack",
+    response_model=RepositoryRead,
+    dependencies=[Depends(require_admin)],
+)
 async def untrack_repository(
     repository_id: int,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -1383,7 +1392,11 @@ async def get_repository_status(
     return RepositoryStatusResponse.model_validate(snapshot)
 
 
-@router.post("/repositories/{repository_id}/refresh", response_model=RepositoryStatusResponse)
+@router.post(
+    "/repositories/{repository_id}/refresh",
+    response_model=RepositoryStatusResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def refresh_repository_status(
     repository_id: int,
     request: Request,
@@ -1490,6 +1503,7 @@ async def refresh_repository_mirror(
 @router.patch(
     "/repositories/{repository_id}/mirror-policy",
     response_model=RepositoryRead,
+    dependencies=[Depends(require_admin)],
 )
 async def update_mirror_policy(
     repository_id: int,
@@ -1523,6 +1537,7 @@ async def mirror_candidates(request: Request) -> MirrorCandidatesResponse:
 @router.post(
     "/repositories/{repository_id}/actions/update-dependencies",
     response_model=ActionLogResponse,
+    dependencies=[Depends(require_admin)],
 )
 async def update_repository_dependencies(
     repository_id: int,
@@ -1547,12 +1562,20 @@ async def update_repository_dependencies(
             status_code=status.HTTP_409_CONFLICT,
             detail=entry.error or "dependency update failed",
         )
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "dep_update",
+        "repository",
+        repository_id,
+        {"ecosystem": payload.ecosystem, "status": entry.status},
+    )
     return ActionLogResponse.model_validate(entry)
 
 
 @router.post(
     "/repositories/{repository_id}/actions/{action}",
     response_model=ActionLogResponse,
+    dependencies=[Depends(require_admin)],
 )
 async def run_repository_action(
     repository_id: int,
@@ -1587,6 +1610,13 @@ async def run_repository_action(
             status_code=status.HTTP_409_CONFLICT,
             detail=entry.error or entry.output or "action failed",
         )
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "repo_push" if action == "push" else f"repo_{action}",
+        "repository",
+        repository_id,
+        {"action": action, "status": entry.status},
+    )
     return ActionLogResponse.model_validate(entry)
 
 
@@ -1611,7 +1641,11 @@ async def repository_action_history(
     return [ActionLogResponse.model_validate(row) for row in rows]
 
 
-@router.post("/mirror/actions/{action}", response_model=ActionLogResponse)
+@router.post(
+    "/mirror/actions/{action}",
+    response_model=ActionLogResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def run_mirror_action(
     action: str,
     payload: ActionRequest,
@@ -1642,10 +1676,21 @@ async def run_mirror_action(
             status_code=status.HTTP_409_CONFLICT,
             detail=entry.error or entry.output or "action failed",
         )
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "repo_push" if action == "push" else f"repo_{action}",
+        "repository",
+        payload.repository_id,
+        {"action": action, "status": entry.status, "mirror": True},
+    )
     return ActionLogResponse.model_validate(entry)
 
 
-@router.post("/repositories/actions/fetch_all", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/repositories/actions/fetch_all",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
+)
 async def bulk_fetch_all(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -1667,6 +1712,7 @@ async def bulk_fetch_all(
 @router.post(
     "/repositories/actions/sync_mirrors_all",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
 )
 async def bulk_sync_mirrors(
     request: Request,
@@ -1689,6 +1735,7 @@ async def bulk_sync_mirrors(
 @router.post(
     "/repositories/actions/migrate_to_gitflic",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
 )
 async def bulk_migrate_to_gitflic(
     request: Request,
@@ -1701,6 +1748,7 @@ async def bulk_migrate_to_gitflic(
 @router.post(
     "/repositories/actions/update_dependencies_all",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
 )
 async def bulk_update_dependencies(
     payload: BulkDependencyUpdateRequest,

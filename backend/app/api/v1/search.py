@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 
+from app.api.deps import require_admin
 from app.db.base import utcnow
 from app.schemas.code_search import (
     ChatRequest,
@@ -87,6 +88,7 @@ async def chat_with_code(
     "/search/code/index",
     response_model=CodeIndexJob,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
 )
 async def index_code(
     payload: CodeIndexRequest,

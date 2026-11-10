@@ -24,6 +24,7 @@ from app.providers.pypi_client import PypiClient
 from app.services.action_service import ActionService
 from app.services.agent_task_service import AgentTaskService
 from app.services.ai_provider_service import AIProviderService
+from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.bulk_service import BulkService
 from app.services.ci_service import CIService
@@ -200,6 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notification_service=notification_service,
     )
     auth_service = AuthService(session_factory, resolved)
+    audit_service = AuditService(session_factory)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -259,6 +261,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.bulk_service = bulk_service
     application.state.settings_service = settings_service
     application.state.auth_service = auth_service
+    application.state.audit_service = audit_service
     application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(AuthMiddleware)

@@ -1857,49 +1857,52 @@ GET /repositories/{id}/sast?tools=all&min_severity=high&refresh=false
 
 ---
 
-## 31. Team edition — роли и audit trail (v1.3.0, Sprint 58 — план)
+## 31. Team edition — роли и audit trail (v1.3.0, Sprint 58 — реализовано)
 
-> **Статус:** план Sprint 58; контракт — SPEC §3.31.
+> **Статус:** реализовано в Sprint 58 (`app/api/deps.py`,
+> `app/services/audit_service.py`, `app/api/v1/team.py`); контракт — SPEC §3.31.
 
 ### 31.1. Роли
 
-- `users.role ∈ {admin, auditor}` (default `admin`); bootstrap-пользователь —
-  `admin`. `AUTH_ENABLED=false` → неявный локальный `admin`.
-- JWT содержит только `sub`; роль читается из БД при каждом запросе, поэтому
-  изменение роли действует без перелогина и не подделывается токеном.
-- FastAPI-зависимость `require_role("admin")` навешивается на все мутации
-  (actions, update-dependencies, settings, users, audit, automation.apply,
-  scan/SAST/index) и возвращает `403 insufficient_role`.
-- `auditor` имеет доступ только к read-only эндпоинтам; экспорт workspace и
-  Markdown разрешён, экспорт audit log — нет.
-- Защита от lockout: нельзя удалить/деактивировать последнего admin и
-  понизить себя (`409 last_admin`/`cannot_demote_self`).
+- `users.role ∈ {admin, auditor}` (default `auditor`); bootstrap-пользователь
+  создаётся как `admin`. `AUTH_ENABLED=false` → неявный локальный `admin`.
+- JWT содержит `sub` и информационный claim `role`; роль читается из БД при
+  каждом запросе, поэтому изменение роли действует без перелогина и не
+  подделывается токеном.
+- FastAPI-зависимость `require_admin` навешивается на мутации (track/untrack,
+  refresh, mirror-policy, actions, update-dependencies, bulk-actions, settings,
+  AI-профили, users, audit, scan, переиндексация RAG) и возвращает
+  `403 insufficient_role`.
+- `auditor` имеет доступ только к read-only эндпоинтам; AI-эндпоинты
+  (commit message, review, chat, поиск) остаются доступны, поскольку не
+  меняют репозиторий.
+- Защита от lockout: нельзя понизить/отключить себя и последнего активного
+  admin (`409 cannot_demote_self`/`last_admin`).
 
 ### 31.2. Audit trail
 
-- `audit_log` — append-only таблица; API только чтение/экспорт.
-- Пишутся security-relevant действия: login/login_failed, users, settings,
-  scan, actions, update-dependencies, SAST, automation.apply, audit.export.
-- `status ∈ {success, error, denied}`; для мутаций запись создаётся до
-  выполнения (`denied` при отказе) и после (`success`/`error`).
-- `details` — allowlist метаданных (экосистема, число пакетов, путь
-  конфигурации); токены, пароли, секреты, diff и содержимое файлов
-  запрещены.
-- Fail-closed: если запись аудита не удалась, мутация отклоняется
-  (`503 audit_unavailable`).
-- Retention `AUDIT_LOG_RETENTION_DAYS=90`; очистка — admin-операция/cron.
-- `action_log` остаётся журналом вывода команд; связь — `request_id`.
-- Индексы: `created_at`, `actor_id`, `action`, `repository_id`; UI `/audit`
-  с фильтрами, пагинацией и CSV-экспортом.
+- `audit_log` — append-only таблица (`user_id`, `action`, `entity_type`,
+  `entity_id`, `details`, `created_at`); API только чтение.
+- Пишутся security-relevant действия: `scan_started`, `repo_push`/
+  `repo_<action>`, `dep_update`, `settings_updated`, `user_created`,
+  `user_updated`, `role_changed`.
+- `details` — allowlist метаданных (экосистема, статус, имена ключей
+  настроек, роль до/после); токены, пароли, секреты, diff и содержимое файлов
+  запрещены, payload ограничен 4000 символами.
+- Запись создаётся после успешной мутации; `AuditService.log` не маскирует
+  ошибку записи.
+- `action_log` остаётся отдельным журналом вывода команд.
+- Индексы: `created_at`, `user_id`, `action`; UI `/admin/audit` (lazy) с
+  пагинацией.
 
 ### 31.3. Инварианты
 
 - Ни один read-only эндпоинт не требует `admin`.
-- Ни одна мутация не доступна `auditor` — это проверяется тестами по списку
-  роутов, а не только UI.
-- Секреты не попадают в `audit_log`, CSV, логи и ответы.
+- Мутации проверяют роль на сервере, а не только в UI; тесты
+  `test_auth_roles.py` подтверждают `403` для auditor.
+- Секреты не попадают в `audit_log`, логи и ответы.
 - Роль и `is_active` проверяются на каждом запросе; отключённый пользователь
-  получает `403 user_disabled`.
+  не проходит аутентификацию.
 
 ---
 

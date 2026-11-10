@@ -179,6 +179,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    role: Mapped[str] = mapped_column(
+        String(16), default="auditor", server_default="auditor", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -187,7 +190,36 @@ class User(Base):
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
-        return f"User(id={self.id!r}, username={self.username!r})"
+        return (
+            f"User(id={self.id!r}, username={self.username!r}, "
+            f"role={self.role!r})"
+        )
+
+
+class AuditLog(Base):
+    """Append-only security audit trail (v1.3.0, Sprint 58)."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"AuditLog(id={self.id!r}, action={self.action!r}, "
+            f"user_id={self.user_id!r})"
+        )
 
 
 class DependencyCache(Base):

@@ -39,6 +39,7 @@
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
 - **Conversational RAG** — чат с кодовой базой на `/search`: pgvector-поиск по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
+- **Командная работа (v1.3.0)** — роли `Admin`/`Auditor`, приглашение пользователей с временным паролем, смена ролей и append-only журнал аудита действий с admin-страницами `/admin/users` и `/admin/audit`.
 - **Безопасность** — CVE-сканер зависимостей Python/Node/.NET через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **Технический долг и активность** — топ-5 «горячих» файлов по churn и commit frequency за 30 дней (DORA-lite) с ленивым sparkline.
 - **Совместная работа** — «Скопировать сводку» в Markdown и экспорт/импорт workspace (Saved Views, колонки) в JSON без токенов и путей.
@@ -268,10 +269,10 @@ pnpm --dir frontend exec playwright install chromium
 |------------|----------|
 | Версия | **v1.2.0** (2026-11-09) |
 | Статус | **v1.2.0 «AI Analytics & Cross-Platform»** |
-| Спринты | 1–57 |
-| Тесты backend | **301** (300 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Спринты | 1–58 |
+| Тесты backend | **310** (309 passed, 1 skipped; pytest, реальные tmp-репозитории) |
 | Тесты frontend | **59** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **87.93 kB gzip** (+ lazy charts 100.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
+| Entry bundle | **88.28 kB gzip** (+ lazy charts 100.9 kB, admin 1.8/3.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |
@@ -366,10 +367,10 @@ pnpm --dir frontend exec playwright install chromium
   V3 flat-container, CVE через OSV (`NuGet`), третья вкладка «C# / .NET»,
   `dotnet list --outdated`/`dotnet add --no-restore` и `.cs`/`.csproj` в
   hotspots/RAG.
-- **Sprint 58 — Team Edition & Audit Log:** роли `Admin` (полный доступ) и
+- **Sprint 58 — Team Edition & Audit Log:** ✅ роли `Admin` (полный доступ) и
   `Auditor` (только чтение), серверная проверка прав на Actions, append-only
-  `audit_log` (кто, когда, какой репозиторий, какой скан) и admin-страница
-  `/audit` с фильтрами и CSV-экспортом.
+  `audit_log` (кто, когда, какой репозиторий, какой скан), страницы
+  `/admin/users` и `/admin/audit` с фильтрами и приглашением пользователей.
 - **Sprint 59 — Advanced Security (SAST) & Automated PRs:** `bandit` для
   Python и `semgrep` для Python/JS/TS/C# в блоке «Безопасность», генерация
   конфигураций Dependabot/Renovate через UI с предпросмотром и явным

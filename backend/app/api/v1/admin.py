@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_admin
 from app.db.session import get_session
 from app.models.entities import ActionLog
 from app.schemas.action import ActionLogResponse
@@ -15,7 +16,11 @@ from app.schemas.action import ActionLogResponse
 router = APIRouter(tags=["admin"])
 
 
-@router.get("/admin/actions", response_model=list[ActionLogResponse])
+@router.get(
+    "/admin/actions",
+    response_model=list[ActionLogResponse],
+    dependencies=[Depends(require_admin)],
+)
 async def list_actions(
     session: Annotated[AsyncSession, Depends(get_session)],
     repository_id: Annotated[int | None, Query()] = None,

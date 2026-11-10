@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.api.deps import actor_id, require_admin
 from app.models.entities import AIProviderProfile
 from app.schemas.ai_provider import (
     AIProviderCreate,
@@ -76,6 +77,7 @@ async def list_ai_providers(request: Request) -> list[AIProviderRead]:
     "/settings/ai-providers",
     response_model=AIProviderRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
 )
 async def create_ai_provider(
     payload: AIProviderCreate,
@@ -96,12 +98,20 @@ async def create_ai_provider(
         )
     except AIProviderConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await request.app.state.audit_service.log(
+        actor_id(request),
+        "settings_updated",
+        "ai_provider",
+        profile.id,
+        {"operation": "create", "name": profile.name},
+    )
     return _read(profile)
 
 
 @router.post(
     "/settings/ai-providers/gigachat/auth",
     response_model=GigaChatAuthResponse,
+    dependencies=[Depends(require_admin)],
 )
 async def authorize_gigachat(
     payload: GigaChatAuthRequest,
@@ -144,6 +154,7 @@ async def authorize_gigachat(
 @router.post(
     "/settings/ai-providers/{profile_id}/gigachat/refresh",
     response_model=GigaChatAuthResponse,
+    dependencies=[Depends(require_admin)],
 )
 async def refresh_gigachat(
     profile_id: int,
@@ -190,6 +201,7 @@ async def refresh_gigachat(
 @router.patch(
     "/settings/ai-providers/{profile_id}",
     response_model=AIProviderRead,
+    dependencies=[Depends(require_admin)],
 )
 async def update_ai_provider(
     profile_id: int,
@@ -221,6 +233,7 @@ async def update_ai_provider(
     "/settings/ai-providers/{profile_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
+    dependencies=[Depends(require_admin)],
 )
 async def delete_ai_provider(profile_id: int, request: Request) -> None:
     service = _provider_service(request)
@@ -233,6 +246,7 @@ async def delete_ai_provider(profile_id: int, request: Request) -> None:
 @router.post(
     "/settings/ai-providers/{profile_id}/activate",
     response_model=AIProviderRead,
+    dependencies=[Depends(require_admin)],
 )
 async def activate_ai_provider(
     profile_id: int,

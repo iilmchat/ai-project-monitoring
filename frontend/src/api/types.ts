@@ -634,10 +634,54 @@ export interface LLMTestResult {
   error: string | null
 }
 
+export type UserRole = 'admin' | 'auditor'
+
 export interface AuthUser {
   id: number
   username: string
+  role: UserRole
   is_active: boolean
+  created_at?: string | null
+  last_login_at?: string | null
+}
+
+export interface UserInviteResponse {
+  user: AuthUser
+  temporary_password: string | null
+}
+
+export interface UserCreatePayload {
+  username: string
+  role: UserRole
+  password?: string
+}
+
+export interface UserUpdatePayload {
+  role?: UserRole
+  is_active?: boolean
+  password?: string
+}
+
+export interface AuditActor {
+  id: number | null
+  username: string | null
+}
+
+export interface AuditEntry {
+  id: number
+  created_at: string
+  user: AuditActor
+  action: string
+  entity_type: string | null
+  entity_id: string | null
+  details: Record<string, unknown>
+}
+
+export interface AuditLogPage {
+  items: AuditEntry[]
+  total: number
+  limit: number
+  offset: number
 }
 
 export interface LoginResponse {

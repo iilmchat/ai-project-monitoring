@@ -6,11 +6,13 @@ from app.models.entities import (
     ActionLog,
     AICache,
     AppSetting,
+    AuditLog,
     DependencyCache,
     Repository,
     RepositoryMirrorStatus,
     RepositoryStatus,
     ScanRun,
+    User,
     WebhookEvent,
 )
 
@@ -18,10 +20,12 @@ __all__ = [
     "AICache",
     "ActionLog",
     "AppSetting",
+    "AuditLog",
     "DependencyCache",
     "Repository",
     "RepositoryMirrorStatus",
     "RepositoryStatus",
     "ScanRun",
+    "User",
     "WebhookEvent",
 ]

@@ -4,6 +4,8 @@ export const common = {
   'nav.dashboard': 'Dashboard',
   'nav.search': 'Search',
   'nav.settings': 'Settings',
+  'nav.users': 'Team',
+  'nav.audit': 'Audit',
   'common.logout': 'Sign out',
   'footer.text': 'ai-project-monitoring · local Git repository monitoring (read-only)',
   'footer.hint': 'Press ? for keyboard shortcuts · Ctrl/Cmd+K — Command Palette',

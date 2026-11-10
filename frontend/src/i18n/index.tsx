@@ -15,6 +15,7 @@ import { common as ruCommon } from './locales/ru/common'
 import { dashboard as ruDashboard } from './locales/ru/dashboard'
 import type { components as ruComponentsType } from './locales/ru/components'
 import type { auth as ruAuthType } from './locales/ru/auth'
+import type { admin as ruAdminType } from './locales/ru/admin'
 import type { repository as ruRepositoryType } from './locales/ru/repository'
 import type { search as ruSearchType } from './locales/ru/search'
 import type { settings as ruSettingsType } from './locales/ru/settings'
@@ -26,7 +27,13 @@ export type Locale = 'ru' | 'en'
  * heavy dictionaries out of the entry chunk is what makes the initial bundle
  * small; everything else (header, dashboard, shared buttons) stays eager.
  */
-export type I18nNamespace = 'settings' | 'repository' | 'components' | 'search' | 'auth'
+export type I18nNamespace =
+  | 'settings'
+  | 'repository'
+  | 'components'
+  | 'search'
+  | 'auth'
+  | 'admin'
 
 type Dictionary = Record<string, string>
 
@@ -46,6 +53,7 @@ export type TranslationKey =
   | keyof typeof ruComponentsType
   | keyof typeof ruSearchType
   | keyof typeof ruAuthType
+  | keyof typeof ruAdminType
   | keyof typeof ruSettingsType
   | keyof typeof ruRepositoryType
 
@@ -67,6 +75,7 @@ const namespaceDictionaries: Record<I18nNamespace, Record<Locale, Dictionary>> =
   components: { ru: {}, en: {} },
   search: { ru: {}, en: {} },
   auth: { ru: {}, en: {} },
+  admin: { ru: {}, en: {} },
 }
 
 const namespaceReady: Record<I18nNamespace, boolean> = {
@@ -75,6 +84,7 @@ const namespaceReady: Record<I18nNamespace, boolean> = {
   components: false,
   search: false,
   auth: false,
+  admin: false,
 }
 
 const namespaceRequests: Partial<Record<I18nNamespace, Promise<void>>> = {}
@@ -90,6 +100,9 @@ function namespaceForKey(key: string): I18nNamespace | null {
   }
   if (key.startsWith('auth.')) {
     return 'auth'
+  }
+  if (key.startsWith('admin.')) {
+    return 'admin'
   }
   if (key.startsWith('repo.') || key.startsWith('OSV.')) {
     return 'repository'
@@ -148,13 +161,20 @@ function loadI18nNamespace(namespace: I18nNamespace): Promise<void> {
       ])
       namespaceDictionaries.search.ru = ruModule.search
       namespaceDictionaries.search.en = enModule.search
-    } else {
+    } else if (namespace === 'auth') {
       const [ruModule, enModule] = await Promise.all([
         import('./locales/ru/auth'),
         import('./locales/en/auth'),
       ])
       namespaceDictionaries.auth.ru = ruModule.auth
       namespaceDictionaries.auth.en = enModule.auth
+    } else {
+      const [ruModule, enModule] = await Promise.all([
+        import('./locales/ru/admin'),
+        import('./locales/en/admin'),
+      ])
+      namespaceDictionaries.admin.ru = ruModule.admin
+      namespaceDictionaries.admin.en = enModule.admin
     }
     namespaceReady[namespace] = true
     for (const listener of namespaceListeners) {

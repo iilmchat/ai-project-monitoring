@@ -16,6 +16,7 @@ from app.api.v1 import (
     scan,
     search,
     settings,
+    team,
     webhooks,
 )
 
@@ -32,5 +33,6 @@ api_router.include_router(dashboard.router)
 api_router.include_router(activity.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(admin.router)
+api_router.include_router(team.router)
 
 __all__ = ["api_router"]

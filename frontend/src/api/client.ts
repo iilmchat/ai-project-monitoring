@@ -5,6 +5,7 @@ import type {
   AIProviderProfile,
   AIProviderUpdate,
   AppSettings,
+  AuditLogPage,
   AuthUser,
   CIStatus,
   CodeIndexJob,
@@ -48,6 +49,9 @@ import type {
   SettingsStatus,
   SettingsUpdate,
   GigaChatAuthResponse,
+  UserCreatePayload,
+  UserInviteResponse,
+  UserUpdatePayload,
 } from './types'
 
 const DEFAULT_API_BASE = '/api/v1'
@@ -522,6 +526,38 @@ export async function getCurrentUser(): Promise<AuthUser> {
 
 export async function logout(): Promise<void> {
   await request<void>('/auth/logout', { method: 'POST' })
+}
+
+export async function getUsers(): Promise<AuthUser[]> {
+  return request<AuthUser[]>('/users')
+}
+
+export async function inviteUser(
+  payload: UserCreatePayload,
+): Promise<UserInviteResponse> {
+  return request<UserInviteResponse>('/users', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function updateUser(
+  userId: number,
+  payload: UserUpdatePayload,
+): Promise<AuthUser> {
+  return request<AuthUser>(`/users/${userId}`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export async function getAuditLog(
+  limit = 50,
+  offset = 0,
+): Promise<AuditLogPage> {
+  return request<AuditLogPage>('/audit', {
+    query: { limit, offset },
+  })
 }
 
 export async function getUnificationAdvice(

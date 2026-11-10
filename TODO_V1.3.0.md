@@ -1,7 +1,7 @@
 # TODO v1.3.0 — .NET, Team Edition & Advanced Security
 
-**Статус:** Sprint 56 — планирование завершено; Sprint 57 — реализован;
-спринты 58–59 запланированы.
+**Статус:** Sprint 56 — планирование завершено; спринты 57–58 — реализованы;
+Sprint 59 запланирован.
 **База:** v1.2.0 «AI Analytics & Cross-Platform» (AI review, conflict resolver,
 release notes, conversational RAG, матрица Windows/macOS/Linux).
 **Цель:** расширить аудит зависимостей на экосистему .NET (NuGet), добавить
@@ -225,20 +225,21 @@ backoff/timeout/404-семантику и один кэш. `DependencyService` �
 
 ---
 
-## 4. Sprint 58 — Team Edition & Audit Log
+## 4. Sprint 58 — Team Edition & Audit Log (✅)
 
 **Цель:** дать команде безопасную модель доступа (администратор и
 наблюдатель/аудитор) и полный журнал действий.
 
 ### 4.1. Роли
 
-- `users.role TEXT NOT NULL DEFAULT 'admin'`, значения `admin` | `auditor`.
+- `users.role TEXT NOT NULL DEFAULT 'auditor'`, значения `admin` | `auditor`;
+  миграция 013 переводит существующего пользователя в `admin`.
 - Bootstrap-пользователь из `ADMIN_USERNAME` получает `admin`. При
-  `AUTH_ENABLED=false` — неявный локальный `admin` (поведение v1.0.0
-  сохраняется, в UI — предупреждение).
-- Роль читается из БД на каждом запросе; claim JWT (`sub`) не является
-  источником прав. Смена роли действует со следующего запроса.
-- `GET /api/v1/auth/me` возвращает `{id, username, role, is_active}`.
+  `AUTH_ENABLED=false` — неявный локальный `admin`.
+- Роль читается из БД на каждом запросе; claim JWT `role` информационный и не
+  является источником прав. Смена роли действует со следующего запроса.
+- `GET /api/v1/auth/me` возвращает `{id, username, role, is_active,
+  created_at, last_login_at}`.
 
 **Матрица прав:**
 
@@ -249,7 +250,7 @@ backoff/timeout/404-семантику и один кэш. `DependencyService` �
 | `fetch`/`pull`/`push`/`stash`/`commit` | ✅ | ❌ `403 insufficient_role` |
 | `update-dependencies`, bulk-actions | ✅ | ❌ |
 | `automation/apply` (запись конфигурации) | ✅ | ❌ |
-| Просмотр/изменение настроек, токенов, AI-профилей | ✅ | ❌ |
+| Просмотр/изменение настроек, токенов, AI-профилей | ✅ (просмотр — и auditor) | ❌ изменение |
 | Управление пользователями | ✅ | ❌ |
 | Просмотр `audit_log` и экспорт | ✅ | ❌ |
 | Запуск scan/SAST/индексации | ✅ | ❌ (только просмотр готовых отчётов) |
@@ -258,59 +259,49 @@ backoff/timeout/404-семантику и один кэш. `DependencyService` �
 
 | Метод | Путь | Тело | Ответ |
 |-------|------|------|-------|
-| GET | `/api/v1/users` | — | `{items: User[]}` |
-| POST | `/api/v1/users` | `{username, password, role}` | `201 User` |
+| GET | `/api/v1/users` | — | `User[]` |
+| POST | `/api/v1/users` | `{username, role, password?}` | `201 UserInviteResponse` |
 | PATCH | `/api/v1/users/{id}` | `{role?, is_active?, password?}` | `User` |
-| DELETE | `/api/v1/users/{id}` | — | `204` |
 
-- Пароль — bcrypt cost ≥ 12, минимум 8 символов; в ответах и логах только hash
-  отсутствует, plaintext не логируется.
-- Нельзя удалить/деактивировать последнего `admin` и понизить себя
-  (`409 last_admin` / `409 cannot_demote_self`).
+- Пароль — bcrypt cost ≥ 12, минимум 8 символов; без пароля генерируется
+  временный и возвращается один раз (`temporary_password`).
+- Нельзя понизить/отключить себя и последнего активного `admin`
+  (`409 cannot_demote_self` / `409 last_admin`).
 - Ошибки: `400 validation_error`, `403 insufficient_role`, `404 user_not_found`,
-  `409 username_exists`, `429 too_many_attempts`.
-- Все операции `POST/PATCH/DELETE` пишутся в `audit_log`.
+  `409 username_exists`.
+- `POST` и `PATCH` пишутся в `audit_log` (`user_created`, `role_changed`,
+  `user_updated`).
 
 ### 4.2. Audit Log
 
 **Назначение:** неизменяемый журнал security-relevant действий. Не заменяет
 `action_log` (вывод команд): `audit_log` отвечает на «кто и что сделал», а
-`action_log` — «что ответила команда». Связь — `request_id`.
+`action_log` — «что ответила команда».
 
 **Схема:**
 
 ```
 audit_log(
-  id, actor_id→users NULL, actor_username TEXT,
-  action TEXT, status TEXT, repository_id→repositories NULL,
-  method TEXT, path TEXT, ip TEXT NULL, user_agent TEXT NULL,
-  request_id TEXT NULL, details JSONB, created_at
+  id, user_id→users NULL,
+  action TEXT, entity_type TEXT NULL, entity_id TEXT NULL,
+  details JSONB, created_at
 )
 ```
 
-- `status ∈ {success, error, denied}`; `action` — стабильный код:
-  `auth.login`, `auth.login_failed`, `user.create`, `user.update`,
-  `user.delete`, `settings.update`, `scan.start`, `action.fetch`,
-  `action.pull`, `action.push`, `action.stash`, `action.commit`,
-  `action.update_dependencies`, `sast.scan`, `automation.apply`,
-  `audit.export`.
-- `details` — только метаданные (например, `{"action": "update-dependencies",
-  "ecosystem": "dotnet", "packages": 4}`); секреты, токены, пароли, содержимое
-  файлов и diff не пишутся. IP/user-agent опциональны и могут отключаться
-  (`AUDIT_LOG_STORE_CLIENT_INFO=false`).
+- `action` — стабильный код: `scan_started`, `repo_push`, `repo_<action>`,
+  `dep_update`, `settings_updated`, `user_created`, `user_updated`,
+  `role_changed`.
+- `details` — только метаданные (например, `{"ecosystem": "dotnet",
+  "status": "success"}`); секреты, токены, пароли, содержимое файлов и diff не
+  пишутся; payload ≤ 4000 символов.
 - Append-only: API только чтение; записи не обновляются и не удаляются
-  приложением. Retention `AUDIT_LOG_RETENTION_DAYS` (default 90), очистка —
-  отдельная admin-операция или cron.
-- Для мутаций запись создаётся **до** выполнения (`status=denied` при отказе)
-  и **после** (`success`/`error`); при ошибке записи аудита мутация
-  отклоняется (fail-closed, `503 audit_unavailable`).
+  приложением. Retention-политика — кандидат v1.3.0+.
 
 **API (admin-only):**
 
 | Метод | Путь | Параметры | Ответ |
 |-------|------|-----------|-------|
-| GET | `/api/v1/audit-log` | `from?, to?, actor?, action?, repository_id?, status?, limit? (1..200, default 50), offset?` | `AuditLogPage` |
-| GET | `/api/v1/audit-log/export` | те же фильтры | `text/csv` (attachment) |
+| GET | `/api/v1/audit` | `limit? (1..200, default 50), offset?` | `AuditLogPage` |
 
 `AuditLogPage`:
 
@@ -320,16 +311,11 @@ audit_log(
     {
       "id": 1024,
       "created_at": "2026-11-11T09:15:00Z",
-      "actor": {"id": 2, "username": "auditor"},
-      "action": "action.update_dependencies",
-      "status": "success",
-      "repository_id": 7,
-      "repository_name": "demo",
-      "method": "POST",
-      "path": "/api/v1/repositories/7/actions/update-dependencies",
-      "ip": "127.0.0.1",
-      "request_id": "req_...",
-      "details": {"ecosystem": "dotnet", "packages": 3}
+      "user": {"id": 2, "username": "auditor"},
+      "action": "dep_update",
+      "entity_type": "repository",
+      "entity_id": "7",
+      "details": {"ecosystem": "dotnet", "status": "success"}
     }
   ],
   "total": 1240,
@@ -338,35 +324,30 @@ audit_log(
 }
 ```
 
-- Сортировка `created_at` desc, `id` desc; `total` — число по фильтру.
-- `from`/`to` — ISO 8601; неверный диапазон → `400 invalid_range`;
-  `limit` > 200 → `400`.
-- CSV-экспорт: те же поля, без `details` с потенциально чувствительными
-  данными (только разрешённые ключи), `Content-Disposition: attachment`.
+- Сортировка `created_at` desc, `id` desc.
 - Доступ только `admin`; `auditor` получает `403 insufficient_role`.
-- UI: страница `/audit` (admin-only, скрыта для auditor), фильтры
-  (период, пользователь, действие, репозиторий, статус), таблица с
-  пагинацией, экспорт CSV; пустое состояние и `aria`.
-- Индексы: `audit_log(created_at)`, `(actor_id)`, `(action)`,
-  `(repository_id)`.
+- UI: страница `/admin/audit` (admin-only, lazy), таблица
+  дата/пользователь/действие/объект/детали, пагинация, `aria`, пустое
+  состояние.
+- Индексы: `audit_log(created_at)`, `(user_id)`, `(action)`.
 
-**DoD Sprint 58:**
+**DoD Sprint 58:** ✅
 
-- [ ] Миграция `users.role` (default `admin`) + миграция `audit_log`;
-      SQLite и PostgreSQL.
-- [ ] Зависимость `require_role("admin")`; матрица прав покрыта тестами
-      (auditor не может выполнить ни одну мутацию; admin может).
-- [ ] `auth/me`, login и фронтенд показывают роль; `/audit` скрыт для auditor.
-- [ ] Пользовательские CRUD-эндпоинты, bcrypt, защита последнего admin.
-- [ ] Audit-запись для login/login_failed, users, settings, scan, actions,
-      update-dependencies, SAST, automation.apply; fail-closed при ошибке
-      записи.
-- [ ] `GET /audit-log` с фильтрами/пагинацией и CSV-экспорт; секреты не
-      попадают в `details`/CSV.
-- [ ] Тесты: роли, lockout, retention, append-only (нет update/delete),
-      фильтры, экспорт, отсутствие секретов.
-- [ ] ADR-0019 «Roles & audit trail».
-- [ ] `ruff`, `mypy --strict`, `pytest -q`, frontend-проверки и bundle
+- [x] Миграция `users.role` (default `auditor`, существующий admin сохранён)
+      + миграция `audit_log`; SQLite и PostgreSQL.
+- [x] Зависимость `require_admin`; матрица прав покрыта тестами
+      (auditor получает `403` на actions/settings/scan/users/audit).
+- [x] `auth/me`, login и фронтенд показывают роль; `/admin/*` скрыт для
+      auditor, сервер возвращает `403`.
+- [x] Пользовательские эндпоинты (list/invite/update), bcrypt, защита
+      последнего admin и self-demotion.
+- [x] Audit-запись для scan, actions (`repo_push`/`repo_<action>`),
+      update-dependencies (`dep_update`), settings, users/roles; `details`
+      санитизируются.
+- [x] `GET /audit` с пагинацией; секреты не попадают в `details`.
+- [x] Тесты: роли, lockout, аудит настроек и ролей, пагинация, санитизация.
+- [x] ADR-0019 «Roles and audit trail».
+- [x] `ruff`, `mypy --strict`, `pytest -q`, frontend-проверки и bundle
       budget — зелёные.
 
 ---
@@ -500,7 +481,7 @@ ecosystems[]}`.
 | `dependency_cache` | ключ `nuget:<lower-id>` | старые ключи `pypi:`/`npm:` не меняются |
 | `security_cache` | ключ `osv:nuget:<lower-id>:<version>` | старые ключи не меняются |
 | `NuGetClient` | `get_latest(name) -> RegistryResult` | идентичен `PyPIClient`/`NpmClient`: `latest`, `source`, `error` |
-| `users` | `role ∈ {admin, auditor}` | default `admin`; существующие пользователи получают `admin` |
+| `users` | `role ∈ {admin, auditor}` | default `auditor`; существующий пользователь миграцией переведён в `admin` |
 | `audit_log` | append-only, admin-only API | новая таблица; `action_log` не меняется |
 | `SastReport` | `{repository_id, checked_at, status, tools[], summary, findings[], truncated, error}` | новое; `SecurityReport` не меняется |
 | `AutomationPreview` | `{provider, path, content, content_hash, warnings}` | новое; apply использует `ActionLog` |
@@ -535,4 +516,4 @@ ecosystems[]}`.
 | SAST false positives / медленный скан | Шум/таймаут | severity/confidence, фильтры, лимиты, `truncated`, кэш |
 | semgrep тянет правила из сети | Supply-chain/офлайн | только локальные правила, `--metrics=off`, без `--config auto` |
 | Неверная конфигурация Dependabot/Renovate | Сломанные PR/CI | валидация синтаксиса, preview, allowlist, hash, никакого autopush |
-| Auditor обходит ограничения через прямые API | Нарушение read-only | `require_role` на всех мутациях, тесты 403, аудит `denied` |
+| Auditor обходит ограничения через прямые API | Нарушение read-only | `require_admin` на мутациях, тесты `403`, аудит действий |
