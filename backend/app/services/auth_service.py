@@ -57,9 +57,10 @@ class AuthService:
             session.add(user)
             await session.commit()
         logger.info(
-            "default_admin_user_created",
+            "bootstrap_admin_created",
             message="Default admin user created.",
             username=self._settings.admin_username,
+            role="admin",
         )
         return True
 

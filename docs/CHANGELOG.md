@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-11
+
+Хотфикс десктопных миграций: обновление v1.1.0 → v1.3.1 больше не оставляет
+базу без таблицы `users` и bootstrap-админа.
+
+### Исправлено
+
+- fix(desktop): `backend/sidecar_entry.py` выполняет `alembic.command.upgrade(cfg, "head")`
+  программно до старта uvicorn; `ScriptLocation` и `alembic.ini` берутся из
+  PyInstaller-бандла, внешние shell-скрипты не используются.
+- fix(desktop): legacy-базы без `alembic_version` (созданные `create_all` в
+  v1.1.0/v1.2.0) определяются по схеме, штампуются (`alembic stamp`) и затем
+  догоняются до head; отсутствующая `users` создаётся миграцией 012.
+- fix(desktop): `alembic/env.py` принимает URL из `config.attributes` и не
+  переконфигурирует logging sidecar'а.
+- fix(auth): bootstrap пишет событие `bootstrap_admin_created` при создании
+  администратора.
+- fix(desktop): путь по умолчанию для данных совпадает с Tauri
+  `app_data_dir` (`%APPDATA%/com.iiruchating.desktop/IIRuchating`); каталог
+  создаётся до открытия SQLite.
+- build(sidecar): `alembic/` и `alembic.ini` включены в PyInstaller `--add-data`.
+- test: `tests/test_sidecar_migrations.py` — свежая база, legacy v1.1.0,
+  идемпотентность и определение ревизии.
+
 ## [1.3.0] - 2026-11-11
 
 .NET Ecosystem Support, Team Edition & Advanced Security.

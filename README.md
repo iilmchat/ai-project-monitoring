@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.3.0 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.3.1 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -269,10 +269,10 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.3.0** (2026-11-11) |
-| Статус | **v1.3.0 «.NET, Team Edition & SAST»** |
+| Версия | **v1.3.1** (2026-11-11) |
+| Статус | **v1.3.0 «.NET, Team Edition & SAST» + хотфикс миграций** |
 | Спринты | 1–59 |
-| Тесты backend | **321** (320 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты backend | **325** (324 passed, 1 skipped; pytest, реальные tmp-репозитории) |
 | Тесты frontend | **60** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **88.33 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.0 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |

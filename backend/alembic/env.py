@@ -24,12 +24,17 @@ from app.models import (  # noqa: F401
 
 config = context.config
 
-if config.config_file_name is not None:
+if config.config_file_name is not None and not config.attributes.get(
+    "skip_logging_config"
+):
     fileConfig(config.config_file_name)
 
 settings = Settings()
-ensure_sqlite_directory(settings.database_url)
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Programmatic callers (the desktop sidecar) pass the target URL explicitly;
+# CLI usage keeps resolving it from the application settings.
+database_url = config.attributes.get("database_url") or settings.database_url
+ensure_sqlite_directory(database_url)
+config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata
 

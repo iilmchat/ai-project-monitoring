@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.3.0"
+    app_version: str = "1.3.1"
 
     @property
     def scan_root_paths(self) -> list[str]:
@@ -168,13 +168,19 @@ class Settings(BaseSettings):
 
 
 def _default_tauri_data_dir() -> Path:
+    """Mirror Tauri's ``app_data_dir`` so both entry points share one database.
+
+    The desktop shell passes ``--data-dir`` explicitly, but keeping the
+    fallback identical avoids creating a second, empty SQLite file when the
+    sidecar is started manually.
+    """
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path.home() / ".local" / "share"
-    return base / "IIRuchating"
+    return base / "com.iiruchating.desktop" / "IIRuchating"
 
 
 def _split_csv(raw: str) -> list[str]:
