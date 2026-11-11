@@ -188,7 +188,7 @@ describe('Dashboard', () => {
     expect(await screen.findByTestId('dashboard-charts')).toBeInTheDocument()
 
     expect(screen.getByRole('columnheader', { name: /Репозиторий/ })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Ahead / Behind' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Впереди / Позади' })).toBeInTheDocument()
     expect(screen.getAllByText('чистый').length).toBeGreaterThan(0)
     expect(screen.getByText('не отслеживается')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Отслеживать' })).toBeInTheDocument()
@@ -242,7 +242,7 @@ describe('Dashboard', () => {
     await screen.findByText('alpha')
     await user.click(screen.getByRole('checkbox', { name: 'Выбрать alpha' }))
 
-    const fetchSelected = screen.getByRole('button', { name: 'Fetch Selected (1)' })
+    const fetchSelected = screen.getByRole('button', { name: 'Обновить выбранные (1)' })
     expect(fetchSelected).toBeInTheDocument()
 
     await user.click(fetchSelected)
@@ -273,7 +273,7 @@ describe('Dashboard', () => {
     })
     fireEvent.keyDown(row, { key: ' ', code: 'Space' })
 
-    expect(await screen.findByRole('button', { name: 'Fetch Selected (1)' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Обновить выбранные (1)' })).toBeInTheDocument()
   })
 
   it('applies filters from URL search params', async () => {    render(

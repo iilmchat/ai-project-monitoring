@@ -38,7 +38,11 @@ class FakeLLM:
         return True
 
     async def generate_dashboard_advice(
-        self, stats: dict[str, int], *, language: str = "ru"
+        self,
+        stats: dict[str, int],
+        details: dict[str, object] | None = None,
+        *,
+        language: str = "ru",
     ) -> str | None:
         self.calls += 1
         return f"advice-{self.calls}"
@@ -82,10 +86,12 @@ async def test_dashboard_advice_is_reused_until_state_changes(
     )
     stats = {"repositories": 2, "dirty": 1}
 
-    async def fake_stats() -> dict[str, int]:
-        return dict(stats)
+    async def fake_context(
+        language: str = "ru",
+    ) -> tuple[dict[str, int], dict[str, object]]:
+        return dict(stats), {"repos_with_ahead": []}
 
-    monkeypatch.setattr(service, "_collect_stats", fake_stats)
+    monkeypatch.setattr(service, "_collect_context", fake_context)
 
     first = await service.get_advice("ru")
     second = await service.get_advice("ru")
@@ -116,10 +122,12 @@ async def test_dashboard_refresh_bypasses_cache(
         llm,  # type: ignore[arg-type]
     )
 
-    async def fake_stats() -> dict[str, int]:
-        return {"repositories": 1}
+    async def fake_context(
+        language: str = "ru",
+    ) -> tuple[dict[str, int], dict[str, object]]:
+        return {"repositories": 1}, {}
 
-    monkeypatch.setattr(service, "_collect_stats", fake_stats)
+    monkeypatch.setattr(service, "_collect_context", fake_context)
 
     first = await service.get_advice("ru", refresh=True)
     second = await service.get_advice("ru", refresh=True)

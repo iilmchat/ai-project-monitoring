@@ -40,6 +40,7 @@ from app.git.command_backend import (
 from app.git.pygit2_backend import (
     GitStatusError,
     compare_refs,
+    detect_remote_names,
     read_commits,
     read_local_status,
 )
@@ -1425,6 +1426,7 @@ async def list_repositories(
     tracked: Annotated[bool | None, Query()] = None,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    detect_remote: Annotated[bool, Query()] = False,
 ) -> RepositoryListResponse:
     filters = []
     if tracked is not None:
@@ -1434,7 +1436,24 @@ async def list_repositories(
     result = await session.scalars(
         select(Repository).where(*filters).order_by(Repository.path).offset(skip).limit(limit)
     )
-    items = [RepositoryRead.model_validate(item) for item in result.all()]
+    rows = list(result.all())
+
+    items: list[RepositoryRead] = []
+    if detect_remote:
+        semaphore = asyncio.Semaphore(8)
+
+        async def detect(path: str) -> dict[str, str | None]:
+            async with semaphore:
+                return await asyncio.to_thread(detect_remote_names, path)
+
+        detected = await asyncio.gather(*(detect(row.path) for row in rows))
+        for row, remote in zip(rows, detected, strict=True):
+            item = RepositoryRead.model_validate(row)
+            item.detected_github_name = remote["github"]
+            item.detected_gitflic_name = remote["gitflic"]
+            items.append(item)
+    else:
+        items = [RepositoryRead.model_validate(row) for row in rows]
 
     return RepositoryListResponse(
         items=items,

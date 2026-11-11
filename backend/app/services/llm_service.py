@@ -8,6 +8,7 @@ of a 500.
 from __future__ import annotations
 
 import ipaddress
+import json
 import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -356,20 +357,31 @@ class LLMService:
     async def generate_dashboard_advice(
         self,
         stats: dict[str, int],
+        details: dict[str, object] | None = None,
         *,
         language: str = "ru",
     ) -> str | None:
-        """Return 2-3 prioritized recommendations for the dashboard."""
-        stats_text = ", ".join(f"{key}={value}" for key, value in sorted(stats.items()))
+        """Return 3 actionable recommendations naming the projects to start with."""
+        context: dict[str, object] = {"summary": stats}
+        if details:
+            context.update(details)
+        context_json = json.dumps(
+            context,
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
         prompt = (
-            f"Состояние проектов: {stats_text}. "
-            "Дай 2-3 краткие рекомендации, с чего начать работу сегодня. "
+            "Ты — DevOps-ассистент. Вот конкретные проблемы в проектах:\n"
+            f"{context_json}\n\n"
+            "Дай 3 actionable-рекомендации. Обязательно указывай ИМЕНА "
+            "проектов, с которых нужно начать."
             + _language_instruction(language)
         )
         return await self._complete(
             DEVOPS_SYSTEM_PROMPT,
             prompt,
-            max_tokens=320,
+            max_tokens=420,
             max_chars=MAX_EXPLANATION_CHARS,
         )
 

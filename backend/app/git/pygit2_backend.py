@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pygit2
 from pygit2.enums import FileStatus, SortMode
@@ -95,6 +96,87 @@ def _open_repository(path: str | Path) -> pygit2.Repository:
         return pygit2.Repository(str(target))
     except (OSError, ValueError, pygit2.GitError) as exc:
         raise GitStatusError(f"cannot open repository at {target}: {exc}") from exc
+
+
+def parse_remote_url(url: str) -> dict[str, str | None]:
+    """Extract ``provider`` and ``full_name`` from a Git remote URL.
+
+    Supports scp-like SSH (``git@github.com:owner/repo.git``), URL style
+    (``ssh://``/``https://``) and the GitFlic web layout
+    (``https://gitflic.ru/project/owner/repo``).  The ``.git`` suffix is
+    stripped.  Unknown hosts keep their path so callers can still inspect it.
+    """
+    raw = (url or "").strip()
+    if not raw:
+        return {"provider": "unknown", "full_name": None}
+
+    host = ""
+    path = ""
+    if raw.startswith("git@") and ":" in raw:
+        host, path = raw[4:].split(":", 1)
+    elif "://" in raw:
+        parsed = urlparse(raw)
+        host = parsed.hostname or ""
+        path = parsed.path
+    elif ":" in raw and not raw.startswith(("/", "./", "../")):
+        possible_host, possible_path = raw.split(":", 1)
+        if "." in possible_host:
+            host, path = possible_host, possible_path
+    else:
+        return {"provider": "unknown", "full_name": None}
+
+    cleaned_host = host.strip().lower()
+    provider = "unknown"
+    if cleaned_host == "github.com" or cleaned_host.endswith(".github.com"):
+        provider = "github"
+    elif cleaned_host == "gitflic.ru" or cleaned_host.endswith(".gitflic.ru"):
+        provider = "gitflic"
+
+    cleaned_path = path.strip().strip("/")
+    if cleaned_path.endswith(".git"):
+        cleaned_path = cleaned_path[:-4]
+    cleaned_path = cleaned_path.rstrip("/")
+    if provider == "gitflic" and cleaned_path.startswith("project/"):
+        cleaned_path = cleaned_path[len("project/") :]
+
+    return {
+        "provider": provider,
+        "full_name": cleaned_path or None,
+    }
+
+
+def detect_remote_names(path: str | Path) -> dict[str, str | None]:
+    """Return ``github``/``gitflic`` full names configured in the repo remotes.
+
+    ``origin`` wins when several remotes point at the same provider.  Failures
+    (missing repo, broken config) degrade to empty values: this helper is used
+    for UI hints and must never break repository listing.
+    """
+    detected: dict[str, str | None] = {"github": None, "gitflic": None}
+    try:
+        repo = _open_repository(path)
+    except GitStatusError:
+        return detected
+    try:
+        remote_names = sorted(
+            repo.remotes,
+            key=lambda remote: (remote.name != "origin", remote.name),
+        )
+        for remote in remote_names:
+            try:
+                remote_url = remote.url
+            except pygit2.GitError:
+                continue
+            info = parse_remote_url(remote_url or "")
+            provider = info["provider"]
+            full_name = info["full_name"]
+            if provider in detected and full_name and detected[provider] is None:
+                detected[provider] = full_name
+    except pygit2.GitError:
+        return detected
+    finally:
+        repo.free()
+    return detected
 
 
 def read_local_status(path: str | Path) -> LocalStatus:
@@ -309,6 +391,8 @@ __all__ = [
     "GitStatusError",
     "LocalStatus",
     "compare_refs",
+    "detect_remote_names",
+    "parse_remote_url",
     "read_commits",
     "read_local_status",
 ]

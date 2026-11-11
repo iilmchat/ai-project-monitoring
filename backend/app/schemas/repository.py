@@ -18,6 +18,8 @@ class RepositoryRead(BaseModel):
     tracked: bool
     github_full_name: str | None = None
     gitflic_full_name: str | None = None
+    detected_github_name: str | None = None
+    detected_gitflic_name: str | None = None
     canonical_provider: str = "github"
     mirror_expected: bool = True
     mirror_policy: str = "github_to_gitflic"

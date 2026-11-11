@@ -32,6 +32,7 @@ import type {
   DuplicatesResponse,
   GlobalDependencyReport,
   UnificationAdvice,
+  HealthResponse,
   HeatmapData,
   InsightsReport,
   LLMTestResult,
@@ -142,9 +143,10 @@ export async function getScan(scanId: number): Promise<ScanStatus> {
 export async function getRepositories(
   skip = 0,
   limit = 500,
+  detectRemote = false,
 ): Promise<RepositoryListResponse> {
   return request<RepositoryListResponse>('/repositories', {
-    query: { skip, limit },
+    query: { skip, limit, detect_remote: detectRemote },
   })
 }
 
@@ -561,6 +563,17 @@ export async function login(
 
 export async function getCurrentUser(): Promise<AuthUser> {
   return request<AuthUser>('/auth/me')
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>('/health')
+}
+
+export async function resetDatabase(): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/reset-db', {
+    method: 'POST',
+    body: { confirm: true },
+  })
 }
 
 export async function logout(): Promise<void> {

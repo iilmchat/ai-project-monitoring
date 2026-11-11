@@ -206,6 +206,7 @@ export const repository = {
   'repo.policy.canonicalProvider': 'Канонический провайдер',
   'repo.policy.githubFullName': 'GitHub full name (owner/repo)',
   'repo.policy.gitflicFullName': 'GitFlic full name (owner/repo)',
+  'repo.policy.autoDetected': 'Определено автоматически из git remote',
   'repo.policy.expectMirror': 'Ожидать зеркало (mirror_expected)',
   'repo.commit.generate': 'Сгенерировать коммит',
   'repo.commit.hint':

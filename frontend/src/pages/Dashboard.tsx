@@ -24,6 +24,7 @@ import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
 import type { SavedViewFilters } from '../store/useViewsStore'
+import { formatRelativeTime } from '../utils/time'
 import { buildDashboardMarkdown } from '../utils/markdown'
 import { isStatusStale } from '../utils/stale'
 
@@ -93,7 +94,7 @@ export default function Dashboard() {
 
 function DashboardContent() {
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale, formatDate } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const stateLabels = Object.fromEntries(
@@ -636,6 +637,7 @@ function DashboardContent() {
             type="button"
             onClick={() => void handleScan()}
             disabled={scanning}
+            title={t('dashboard.scanTitle')}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
           >
             {scanning ? t('dashboard.scanning') : t('dashboard.scan')}
@@ -643,6 +645,7 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => void handleCopySummary()}
+            title={t('dashboard.copySummaryTitle')}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {t('dashboard.copySummary')}
@@ -651,6 +654,7 @@ function DashboardContent() {
             <button
               type="button"
               onClick={() => setExportOpen((current) => !current)}
+              title={t('dashboard.exportTitle')}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {t('dashboard.export')}
@@ -698,6 +702,11 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => void handleBulk('fetch')}
+            title={
+              selectedVisible.length > 0
+                ? t('dashboard.fetchSelectedTitle')
+                : t('dashboard.fetchAllTitle')
+            }
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {selectedVisible.length > 0
@@ -707,6 +716,11 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => void handleBulk('sync')}
+            title={
+              selectedVisible.length > 0
+                ? t('dashboard.syncSelectedTitle')
+                : t('dashboard.syncMirrorsTitle')
+            }
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {selectedVisible.length > 0
@@ -1167,6 +1181,15 @@ function DashboardContent() {
                           tracked={repository.tracked}
                           stale={isStatusStale(repository.status)}
                         />
+                        {repository.status?.checked_at && (
+                          <p
+                            className="mt-1 text-xs text-slate-500 dark:text-slate-400"
+                            title={formatDate(repository.status.checked_at)}
+                          >
+                            {t('dashboard.checked')}:{' '}
+                            {formatRelativeTime(repository.status.checked_at, locale)}
+                          </p>
+                        )}
                       </td>
                     )}
                     {visibleColumns.mirror && (

@@ -210,6 +210,8 @@ function RepositoryDetailsContent() {
   const [policyExpected, setPolicyExpected] = useState(true)
   const [policyGithubName, setPolicyGithubName] = useState('')
   const [policyGitflicName, setPolicyGitflicName] = useState('')
+  const [policyGithubDetected, setPolicyGithubDetected] = useState(false)
+  const [policyGitflicDetected, setPolicyGitflicDetected] = useState(false)
   const [history, setHistory] = useState<ActionLog[]>([])
   const [actionPrompt, setActionPrompt] = useState<ActionPrompt | null>(null)
   const [actionConfirmed, setActionConfirmed] = useState(false)
@@ -238,7 +240,7 @@ function RepositoryDetailsContent() {
           conflictData,
           docker,
         ] = await Promise.all([
-          getRepositories(0, 500),
+          getRepositories(0, 500, true),
           getStatus(repositoryId),
           getLog(repositoryId, 10),
           getRecommendations(repositoryId),
@@ -656,10 +658,16 @@ function RepositoryDetailsContent() {
   }
 
   function openPolicy() {
+    const detectedGithub = repository?.detected_github_name ?? ''
+    const detectedGitflic = repository?.detected_gitflic_name ?? ''
+    const githubName = repository?.github_full_name || detectedGithub
+    const gitflicName = repository?.gitflic_full_name || detectedGitflic
     setPolicyCanonical(repository?.canonical_provider === 'gitflic' ? 'gitflic' : 'github')
     setPolicyExpected(repository?.mirror_expected ?? true)
-    setPolicyGithubName(repository?.github_full_name ?? '')
-    setPolicyGitflicName(repository?.gitflic_full_name ?? '')
+    setPolicyGithubName(githubName)
+    setPolicyGitflicName(gitflicName)
+    setPolicyGithubDetected(!repository?.github_full_name && Boolean(detectedGithub))
+    setPolicyGitflicDetected(!repository?.gitflic_full_name && Boolean(detectedGitflic))
     setPolicyOpen(true)
   }
 
@@ -674,10 +682,12 @@ function RepositoryDetailsContent() {
       })
       const [updatedMirror, list] = await Promise.all([
         getMirror(repositoryId),
-        getRepositories(0, 500),
+        getRepositories(0, 500, true),
       ])
       setMirror(updatedMirror)
       setRepository(list.items.find((item) => item.id === repositoryId) ?? null)
+      setPolicyGithubDetected(false)
+      setPolicyGitflicDetected(false)
       setPolicyOpen(false)
       setError(null)
     } catch {
@@ -2020,6 +2030,11 @@ function RepositoryDetailsContent() {
                     placeholder="owner/repo"
                     className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
                   />
+                  {policyGithubDetected && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {t('repo.policy.autoDetected')}
+                    </p>
+                  )}
                 </label>
                 <label className="mt-3 block text-sm font-medium text-slate-700 dark:text-slate-300">
                   {t('repo.policy.gitflicFullName')}
@@ -2029,6 +2044,11 @@ function RepositoryDetailsContent() {
                     placeholder="owner/repo"
                     className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
                   />
+                  {policyGitflicDetected && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {t('repo.policy.autoDetected')}
+                    </p>
+                  )}
                 </label>
                 <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <input

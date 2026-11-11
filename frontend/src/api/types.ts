@@ -22,6 +22,15 @@ export interface RepositoryDoc {
   content: string
 }
 
+export interface HealthResponse {
+  status: string
+  version: string
+  git_version: string | null
+  scan_roots: string[]
+  db_ok: boolean
+  providers: Record<string, string>
+}
+
 export interface Repository {
   id: number
   path: string
@@ -29,6 +38,8 @@ export interface Repository {
   tracked: boolean
   github_full_name: string | null
   gitflic_full_name: string | null
+  detected_github_name?: string | null
+  detected_gitflic_name?: string | null
   canonical_provider: string
   mirror_expected: boolean
   mirror_policy: string
