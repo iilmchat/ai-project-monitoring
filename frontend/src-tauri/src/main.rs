@@ -55,11 +55,12 @@ struct LogsOpenResult {
 /// manager.  When the native opener fails the path is returned so the
 /// frontend can copy it to the clipboard and show a toast.
 #[tauri::command]
+#[allow(deprecated)] // tauri-plugin-opener is not bundled yet
 fn open_logs_folder(app: tauri::AppHandle) -> Result<LogsOpenResult, String> {
     let directory = logs_dir_path();
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let path = directory.to_string_lossy().into_owned();
-    match app.shell().open(path.clone(), None::<String>) {
+    match app.shell().open(path.clone(), None) {
         Ok(()) => Ok(LogsOpenResult { opened: true, path }),
         Err(error) => {
             eprintln!("open logs folder failed: {error}");
