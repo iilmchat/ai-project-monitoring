@@ -40,6 +40,13 @@ DEVOPS_SYSTEM_PROMPT = (
     "Ты - DevOps-ассистент. Давай короткие приоритизированные рекомендации "
     "по состоянию локальных репозиториев. Не выдумывай факты."
 )
+GLOBAL_STATS_SYSTEM_PROMPT = (
+    "Ты — Lead DevOps Engineer. По агрегированным счётчикам технического долга "
+    "напиши краткий Markdown-отчёт: что горит сильнее всего и с чего начать. "
+    "Используй только переданные агрегаты и имена проектов. Не выдумывай факты, "
+    "не предлагай выполнять команды. Структура: заголовок, 3–5 приоритетов "
+    "списком, короткий итог. Уложись в 1800 символов."
+)
 AGENT_TASK_SYSTEM_PROMPT = (
     "Ты - Senior-разработчик. Пиши чёткие пошаговые инструкции для другого "
     "AI-агента. Не выполняй действия сам, только составь задачу."
@@ -447,6 +454,33 @@ class LLMService:
             DEVOPS_SYSTEM_PROMPT,
             prompt,
             max_tokens=420,
+            max_chars=MAX_EXPLANATION_CHARS,
+        )
+
+    async def generate_global_stats_advice(
+        self,
+        stats: dict[str, object],
+        *,
+        language: str = "ru",
+    ) -> str | None:
+        """Return a short Markdown report about the biggest tech-debt fires."""
+        context_json = json.dumps(
+            stats,
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+        prompt = (
+            "Агрегированная статистика технического долга по локальным "
+            f"репозиториям:\n{context_json}\n\n"
+            "Напиши отчёт «что горит и с чего начать». Укажи конкретные имена "
+            "проектов в приоритетах."
+            + _language_instruction(language)
+        )
+        return await self._complete(
+            GLOBAL_STATS_SYSTEM_PROMPT,
+            prompt,
+            max_tokens=700,
             max_chars=MAX_EXPLANATION_CHARS,
         )
 

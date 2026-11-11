@@ -95,6 +95,8 @@ export const repository = {
   'repo.dependencies.noneDeclared': 'Зависимости не объявлены.',
   'repo.dependencies.footer':
     'Проверено: {checked} · источник: {source} · всего устаревших: {outdated}',
+  'repo.dependencies.footerMeta':
+    'источник: {source} · всего устаревших: {outdated}',
   'repo.dependencyStatus.noManifest': 'Нет манифеста',
   'repo.dependencyStatus.parseError': 'Ошибка парсинга',
   'repo.dependencyStatus.outdated': '{count} устарели',
@@ -124,6 +126,8 @@ export const repository = {
   'repo.security.secretsBadge': 'секреты: {count}',
   'repo.security.footer':
     'Проверено: {checked} · всего пакетов: {total} · проверено: {checkedCount} · неизвестно: {unknown} · секретов: {secrets}',
+  'repo.security.footerMeta':
+    'всего пакетов: {total} · проверено: {checkedCount} · неизвестно: {unknown} · секретов: {secrets}',
   'repo.security.range': 'диапазон',
   'repo.security.fixedIn': 'исправлено в {version}',
   'repo.security.explain': 'Объяснить',
@@ -144,6 +148,7 @@ export const repository = {
   'repo.sast.truncated': 'Список сокращён из-за лимита находок.',
   'repo.sast.footer':
     'Проверено: {checked} · high: {high} · medium: {medium} · low: {low}',
+  'repo.sast.footerMeta': 'high: {high} · medium: {medium} · low: {low}',
   'repo.sast.fixWithAi': 'Исправить с AI',
   'repo.sast.explanationTitle': 'Объяснение находки',
   'repo.sast.explanationLoading': 'LLM анализирует находку…',

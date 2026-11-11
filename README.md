@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.4.2 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.4.3 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -271,12 +271,12 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.4.2** (2026-11-11) |
-| Статус | **Разделение chat- и embedding-моделей для RAG** |
-| Спринты | 1–61 + hotfix S63-Fix-3 |
-| Тесты backend | **352** (351 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **67** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **88.87 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
+| Версия | **v1.4.3** (2026-11-11) |
+| Статус | **Global Tech Debt Dashboard + единое отображение времени** |
+| Спринты | 1–63 |
+| Тесты backend | **361** (360 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **73** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **89.88 kB gzip** (+ lazy charts 100.9 kB, GlobalStats 2.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |

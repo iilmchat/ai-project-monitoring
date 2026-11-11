@@ -19,17 +19,18 @@ import GlobalDependencies from '../components/GlobalDependencies'
 import Heatmap from '../components/Heatmap'
 import MirrorBadge from '../components/MirrorBadge'
 import StatusBadge from '../components/StatusBadge'
+import RelativeTime from '../components/ui/RelativeTime'
 import { ciLabel, mirrorLabel, statusLabel, useI18n, useI18nNamespace } from '../i18n'
 import { useTableStore } from '../store/useTableStore'
 import type { ColumnKey } from '../store/useTableStore'
 import { useViewsStore } from '../store/useViewsStore'
 import type { SavedViewFilters } from '../store/useViewsStore'
-import { formatRelativeTime } from '../utils/time'
 import { buildDashboardMarkdown } from '../utils/markdown'
 import { isStatusStale } from '../utils/stale'
 
 const AiDigest = lazy(() => import('../components/AiDigest'))
 const DashboardCharts = lazy(() => import('../components/DashboardCharts'))
+const GlobalStats = lazy(() => import('../components/GlobalStats'))
 
 type SortKey = 'name' | 'status' | 'ahead'
 type SortDirection = 'asc' | 'desc'
@@ -94,7 +95,7 @@ export default function Dashboard() {
 
 function DashboardContent() {
   const navigate = useNavigate()
-  const { t, locale, formatDate } = useI18n()
+  const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const stateLabels = Object.fromEntries(
@@ -953,6 +954,16 @@ function DashboardContent() {
         />
       </div>
 
+      <Suspense
+        fallback={
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('common.loading')}
+          </p>
+        }
+      >
+        <GlobalStats />
+      </Suspense>
+
       {analyticsOpen && (
         <div className="space-y-6">
           {summary && (
@@ -1182,12 +1193,9 @@ function DashboardContent() {
                           stale={isStatusStale(repository.status)}
                         />
                         {repository.status?.checked_at && (
-                          <p
-                            className="mt-1 text-xs text-slate-500 dark:text-slate-400"
-                            title={formatDate(repository.status.checked_at)}
-                          >
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                             {t('dashboard.checked')}:{' '}
-                            {formatRelativeTime(repository.status.checked_at, locale)}
+                            <RelativeTime date={repository.status.checked_at} />
                           </p>
                         )}
                       </td>

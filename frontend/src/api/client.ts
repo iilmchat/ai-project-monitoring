@@ -31,6 +31,8 @@ import type {
   DockerStatus,
   DuplicatesResponse,
   GlobalDependencyReport,
+  GlobalStatsAdvice,
+  GlobalStatsReport,
   UnificationAdvice,
   HealthResponse,
   HeatmapData,
@@ -435,6 +437,23 @@ export async function getDashboardAdvice(
   return request<DashboardAdvice>('/ai/dashboard-advice', {
     method: 'POST',
     body: { language },
+  })
+}
+
+export async function getGlobalStats(refresh = false): Promise<GlobalStatsReport> {
+  return request<GlobalStatsReport>('/dashboard/global-stats', {
+    query: { refresh },
+  })
+}
+
+export async function getGlobalStatsAdvice(
+  language: 'ru' | 'en',
+  refresh = false,
+): Promise<GlobalStatsAdvice> {
+  return request<GlobalStatsAdvice>('/dashboard/global-stats/ai-advice', {
+    method: 'POST',
+    body: { language },
+    query: { refresh },
   })
 }
 

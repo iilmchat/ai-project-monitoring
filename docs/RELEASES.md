@@ -1,6 +1,35 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.4.2 (2026-11-11)
+**Текущая версия:** v1.4.3 (2026-11-11)
+
+---
+
+## Спринт 63 — Global Tech Debt Dashboard
+
+**Дата:** 2026-11-11 · **Тег:** `v1.4.3`
+
+Глобальная картина технического долга по всем tracked-репозиториям и единый
+формат отображения времени в UI.
+
+- **Backend:** `GlobalStatsService` агрегирует outdated-пакеты, CVE по
+  severity, dirty-файлы, diverged-ветки; считает детерминированный
+  `problem_score` и топ-5 репозиториев. Агрегация идёт только по
+  `tracked=true`, `asyncio.Semaphore(4)`, in-memory TTL-кэш **300 с** и
+  single-flight; ошибка одного источника даёт `partial`/`error`, HTTP 200.
+- **API:** `GET /api/v1/dashboard/global-stats` (`refresh`) и
+  `POST /api/v1/dashboard/global-stats/ai-advice` (chat-модель, Markdown,
+  `ai_cache`, `X-AI-Cache`, `503 llm_unavailable`).
+- **UI:** lazy-блок «Tech Debt Overview» с карточками, Pie/Bar (`recharts`),
+  топ-5 по `problem_score`, кнопкой «AI Анализ», partial/empty-состояниями,
+  RU/EN и `aria`-описаниями.
+- **UI polish:** `<RelativeTime />` — относительное время + кастомный тултип
+  точной локальной даты (`Intl.DateTimeFormat`) вместо системного `title`;
+  внедрён на дашборде и в деталях репозитория, поддержана тёмная тема.
+- **Кэш:** первый запрос строит отчёт, второй отдаёт копию из памяти с
+  `cached=true` и не вызывает источники; `refresh=true` обходит кэш.
+- **Проверки:** backend **361** (360 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **73** unit, `typecheck/lint/test/build`; entry bundle **89.88 kB**
+  gzip (budget 90 kB).
 
 ---
 

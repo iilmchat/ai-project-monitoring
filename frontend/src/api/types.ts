@@ -578,6 +578,88 @@ export interface GlobalDependencyReport {
   error: string | null
 }
 
+export type ProblemSeverity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+
+export interface GlobalStatsScope {
+  repositories: number
+  tracked: number
+  scanned: number
+  skipped: number
+}
+
+export interface GlobalVulnerabilitySummary {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unknown: number
+  total: number
+  unique_cves: number
+}
+
+export interface ProblemTypeSummary {
+  type: string
+  count: number
+  severity: ProblemSeverity
+}
+
+export interface GlobalStatsSummary {
+  outdated_packages: number
+  unique_outdated_packages: number
+  vulnerabilities: GlobalVulnerabilitySummary
+  dirty_files: number
+  diverged_branches: number
+  iac_issues: number
+  problem_types: ProblemTypeSummary[]
+}
+
+export interface GlobalRepositoryStats {
+  repository_id: number
+  name: string
+  path: string
+  status: 'ok' | 'partial' | 'error'
+  stale: boolean
+  outdated_packages: number
+  vulnerabilities: GlobalVulnerabilitySummary
+  dirty_files: number
+  diverged: boolean
+  iac_issues: number
+  problem_score: number
+  error: string | null
+}
+
+export interface TopProblematicRepository {
+  repository_id: number
+  name: string
+  problem_score: number
+}
+
+export interface GlobalStatsReport {
+  checked_at: string
+  cached: boolean
+  scope: GlobalStatsScope
+  summary: GlobalStatsSummary
+  repositories: GlobalRepositoryStats[]
+  top_problematic: TopProblematicRepository[]
+  errors: string[]
+  error: string | null
+}
+
+export interface GlobalStatsPriority {
+  title: string
+  reason: string
+  repository_id: number | null
+  action: string
+}
+
+export interface GlobalStatsAdvice {
+  generated_at: string
+  summary: string
+  priorities: GlobalStatsPriority[]
+  model: string | null
+  cached: boolean
+}
+
 export interface AIProviderProfile {
   id: number
   name: string

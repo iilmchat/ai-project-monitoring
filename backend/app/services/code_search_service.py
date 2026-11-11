@@ -748,13 +748,15 @@ class CodeSearchService:
                 "embedding_model_not_configured",
                 "укажите embedding-модель в настройках AI-провайдера",
             )
-        model = (self._settings.embedding_model or "").strip()
-        if not model:
+        fallback_model: str = str(
+            self._settings.embedding_model or ""
+        ).strip()
+        if not fallback_model:
             raise RagUnavailableError(
                 "embedding_model_not_configured",
                 "укажите embedding-модель в настройках AI-провайдера",
             )
-        return model
+        return fallback_model
 
     async def _embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []

@@ -38,6 +38,7 @@ from app.services.dependency_update_service import DependencyUpdateService
 from app.services.docker_service import DockerService
 from app.services.gigachat_provider import GigaChatProvider
 from app.services.global_analytics_service import GlobalAnalyticsService
+from app.services.global_stats_service import GlobalStatsService
 from app.services.identity_service import IdentityService
 from app.services.insights_service import InsightsService
 from app.services.llm_service import LLMService
@@ -183,6 +184,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         llm_service,
         prompt_version=resolved.ai_prompt_version,
     )
+    global_stats_service = GlobalStatsService(
+        session_factory,
+        dependency_service,
+        security_service,
+        cache_ttl_seconds=resolved.global_stats_cache_ttl_seconds,
+        concurrency=resolved.global_stats_concurrency,
+        top_limit=resolved.global_stats_top_limit,
+        llm_service=llm_service,
+        ai_cache_ttl_seconds=resolved.ai_cache_ttl_seconds,
+        prompt_version=resolved.ai_prompt_version,
+    )
     agent_task_service = AgentTaskService(llm_service)
     dependency_update_service = DependencyUpdateService(
         session_factory,
@@ -269,6 +281,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.identity_service = identity_service
     application.state.code_search_service = code_search_service
     application.state.dashboard_advice_service = dashboard_advice_service
+    application.state.global_stats_service = global_stats_service
     application.state.agent_task_service = agent_task_service
     application.state.ai_provider_service = ai_provider_service
     application.state.dependency_update_service = dependency_update_service

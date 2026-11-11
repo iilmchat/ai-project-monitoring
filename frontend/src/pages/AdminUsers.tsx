@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 
 import { getUsers, inviteUser, resetUserPassword, updateUser } from '../api/client'
 import type { AuthUser, UserRole } from '../api/types'
+import RelativeTime from '../components/ui/RelativeTime'
 import { useI18n, useI18nNamespace } from '../i18n'
 
 export default function AdminUsers() {
   const ready = useI18nNamespace('admin')
-  const { t, formatDate } = useI18n()
+  const { t } = useI18n()
   const [users, setUsers] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -275,10 +276,10 @@ export default function AdminUsers() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {formatDate(user.created_at)}
+                    <RelativeTime date={user.created_at} />
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {formatDate(user.last_login_at)}
+                    <RelativeTime date={user.last_login_at} />
                   </td>
                   <td className="px-4 py-3">
                     <button

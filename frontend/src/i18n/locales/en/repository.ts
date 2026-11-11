@@ -95,6 +95,8 @@ export const repository = {
   'repo.dependencies.noneDeclared': 'No dependencies declared.',
   'repo.dependencies.footer':
     'Checked: {checked} · source: {source} · outdated total: {outdated}',
+  'repo.dependencies.footerMeta':
+    'source: {source} · outdated total: {outdated}',
   'repo.dependencyStatus.noManifest': 'No manifest',
   'repo.dependencyStatus.parseError': 'Parse error',
   'repo.dependencyStatus.outdated': '{count} outdated',
@@ -125,6 +127,8 @@ export const repository = {
   'repo.security.secretsBadge': 'secrets: {count}',
   'repo.security.footer':
     'Checked: {checked} · packages total: {total} · checked: {checkedCount} · unknown: {unknown} · secrets: {secrets}',
+  'repo.security.footerMeta':
+    'packages total: {total} · checked: {checkedCount} · unknown: {unknown} · secrets: {secrets}',
   'repo.security.range': 'range',
   'repo.security.fixedIn': 'fixed in {version}',
   'repo.security.explain': 'Explain',
@@ -145,6 +149,7 @@ export const repository = {
   'repo.sast.truncated': 'The list was truncated by the findings limit.',
   'repo.sast.footer':
     'Checked: {checked} · high: {high} · medium: {medium} · low: {low}',
+  'repo.sast.footerMeta': 'high: {high} · medium: {medium} · low: {low}',
   'repo.sast.fixWithAi': 'Fix with AI',
   'repo.sast.explanationTitle': 'Finding explanation',
   'repo.sast.explanationLoading': 'LLM is analysing the finding…',

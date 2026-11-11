@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     global_analytics_cache_ttl_seconds: int = 3600
     global_analytics_limit: int = 50
     global_analytics_concurrency: int = 4
+    global_stats_cache_ttl_seconds: int = 300
+    global_stats_concurrency: int = 4
+    global_stats_top_limit: int = 5
     dependency_update_timeout_seconds: int = 180
     dependency_update_max_output_chars: int = 10000
     action_timeout_seconds: int = 60
@@ -129,7 +132,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.4.2"
+    app_version: str = "1.4.3"
 
     @property
     def scan_root_paths(self) -> list[str]:

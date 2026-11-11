@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-11-11
+
+Глобальный дашборд технического долга: один экран показывает outdated-пакеты,
+CVE, dirty-файлы, diverged-ветки и топ-5 «горящих» репозиториев. Sprint 63.
+
+### Добавлено
+
+- feat(analytics): `GlobalStatsService` — агрегация только по `tracked=true`
+  репозиториям, `problem_score`, `top_problematic`, `partial`/`stale`,
+  `asyncio.Semaphore(4)`, single-flight и in-memory TTL-кэш 300 секунд.
+- feat(api): `GET /api/v1/dashboard/global-stats` (`refresh`), схемы
+  `GlobalStatsReport`, `GlobalRepositoryStats`, `GlobalStatsSummary`.
+- feat(ai): `POST /api/v1/dashboard/global-stats/ai-advice` — Markdown-отчёт
+  «что горит и с чего начать» через chat-модель, `ai_cache` с ключом по
+  агрегатам, `X-AI-Cache`, `503 llm_unavailable`.
+- feat(ui): блок «Tech Debt Overview» на главном дашборде (lazy chunk,
+  `recharts`): карточки, Pie Chart распределения проблем, Bar Chart топ-5,
+  кнопка «AI Анализ», partial/empty-состояния, RU/EN, `aria`.
+- feat(ui): единый компонент `<RelativeTime />` с кастомным тултипом точной
+  даты (`Intl.DateTimeFormat`) вместо системного `title`; внедрён в
+  «Проверено» на дашборде и в деталях репозитория.
+- feat(metrics): `global_stats_duration_seconds`,
+  `global_stats_cache_hits_total`, `global_stats_partial_total`.
+
+### Изменено
+
+- test: `test_global_stats.py` (агрегация, partial/error, stale, TTL/refresh,
+  single-flight, API, AI hit/miss/503), `GlobalStats.test.tsx`,
+  `RelativeTime.test.tsx`.
+- docs: ADR-0023 «Global stats aggregation & caching».
+- chore(release): версия `1.4.3` во всех манифестах.
+
 ## [1.4.2] - 2026-11-11
 
 Разделение моделей чата и эмбеддингов: LM Studio больше не получает

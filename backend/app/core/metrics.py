@@ -59,6 +59,22 @@ AI_LLM_CALLS = Counter(
     labelnames=("feature", "provider", "status"),
 )
 
+GLOBAL_STATS_DURATION = Histogram(
+    "iiruchating_global_stats_duration_seconds",
+    "Duration of building the global tech-debt report",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
+)
+
+GLOBAL_STATS_CACHE_HITS = Counter(
+    "iiruchating_global_stats_cache_hits_total",
+    "In-memory global tech-debt cache hits",
+)
+
+GLOBAL_STATS_PARTIAL = Counter(
+    "iiruchating_global_stats_partial_total",
+    "Global tech-debt reports that contained partial data",
+)
+
 
 def observe_ai_cache(feature: str, *, hit: bool) -> None:
     counter = AI_CACHE_HITS if hit else AI_CACHE_MISSES
@@ -96,6 +112,19 @@ def observe_mirror_check_duration(seconds: float) -> None:
     MIRROR_CHECK_DURATION.observe(max(seconds, 0.0))
 
 
+def observe_global_stats_duration(seconds: float) -> None:
+    GLOBAL_STATS_DURATION.observe(max(seconds, 0.0))
+
+
+def observe_global_stats_cache_hit() -> None:
+    GLOBAL_STATS_CACHE_HITS.inc()
+
+
+def observe_global_stats_partial(partial: bool) -> None:
+    if partial:
+        GLOBAL_STATS_PARTIAL.inc()
+
+
 def set_mirror_status_counts(counts: Mapping[str, int]) -> None:
     """Replace the mirror-status gauge with the current DB snapshot."""
     MIRROR_STATUS_TOTAL.clear()
@@ -108,6 +137,9 @@ __all__ = [
     "AI_CACHE_MISSES",
     "AI_LLM_CALLS",
     "FETCH_DURATION",
+    "GLOBAL_STATS_CACHE_HITS",
+    "GLOBAL_STATS_DURATION",
+    "GLOBAL_STATS_PARTIAL",
     "MIRROR_CHECK_DURATION",
     "MIRROR_STATUS_TOTAL",
     "REPOSITORIES_TOTAL",
@@ -115,6 +147,9 @@ __all__ = [
     "STATUS_DURATION",
     "observe_ai_cache",
     "observe_fetch_duration",
+    "observe_global_stats_cache_hit",
+    "observe_global_stats_duration",
+    "observe_global_stats_partial",
     "observe_llm_call",
     "observe_mirror_check_duration",
     "observe_scan_duration",

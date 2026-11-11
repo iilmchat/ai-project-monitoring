@@ -1,6 +1,6 @@
 [project]
 name = "iiruchating-backend"
-version = "1.4.2"
+version = "1.4.3"
 description = "ai-project-monitoring backend (FastAPI)"
 requires-python = ">=3.11"
 

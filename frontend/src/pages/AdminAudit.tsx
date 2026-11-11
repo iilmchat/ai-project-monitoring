@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 
 import { getAuditLog } from '../api/client'
 import type { AuditLogPage } from '../api/types'
+import RelativeTime from '../components/ui/RelativeTime'
 import { useI18n, useI18nNamespace } from '../i18n'
 
 const PAGE_SIZE = 50
 
 export default function AdminAudit() {
   const ready = useI18nNamespace('admin')
-  const { t, formatDate } = useI18n()
+  const { t } = useI18n()
   const [page, setPage] = useState<AuditLogPage | null>(null)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
@@ -91,7 +92,7 @@ export default function AdminAudit() {
               {items.map((entry) => (
                 <tr key={entry.id}>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {formatDate(entry.created_at)}
+                    <RelativeTime date={entry.created_at} />
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-800 dark:text-slate-200">
                     {entry.user.username ?? t('admin.system')}

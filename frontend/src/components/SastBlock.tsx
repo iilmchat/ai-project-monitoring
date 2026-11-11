@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { explainSast, getSast } from '../api/client'
 import type { SastFinding, SastReport } from '../api/types'
 import { useI18n } from '../i18n'
+import RelativeTime from './ui/RelativeTime'
 
 const SEVERITY_CLASS: Record<string, string> = {
   critical: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200',
@@ -19,7 +20,7 @@ export default function SastBlock({
   repositoryId: number
   llmEnabled: boolean
 }) {
-  const { t, formatDate } = useI18n()
+  const { t } = useI18n()
   const [report, setReport] = useState<SastReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -196,8 +197,9 @@ export default function SastBlock({
               </p>
             )}
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              {t('repo.sast.footer', {
-                checked: formatDate(report.checked_at),
+              {t('repo.fields.checked')}:{' '}
+              <RelativeTime date={report.checked_at} /> ·{' '}
+              {t('repo.sast.footerMeta', {
                 high: report.summary.high,
                 medium: report.summary.medium,
                 low: report.summary.low,

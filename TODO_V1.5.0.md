@@ -1,6 +1,7 @@
 # TODO v1.5.0 — Global Analytics & IaC Scanning
 
-**Статус:** Sprint 62 — планирование завершено; спринты 63–65 — запланированы.
+**Статус:** Sprint 62 — планирование завершено; Sprint 63 — реализован
+(v1.4.3); спринты 64–65 — запланированы.
 **База:** v1.4.2 «Chat/Embedding Model Split» (раздельные `model_name` и
 `embedding_model` в профиле AI, миграция 016).
 **Цель:** дать сводную картину технического долга по всем tracked-репозиториям
@@ -246,22 +247,22 @@ model, cached}`.
 
 **DoD Sprint 63:**
 
-- [ ] `GlobalStatsService`: агрегация tracked-репозиториев, partial/stale,
+- [x] `GlobalStatsService`: агрегация tracked-репозиториев, partial/stale,
       `problem_score`, `top_problematic`, single-flight, TTL 300 с.
-- [ ] `GET /dashboard/global-stats` + Pydantic-схемы `GlobalStatsReport`,
+- [x] `GET /dashboard/global-stats` + Pydantic-схемы `GlobalStatsReport`,
       `GlobalRepositoryStats`; контракт совпадает со SPEC §3.34.
-- [ ] `POST /dashboard/global-stats/ai-advice`: `ai_cache`, 503 при LLM off,
+- [x] `POST /dashboard/global-stats/ai-advice`: `ai_cache`, 503 при LLM off,
       лимит 2000 символов, промпт без кода/секретов.
-- [ ] Интеграционные тесты на реальных tmp-репозиториях: outdated/CVE из
+- [x] Интеграционные тесты на реальных tmp-репозиториях: outdated/CVE из
       кэша, dirty/diverged, отсутствие tracked, частичная ошибка, кэш/refresh,
       single-flight, AI 503/hit/miss.
-- [ ] UI: карточки + Pie/Bar, lazy charts, empty/partial/error, RU/EN, `aria`,
+- [x] UI: карточки + Pie/Bar, lazy charts, empty/partial/error, RU/EN, `aria`,
       клики к фильтрам/деталям; entry bundle < 90 kB gzip.
-- [ ] Read-only: тест `git status --porcelain` до/после запроса не меняется;
+- [x] Read-only: тест `git status --porcelain` до/после запроса не меняется;
       `fetch` не вызывается.
-- [ ] Prometheus-метрики и structlog-события без путей/секретов.
-- [ ] ADR-0023 «Global stats aggregation & caching».
-- [ ] `ruff`, `mypy --strict`, `pytest -q`, frontend typecheck/lint/test/build
+- [x] Prometheus-метрики и structlog-события без путей/секретов.
+- [x] ADR-0023 «Global stats aggregation & caching».
+- [x] `ruff`, `mypy --strict`, `pytest -q`, frontend typecheck/lint/test/build
       — зелёные.
 
 ---

@@ -53,6 +53,7 @@ import type {
 import MirrorBadge from '../components/MirrorBadge'
 import ReadmeModal from '../components/ReadmeModal'
 import StatusBadge from '../components/StatusBadge'
+import RelativeTime from '../components/ui/RelativeTime'
 import { type TranslationKey, useI18n, useI18nNamespace } from '../i18n'
 import { isStatusStale } from '../utils/stale'
 
@@ -956,7 +957,9 @@ function RepositoryDetailsContent() {
                   <dt className="text-slate-500 dark:text-slate-400">
                     {t('repo.fields.checked')}
                   </dt>
-                  <dd className="font-medium">{formatDate(status?.checked_at)}</dd>
+                  <dd className="font-medium">
+                    <RelativeTime date={status?.checked_at} />
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -1282,9 +1285,8 @@ function RepositoryDetailsContent() {
                     </ul>
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-                    {t('repo.fields.checkedWithDate', {
-                      date: formatDate(dockerStatus.checked_at),
-                    })}
+                    {t('repo.fields.checked')}:{' '}
+                    <RelativeTime date={dockerStatus.checked_at} />
                   </p>
                 </>
               )}
@@ -1534,8 +1536,9 @@ function RepositoryDetailsContent() {
                     )
                   )}
                   <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-                    {t('repo.dependencies.footer', {
-                      checked: formatDate(dependencies?.checked_at),
+                    {t('repo.fields.checked')}:{' '}
+                    <RelativeTime date={dependencies?.checked_at} /> ·{' '}
+                    {t('repo.dependencies.footerMeta', {
                       source: dependencySourceLabel(
                         selectedDependencies.source,
                         t,
@@ -1651,8 +1654,9 @@ function RepositoryDetailsContent() {
                   )}
 
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {t('repo.security.footer', {
-                      checked: formatDate(security.checked_at),
+                    {t('repo.fields.checked')}:{' '}
+                    <RelativeTime date={security.checked_at} /> ·{' '}
+                    {t('repo.security.footerMeta', {
                       total: security.summary.total_packages,
                       checkedCount: security.summary.packages_checked,
                       unknown: security.summary.unknown,
@@ -1973,7 +1977,7 @@ function RepositoryDetailsContent() {
                   {history.map((entry) => (
                     <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                        {formatDate(entry.created_at)}
+                        <RelativeTime date={entry.created_at} />
                       </td>
                       <td className="px-4 py-3 font-medium">{entry.action}</td>
                       <td className="px-4 py-3">
@@ -2792,7 +2796,6 @@ function ProviderSummary({
   fullName: string | null
   t: Translate
 }) {
-  const { formatDate } = useI18n()
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 p-3 text-sm">
       <p className="font-semibold text-slate-700 dark:text-slate-300">{name}</p>
@@ -2803,7 +2806,7 @@ function ProviderSummary({
         {info?.head_sha ? info.head_sha.slice(0, 12) : '—'}
       </p>
       <p className="text-xs text-slate-500 dark:text-slate-400">branch: {info?.branch ?? '—'}</p>
-      <p className="text-xs text-slate-500 dark:text-slate-400">checked: {formatDate(info?.checked_at)}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">checked: <RelativeTime date={info?.checked_at} /></p>
     </div>
   )
 }

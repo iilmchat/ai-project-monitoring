@@ -19,6 +19,11 @@ from app.schemas.global_analytics import (
     UnificationAdvice,
     UnificationAdviceRequest,
 )
+from app.schemas.global_stats import (
+    GlobalStatsAdvice,
+    GlobalStatsAdviceRequest,
+    GlobalStatsReport,
+)
 from app.schemas.identity import DuplicatesResponse
 from app.schemas.mirror import MirrorStatusResponse
 from app.schemas.repository import RepositoryRead, RepositoryStatusResponse
@@ -31,6 +36,10 @@ from app.services.global_analytics_service import (
     LLMUnavailableError,
     PackageNotFoundError,
     UnificationNotNeededError,
+)
+from app.services.global_stats_service import (
+    GlobalStatsAdviceUnavailableError,
+    GlobalStatsService,
 )
 from app.services.identity_service import IdentityService
 from app.services.mirror_service import ATTENTION_STATUSES, snapshot_from_row
@@ -161,6 +170,40 @@ async def get_global_dependencies(
 ) -> GlobalDependencyReport:
     service: GlobalAnalyticsService = request.app.state.global_analytics_service
     return await service.get_global_dependencies(refresh=refresh)
+
+
+@router.get(
+    "/dashboard/global-stats",
+    response_model=GlobalStatsReport,
+)
+async def get_global_stats(
+    request: Request,
+    refresh: Annotated[bool, Query()] = False,
+) -> GlobalStatsReport:
+    service: GlobalStatsService = request.app.state.global_stats_service
+    return await service.get_global_stats(refresh=refresh)
+
+
+@router.post(
+    "/dashboard/global-stats/ai-advice",
+    response_model=GlobalStatsAdvice,
+)
+async def get_global_stats_advice(
+    request: Request,
+    response: Response,
+    payload: GlobalStatsAdviceRequest | None = None,
+    refresh: Annotated[bool, Query()] = False,
+) -> GlobalStatsAdvice:
+    service: GlobalStatsService = request.app.state.global_stats_service
+    try:
+        result = await service.get_ai_advice(
+            payload.language if payload else "ru",
+            refresh=refresh,
+        )
+    except GlobalStatsAdviceUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response.headers["X-AI-Cache"] = "hit" if result.cached else "miss"
+    return result
 
 
 @router.post("/ai/dashboard-advice", response_model=DashboardAdvice)
