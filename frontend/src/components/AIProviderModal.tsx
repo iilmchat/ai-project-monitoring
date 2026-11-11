@@ -42,6 +42,12 @@ export default function AIProviderModal({
     profile?.model_name ??
       (providerType === 'gigachat' ? 'GigaChat' : 'qwen2.5-coder-7b-instruct'),
   )
+  const [embeddingModel, setEmbeddingModel] = useState(
+    profile?.embedding_model ??
+      (providerType === 'gigachat'
+        ? ''
+        : 'text-embedding-nomic-embed-text-v1.5'),
+  )
   const [apiKey, setApiKey] = useState('')
   const [clientId, setClientId] = useState(profile?.client_id ?? '')
   const [clientSecret, setClientSecret] = useState('')
@@ -60,6 +66,9 @@ export default function AIProviderModal({
       if (!modelName || modelName === 'qwen2.5-coder-7b-instruct') {
         setModelName('GigaChat')
       }
+    }
+    if (next === 'openai_compatible' && !embeddingModel) {
+      setEmbeddingModel('text-embedding-nomic-embed-text-v1.5')
     }
   }
 
@@ -83,6 +92,7 @@ export default function AIProviderModal({
           name: name.trim(),
           base_url: baseUrl.trim(),
           model_name: modelName.trim(),
+          embedding_model: embeddingModel.trim(),
           api_key: apiKey.trim() || undefined,
           provider_type: providerType,
         }
@@ -173,6 +183,20 @@ export default function AIProviderModal({
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
+          {providerType === 'openai_compatible' && (
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t('settings.providerEmbeddingModel')}
+              <input
+                value={embeddingModel}
+                onChange={(event) => setEmbeddingModel(event.target.value)}
+                placeholder="text-embedding-nomic-embed-text-v1.5"
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+              <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">
+                {t('settings.providerEmbeddingModelHint')}
+              </span>
+            </label>
+          )}
 
           {providerType === 'gigachat' ? (
             <>

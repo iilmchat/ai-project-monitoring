@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.deps import actor_id, require_admin
 from app.config import Settings
-from app.schemas.ai import LLMTestResponse
+from app.schemas.ai import LLMTestResponse, LLMTestStatus
 from app.schemas.settings import (
     SettingsResponse,
     SettingsStatusResponse,
@@ -79,11 +79,22 @@ async def get_settings(request: Request) -> SettingsResponse:
 @router.post("/settings/llm/test", response_model=LLMTestResponse)
 async def test_llm(request: Request) -> LLMTestResponse:
     service: LLMService = request.app.state.llm_service
-    ok, latency_ms, error = await service.test_connection()
+    chat_ok, chat_latency, chat_error = await service.test_chat()
+    embedding_ok, embedding_latency, embedding_error = await service.test_embedding()
     return LLMTestResponse(
-        status="ok" if ok else "error",
-        latency_ms=latency_ms,
-        error=error,
+        chat=LLMTestStatus(
+            status="ok" if chat_ok else "error",
+            latency_ms=chat_latency,
+            error=chat_error,
+        ),
+        embedding=LLMTestStatus(
+            status="ok" if embedding_ok else "error",
+            latency_ms=embedding_latency,
+            error=embedding_error,
+        ),
+        status="ok" if chat_ok and embedding_ok else "error",
+        latency_ms=chat_latency,
+        error=chat_error or embedding_error,
     )
 
 

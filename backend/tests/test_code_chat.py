@@ -145,4 +145,7 @@ async def test_chat_api_requires_embedding_model_on_sqlite(
     )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "embedding_unavailable"
+    assert (
+        response.json()["detail"]
+        == "embedding_model_unavailable: проверьте настройки AI-провайдера"
+    )

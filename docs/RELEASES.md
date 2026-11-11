@@ -1,6 +1,30 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.4.1 (2026-11-11)
+**Текущая версия:** v1.4.2 (2026-11-11)
+
+---
+
+## Хотфикс v1.4.2 — разделение chat_model и embedding_model
+
+**Дата:** 2026-11-11 · **Тег:** `v1.4.2`
+
+Причина: LM Studio обслуживает чат и эмбеддинги разными моделями. До v1.4.2
+RAG отправлял `model_name` (например, `qwen2.5-coder`) в `/v1/embeddings` и
+падал с `embedding model is unavailable`.
+
+- **Модель данных:** `ai_provider_profiles.embedding_model` (nullable),
+  миграция `016`; backfill существующих OpenAI-совместимых профилей
+  `text-embedding-nomic-embed-text-v1.5`.
+- **LLMService:** чат-методы используют только `model_name`;
+  `resolve_embedding()`/`embed_or_raise()` — только `embedding_model`.
+  Пустое значение → `embedding_model_not_configured`, без подмены чат-моделью.
+- **API/UI:** `embedding_model` в CRUD провайдера; второе поле в модалке;
+  `/settings/llm/test` возвращает `chat` и `embedding` по отдельности.
+- **RAG:** `embedding_model_unavailable: проверьте настройки AI-провайдера`
+  при HTTP-ошибке; на `/search` — подсказка открыть «Настройки → AI Провайдеры».
+- **Проверки:** backend **352** (351 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **67** unit, `typecheck/lint/test/build`; entry bundle **88.87 kB**
+  gzip (budget 90 kB); sidecar собран, версия `1.4.2`.
 
 ---
 

@@ -63,7 +63,7 @@ def test_fresh_database_migrates_to_head(tmp_path: Path) -> None:
         "sast_cache",
         "code_chunks",
     } <= _tables(db_path)
-    assert _revision(db_path) == "015"
+    assert _revision(db_path) == "016"
 
 
 def test_legacy_v110_database_is_stamped_and_upgraded(tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ def test_legacy_v110_database_is_stamped_and_upgraded(tmp_path: Path) -> None:
 
     tables = _tables(db_path)
     assert {"users", "audit_log", "sast_cache", "code_chunks"} <= tables
-    assert _revision(db_path) == "015"
+    assert _revision(db_path) == "016"
     with sqlite3.connect(db_path) as connection:
         user_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(users)")
@@ -116,7 +116,7 @@ def test_half_migrated_roles_are_repaired_without_data_loss(tmp_path: Path) -> N
         ).fetchone()
     assert "role" in columns
     assert role is not None and role[0] == "admin"
-    assert _revision(db_path) == "015"
+    assert _revision(db_path) == "016"
 
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ def test_migrations_are_idempotent(tmp_path: Path) -> None:
     _apply_migrations(_url(db_path))
 
     assert "users" in _tables(db_path)
-    assert _revision(db_path) == "015"
+    assert _revision(db_path) == "016"
 
 
 def test_legacy_revision_detection(tmp_path: Path) -> None:
@@ -140,3 +140,30 @@ def test_legacy_revision_detection(tmp_path: Path) -> None:
     # PostgreSQL-only), so users is created while replaying 012.
     legacy_tables = tables - {"users", "audit_log", "sast_cache"}
     assert _detect_legacy_revision(db_path, legacy_tables) == "010"
+
+
+def test_embedding_model_is_backfilled_for_existing_profiles(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "backfill.db"
+    asyncio.run(_create_all(_url(db_path)))
+    asyncio.run(
+        _execute(
+            _url(db_path),
+            "INSERT INTO ai_provider_profiles "
+            "(name, base_url, model_name, provider_type, auth_type, is_active, "
+            "created_at) VALUES "
+            "('LM Studio', 'http://127.0.0.1:1234/v1', 'qwen2.5-coder', "
+            "'openai_compatible', 'api_key', 1, '2026-01-01 00:00:00')",
+        )
+    )
+
+    _apply_migrations(_url(db_path))
+
+    with sqlite3.connect(db_path) as connection:
+        model = connection.execute(
+            "SELECT embedding_model FROM ai_provider_profiles "
+            "WHERE name = 'LM Studio'"
+        ).fetchone()
+    assert model is not None
+    assert model[0] == "text-embedding-nomic-embed-text-v1.5"

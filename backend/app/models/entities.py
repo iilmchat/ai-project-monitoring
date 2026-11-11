@@ -295,6 +295,7 @@ class AIProviderProfile(Base):
     base_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     api_key: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_type: Mapped[str] = mapped_column(
         String(32), default="openai_compatible", nullable=False
     )

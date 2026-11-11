@@ -30,9 +30,12 @@ def _service(request: Request) -> CodeSearchService:
 
 
 def _unavailable(exc: RagUnavailableError) -> HTTPException:
+    detail = exc.code
+    if exc.message and exc.message != exc.code:
+        detail = f"{exc.code}: {exc.message}"
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=exc.code,
+        detail=detail,
     )
 
 

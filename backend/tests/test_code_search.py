@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
 import pytest
 from app.config import Settings
-from app.models.entities import Repository
+from app.models.entities import AIProviderProfile, Repository
 from app.services.code_search_service import (
     CodeSearchService,
     RagUnavailableError,
@@ -17,7 +18,7 @@ from app.services.code_search_service import (
     _language_for_path,
     _mask_snippet,
 )
-from app.services.llm_service import LLMService
+from app.services.llm_service import EmbeddingError, LLMService
 from app.services.sqlite_vec_store import SqliteVecStore
 from fastapi import FastAPI
 from httpx import AsyncClient
@@ -123,6 +124,7 @@ def _rag_service(
     async def embed(texts: list[str]) -> list[list[float]]:
         return _fake_vectors(texts)
 
+    service._llm.embed_or_raise = embed  # type: ignore[method-assign]
     service._llm.embed = embed  # type: ignore[method-assign]
     return service
 
@@ -162,7 +164,10 @@ async def test_sqlite_search_requires_embedding_model(
         json={"query": "where is redis configured"},
     )
     assert search.status_code == 503
-    assert search.json()["detail"] == "embedding_unavailable"
+    assert (
+        search.json()["detail"]
+        == "embedding_model_unavailable: проверьте настройки AI-провайдера"
+    )
 
     index = await client.post("/api/v1/search/code/index", json={})
     assert index.status_code == 202
@@ -290,3 +295,204 @@ async def test_llm_embed_returns_vectors_and_blocks_remote() -> None:
         transport=httpx.MockTransport(handler),
     )
     assert await blocked.embed(["redis"]) is None
+
+
+async def test_embedding_uses_active_profile_model(
+    session_factory,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]},
+        )
+
+    async with session_factory() as session:
+        session.add(
+            AIProviderProfile(
+                name="LM Studio",
+                base_url="http://127.0.0.1:1234/v1",
+                model_name="qwen2.5-coder-7b-instruct",
+                embedding_model="nomic-embed-text",
+                is_active=True,
+            )
+        )
+        await session.commit()
+
+    service = LLMService(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+        session_factory=session_factory,
+    )
+
+    vectors = await service.embed_or_raise(["redis"])
+
+    assert vectors == [[0.1, 0.2, 0.3]]
+    assert captured["body"] == {
+        "model": "nomic-embed-text",
+        "input": ["redis"],
+    }
+
+
+async def test_embedding_model_not_configured_raises(
+    session_factory,
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            AIProviderProfile(
+                name="LM Studio",
+                base_url="http://127.0.0.1:1234/v1",
+                model_name="qwen2.5-coder-7b-instruct",
+                embedding_model=None,
+                is_active=True,
+            )
+        )
+        await session.commit()
+
+    service = LLMService(_settings(), session_factory=session_factory)
+
+    with pytest.raises(EmbeddingError) as error:
+        await service.embed_or_raise(["redis"])
+
+    assert error.value.code == "embedding_model_not_configured"
+
+
+async def test_embedding_http_error_is_structured() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": "model not found"})
+
+    service = LLMService(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(EmbeddingError) as error:
+        await service.embed_or_raise(["redis"])
+
+    assert error.value.code == "http_404"
+    assert await service.embed(["redis"]) is None
+
+
+async def test_llm_test_pings_chat_and_embedding_models_separately() -> None:
+    requests: list[tuple[str, dict[str, object]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append((request.url.path, body))
+        if request.url.path.endswith("/chat/completions"):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "pong"}}]},
+            )
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [0.1]}]},
+        )
+
+    service = LLMService(
+        _settings(
+            llm_enabled=True,
+            llm_model="qwen2.5-coder-7b-instruct",
+            embedding_model="nomic-embed-text",
+            embedding_dimensions=1,
+        ),
+        transport=httpx.MockTransport(handler),
+    )
+
+    chat_ok, _, chat_error = await service.test_chat()
+    embedding_ok, _, embedding_error = await service.test_embedding()
+
+    assert chat_ok is True
+    assert chat_error is None
+    assert embedding_ok is True
+    assert embedding_error is None
+    assert requests == [
+        (
+            "/v1/chat/completions",
+            {
+                "model": "qwen2.5-coder-7b-instruct",
+                "messages": [{"role": "user", "content": "ping"}],
+                "temperature": 0,
+                "max_tokens": 8,
+                "stream": False,
+            },
+        ),
+        (
+            "/v1/embeddings",
+            {"model": "nomic-embed-text", "input": ["ping"]},
+        ),
+    ]
+
+
+async def test_rag_index_and_search_use_profile_embedding_model(
+    session_factory,
+    settings: Settings,
+    make_repo,
+    tmp_path: Path,
+) -> None:
+    """Simulate LM Studio with qwen (chat) and nomic-embed-text (RAG)."""
+    repo = make_repo(tmp_path / "split-models")
+    (repo / "cache.py").write_text("redis client setup\n", encoding="utf-8")
+    (repo / "db.py").write_text("postgres connection pool\n", encoding="utf-8")
+    async with session_factory() as session:
+        session.add(
+            AIProviderProfile(
+                name="LM Studio",
+                base_url="http://127.0.0.1:1234/v1",
+                model_name="qwen2.5-coder-7b-instruct",
+                embedding_model="nomic-embed-text",
+                is_active=True,
+            )
+        )
+        session.add(Repository(path=str(repo.resolve()), tracked=True))
+        await session.commit()
+
+    embedded_models: list[str] = []
+
+    def vector_for(text: str) -> list[float]:
+        lowered = text.lower()
+        if "redis" in lowered:
+            return [1.0, 0.0, 0.0]
+        if "postgres" in lowered:
+            return [0.0, 1.0, 0.0]
+        return [0.0, 0.0, 1.0]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/embeddings"
+        body = json.loads(request.content)
+        embedded_models.append(str(body["model"]))
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"index": index, "embedding": vector_for(text)}
+                    for index, text in enumerate(body["input"])
+                ]
+            },
+        )
+
+    rag_settings = settings.model_copy(update={"embedding_dimensions": 3})
+    service = CodeSearchService(
+        session_factory,
+        rag_settings,
+        LLMService(
+            rag_settings,
+            transport=httpx.MockTransport(handler),
+            session_factory=session_factory,
+        ),
+        database_url=rag_settings.database_url,
+        vec_store=_PythonFallbackStore(),
+    )
+
+    status = await service.index(force=True)
+    assert status.indexed_chunks > 0, status
+    assert status.errors == []
+    response = await service.search("redis configuration", min_score=0.1)
+
+    assert response.model == "nomic-embed-text"
+    assert response.results
+    assert response.results[0].path == "cache.py"
+    assert embedded_models
+    assert set(embedded_models) == {"nomic-embed-text"}

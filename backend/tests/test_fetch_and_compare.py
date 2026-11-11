@@ -96,7 +96,7 @@ async def _refresh(
 async def test_fetch_success_updates_ahead_behind(
     session_factory, tmp_path: Path
 ) -> None:
-    remote, seed, local = _make_remote_and_clone(tmp_path)
+    _remote, seed, local = _make_remote_and_clone(tmp_path)
     repository_id = await _create_repository(session_factory, local)
 
     _commit(seed, "remote.txt", "remote\n", "remote update")
@@ -114,7 +114,7 @@ async def test_fetch_success_updates_ahead_behind(
 async def test_refresh_without_fetch_keeps_stale(
     session_factory, tmp_path: Path
 ) -> None:
-    remote, seed, local = _make_remote_and_clone(tmp_path)
+    _remote, seed, local = _make_remote_and_clone(tmp_path)
     repository_id = await _create_repository(session_factory, local)
 
     _commit(seed, "remote.txt", "remote\n", "remote update")

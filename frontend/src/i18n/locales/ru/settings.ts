@@ -44,6 +44,10 @@ export const settings = {
   'settings.llmOk': 'LLM отвечает',
   'settings.llmError': 'LLM недоступна',
   'settings.llmLatency': 'за {ms} мс',
+  'settings.llmChatStatus': 'Чат',
+  'settings.llmEmbeddingStatus': 'Эмбеддинги',
+  'settings.llmOkShort': 'OK',
+  'settings.llmFailShort': 'Fail',
   'settings.aiProviders': 'AI Провайдеры',
   'settings.aiProvidersHint':
     'OpenAI-совместимые профили: локальные (LM Studio/Ollama) и внешние (DeepSeek, OpenRouter, Yandex и др.).',
@@ -56,6 +60,10 @@ export const settings = {
   'settings.providerName': 'Имя',
   'settings.providerBaseUrl': 'Base URL',
   'settings.providerModel': 'Модель',
+  'settings.providerEmbeddingModel': 'Модель для эмбеддингов (RAG)',
+  'settings.providerEmbeddingModelHint':
+    'Укажите название embedding-модели из LM Studio (например, nomic-embed-text). Она используется только для RAG-поиска по коду.',
+  'settings.embeddingModelNotSet': 'не настроена',
   'settings.providerApiKey': 'API Key',
   'settings.providerApiKeyHint':
     'Пустое поле при редактировании сохраняет текущий ключ.',

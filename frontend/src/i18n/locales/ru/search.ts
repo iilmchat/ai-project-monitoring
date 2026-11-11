@@ -19,7 +19,11 @@ export const search = {
     'RAG недоступен. Проверьте настройки базы данных и модели эмбеддингов.',
   'search.ragUnavailable': 'Поиск по коду недоступен. Проверьте настройки БД',
   'search.embeddingUnavailable':
-    'Модель эмбеддингов недоступна. Проверьте EMBEDDING_* настройки.',
+    'Ошибка: Модель эмбеддингов недоступна. Зайдите в Настройки → AI Провайдеры и укажите embedding-модель (например, nomic-embed-text).',
+  'search.embeddingNotConfigured':
+    'Ошибка: Модель эмбеддингов не настроена. Зайдите в Настройки → AI Провайдеры и укажите embedding-модель (например, nomic-embed-text).',
+  'search.embeddingDimensionMismatch':
+    'Размерность эмбеддингов не совпадает с индексом. Для nomic-embed-text задайте EMBEDDING_DIMENSIONS=768 и переиндексируйте код.',
   'search.error': 'Не удалось выполнить поиск.',
   'search.stale': 'Индекс устарел — рекомендуем переиндексацию.',
   'search.copyPath': 'Копировать путь',

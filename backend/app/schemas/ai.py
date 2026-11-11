@@ -141,9 +141,23 @@ class AgentTask(BaseModel):
     generated_at: datetime
 
 
-class LLMTestResponse(BaseModel):
-    """Result of ``POST /settings/llm/test``."""
+class LLMTestStatus(BaseModel):
+    """Result of one model ping (chat or embeddings)."""
 
+    status: Literal["ok", "error"]
+    latency_ms: float = Field(default=0, ge=0)
+    error: str | None = None
+
+
+class LLMTestResponse(BaseModel):
+    """Result of ``POST /settings/llm/test``.
+
+    ``chat`` and ``embedding`` are the primary contract; the top-level
+    ``status``/``latency_ms``/``error`` fields are kept for older clients.
+    """
+
+    chat: LLMTestStatus
+    embedding: LLMTestStatus
     status: Literal["ok", "error"]
     latency_ms: float = Field(default=0, ge=0)
     error: str | None = None
@@ -162,6 +176,7 @@ __all__ = [
     "DashboardAdvice",
     "DashboardAdviceRequest",
     "LLMTestResponse",
+    "LLMTestStatus",
     "ReleaseNotesRequest",
     "ReleaseNotesResponse",
 ]

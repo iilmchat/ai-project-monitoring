@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.4.1 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.4.2 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -31,7 +31,7 @@
 - **README и документация** — название и версия проекта из README, модальный просмотр Markdown с переходами по внутренним ссылкам и историей «Назад» (read-only).
 - **Действенный дашборд** — кликабельные карточки сводки («9 требуют внимания» → отфильтрованный список), сворачиваемые фильтры/аналитика и человеческие подписи состояний.
 - **Мультиязычный интерфейс (RU/EN)** — переключатель языка рядом с темой, выбор сохраняется; даты и числа локализованы через `Intl`.
-- **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter, GigaChat OAuth) с активацией без перезапуска.
+- **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter, GigaChat OAuth) с активацией без перезапуска и раздельными моделями чата (`model_name`) и эмбеддингов (`embedding_model`, RAG).
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
 - **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев: PostgreSQL + `pgvector` на сервере и SQLite + `sqlite-vec` в desktop-сборке (с Python-fallback, если расширение недоступно).
@@ -271,11 +271,11 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.4.1** (2026-11-11) |
-| Статус | **Управление паролями + RAG on SQLite** |
-| Спринты | 1–61 |
-| Тесты backend | **344** (343 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **66** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Версия | **v1.4.2** (2026-11-11) |
+| Статус | **Разделение chat- и embedding-моделей для RAG** |
+| Спринты | 1–61 + hotfix S63-Fix-3 |
+| Тесты backend | **352** (351 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **67** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **88.87 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
@@ -383,7 +383,7 @@ pnpm --dir frontend exec playwright install chromium
   PR и не исполняет код проверяемых проектов; MSBuild-выражения в .NET не
   вычисляются (KI-025).
 
-**v1.4.0–v1.4.1 «RAG on Desktop & Password Management»** — релиз 2026-11-11
+**v1.4.0–v1.4.2 «RAG on Desktop & Model Split»** — релиз 2026-11-11
 ([`CHANGELOG.md`](docs/CHANGELOG.md)):
 
 - **Sprint 61 — SQLite RAG & UX:** ✅ `sqlite-vec` (`vec0`) вместо обязательного
@@ -393,6 +393,9 @@ pnpm --dir frontend exec playwright install chromium
   (`PATCH /users/me/password`) и admin-сброс пароля
   (`POST /users/{id}/reset-password`), аудит `password_changed`/
   `user_password_reset`.
+- **S63-Fix-3 — Chat & Embedding Models:** ✅ `embedding_model` в профиле
+  AI-провайдера и миграция `016`; чат и RAG используют разные модели; проверка
+  `/settings/llm/test` показывает статусы чата и эмбеддингов отдельно.
 
 **v1.5.0 «Global Analytics & IaC Scanning»** — планируется
 ([`TODO_V1.5.0.md`](TODO_V1.5.0.md)):

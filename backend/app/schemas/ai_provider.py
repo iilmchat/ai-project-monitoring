@@ -17,6 +17,7 @@ class AIProviderRead(BaseModel):
     base_url: str
     api_key: str
     model_name: str
+    embedding_model: str | None = None
     is_active: bool
     created_at: datetime
     provider_type: ProviderType = "openai_compatible"
@@ -31,6 +32,7 @@ class AIProviderCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     base_url: str = Field(min_length=1, max_length=1024)
     model_name: str = Field(min_length=1, max_length=255)
+    embedding_model: str | None = Field(default=None, max_length=255)
     api_key: str | None = Field(default=None, max_length=2048)
     provider_type: ProviderType = "openai_compatible"
     auth_type: AuthType = "api_key"
@@ -43,6 +45,7 @@ class AIProviderUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     base_url: str | None = Field(default=None, min_length=1, max_length=1024)
     model_name: str | None = Field(default=None, min_length=1, max_length=255)
+    embedding_model: str | None = Field(default=None, max_length=255)
     api_key: str | None = Field(default=None, max_length=2048)
     provider_type: ProviderType | None = None
     auth_type: AuthType | None = None

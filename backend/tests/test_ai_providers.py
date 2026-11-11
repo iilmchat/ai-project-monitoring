@@ -14,6 +14,7 @@ async def _create(
     name: str,
     base_url: str = "http://127.0.0.1:1234/v1",
     model: str = "qwen2.5-coder-7b-instruct",
+    embedding_model: str | None = None,
     api_key: str | None = None,
 ) -> dict:
     response = await client.post(
@@ -22,6 +23,7 @@ async def _create(
             "name": name,
             "base_url": base_url,
             "model_name": model,
+            "embedding_model": embedding_model,
             "api_key": api_key,
         },
     )
@@ -39,6 +41,7 @@ async def test_provider_crud_masking_and_first_active(
     )
     assert first["is_active"] is True
     assert first["api_key"] == "sk-a****5678"
+    assert first["embedding_model"] is None
 
     second = await _create(
         client,
@@ -86,6 +89,31 @@ async def test_provider_activation_and_api_key_preserved(
         f"/api/v1/settings/ai-providers/{first['id']}"
     )
     assert deleted.status_code == 204
+
+
+async def test_provider_embedding_model_can_be_set_and_cleared(
+    client: AsyncClient,
+) -> None:
+    provider = await _create(
+        client,
+        name="LM Studio",
+        embedding_model="nomic-embed-text",
+    )
+    assert provider["embedding_model"] == "nomic-embed-text"
+
+    updated = await client.patch(
+        f"/api/v1/settings/ai-providers/{provider['id']}",
+        json={"embedding_model": "text-embedding-nomic-embed-text-v1.5"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["embedding_model"] == "text-embedding-nomic-embed-text-v1.5"
+
+    cleared = await client.patch(
+        f"/api/v1/settings/ai-providers/{provider['id']}",
+        json={"embedding_model": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["embedding_model"] is None
 
 
 async def test_llm_service_uses_active_profile_without_restart(

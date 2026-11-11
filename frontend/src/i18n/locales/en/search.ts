@@ -19,7 +19,11 @@ export const search = {
   'search.ragUnavailable':
     'Code search is unavailable. Check the database settings.',
   'search.embeddingUnavailable':
-    'The embedding model is unavailable. Check the EMBEDDING_* settings.',
+    'Error: The embedding model is unavailable. Open Settings → AI Providers and set an embedding model (for example, nomic-embed-text).',
+  'search.embeddingNotConfigured':
+    'Error: The embedding model is not configured. Open Settings → AI Providers and set an embedding model (for example, nomic-embed-text).',
+  'search.embeddingDimensionMismatch':
+    'The embedding dimension does not match the index. For nomic-embed-text set EMBEDDING_DIMENSIONS=768 and re-index the code.',
   'search.error': 'Could not run the search.',
   'search.stale': 'The index is stale — re-indexing is recommended.',
   'search.copyPath': 'Copy path',

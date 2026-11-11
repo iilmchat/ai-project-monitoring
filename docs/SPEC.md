@@ -12,11 +12,12 @@ Sprints 53–54; §3.30 (conversational RAG) — реализовано в Sprin
 см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md). §3.31–§3.33 (Team Edition, SAST,
 автоматические PR) — реализованы в v1.3.0 (Sprints 57–59), см.
 [`TODO_V1.3.0.md`](../TODO_V1.3.0.md). v1.4.0–v1.4.1 — SQLite + `sqlite-vec`
-RAG и управление паролями (Sprint 61). §3.34 (Global Tech Debt Dashboard) и
+RAG и управление паролями (Sprint 61); v1.4.2 — разделение `model_name` (чат) и
+`embedding_model` (RAG), миграция 016. §3.34 (Global Tech Debt Dashboard) и
 §3.35 (IaC Scanning) — **план v1.5.0** (Sprints 63–64), см.
 [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
 
-**Версия:** v1.4.1 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-11
+**Версия:** v1.4.2 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-11
 
 ---
 
@@ -1326,11 +1327,17 @@ Git-конфигурация только читается, репозитори
 
 **LLM test:**
 
-- Короткий `ping` к текущей модели; HTTP 200 в обоих случаях.
-- `{status: "ok", latency_ms: number}` или
-  `{status: "error", latency_ms: number, error: string}`.
-- Коды ошибок: `llm_disabled`, `llm_remote_not_allowed`, `timeout`,
+- Два коротких `ping`: `/v1/chat/completions` для `model_name` (чат) и
+  `/v1/embeddings` для `embedding_model` (RAG). HTTP 200 в обоих случаях,
+  даже если одна из моделей недоступна.
+- `{chat: {status, latency_ms, error}, embedding: {status, latency_ms, error},
+  status, latency_ms, error}`; верхнеуровневые поля сохранены для старых
+  клиентов, `status="ok"` только если обе модели ответили.
+- Коды ошибок чата: `llm_disabled`, `llm_remote_not_allowed`, `timeout`,
   `connection_error`, `http_<code>`, `invalid_json`, `invalid_response`.
+- Коды ошибок эмбеддингов: `embedding_model_not_configured`,
+  `embedding_remote_not_allowed`, `timeout`, `connection_error`,
+  `http_<code>`, `invalid_json`, `invalid_response`.
 
 ---
 
@@ -1350,11 +1357,13 @@ OpenAI-совместимые профили провайдеров. Актив�
 | POST | `/settings/ai-providers/gigachat/auth` | OAuth-авторизация GigaChat (§3.27) |
 | POST | `/settings/ai-providers/{id}/gigachat/refresh` | обновить токен GigaChat |
 
-`AIProviderRead`: `{id, name, base_url, api_key, model_name, is_active,
-created_at, provider_type, auth_type, client_id, has_client_secret,
+`AIProviderRead`: `{id, name, base_url, api_key, model_name, embedding_model,
+is_active, created_at, provider_type, auth_type, client_id, has_client_secret,
 oauth_scope, oauth_expires_at}`.
 `api_key` всегда маскируется (`sk-a****1234`); `client_secret` и
 `access_token` **никогда** не возвращаются; пустой ключ не отдаётся.
+`model_name` — модель чата; `embedding_model` — отдельная модель для
+`/v1/embeddings` (RAG), может быть `null`.
 
 **Инварианты:**
 
@@ -1363,6 +1372,14 @@ oauth_scope, oauth_expires_at}`.
 - `activate` сбрасывает `is_active` у остальных; активным может быть только
   один профиль.
 - `PATCH` с пустым/отсутствующим `api_key` сохраняет текущий ключ.
+- `PATCH` с пустой строкой `embedding_model` очищает поле (`null`).
+- Чат-методы (`generate_commit_message`, `review_code`, `chat` и др.)
+  используют `model_name`; `embed()`/`/v1/embeddings` — только
+  `embedding_model` активного профиля. Если поле пустое, RAG возвращает
+  `503 embedding_model_not_configured` и не подставляет чат-модель.
+- Миграция `016` добавляет nullable-колонку `embedding_model` и заполняет её
+  `text-embedding-nomic-embed-text-v1.5` для существующих
+  OpenAI-совместимых профилей; GigaChat-профили остаются пустыми.
 - `LLMService` перечитывает активный профиль из БД при каждом вызове
   (изменения применяются без перезапуска).
 - Если активного профиля нет — fallback на `LLM_ENABLED`, `LLM_BASE_URL`,
@@ -1444,10 +1461,18 @@ oauth_scope, oauth_expires_at}`.
   `sqlite-vec` (`vec_chunks`, cosine KNN) в desktop; если C-расширение не
   загрузилось, поиск считает косинус в Python по JSON-эмбеддингам
   (`sqlite_vec_unavailable_fallback_to_python`).
-- Эмбеддинги — OpenAI-compatible `/v1/embeddings` (`EMBEDDING_BASE_URL`,
-  `EMBEDDING_MODEL`, default `text-embedding-3-small`, 1536 измерений;
-  локальная модель настраивается через `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS`);
-  remote embeddings — только `EMBEDDING_ALLOW_REMOTE=true`.
+- Эмбеддинги — OpenAI-compatible `/v1/embeddings`. Модель берётся из
+  `embedding_model` активного профиля (§3.25), а при его отсутствии — из
+  `EMBEDDING_MODEL` (default `text-embedding-3-small`, 1536 измерений);
+  локальная модель настраивается через профиль и `EMBEDDING_DIMENSIONS`
+  (например, `nomic-embed-text` → 768). `embedding_base_url`/`embedding_api_key`
+  остаются настройками RAG; remote embeddings — только
+  `EMBEDDING_ALLOW_REMOTE=true`.
+- Если у активного профиля `embedding_model` не задан, поиск/индексация
+  возвращают `503 embedding_model_not_configured` с указанием открыть
+  «Настройки → AI Провайдеры». HTTP/сетевые ошибки эмбеддингов —
+  `503 embedding_model_unavailable: проверьте настройки AI-провайдера`.
+  Чат-модель `model_name` для эмбеддингов **не** используется.
 - Индекс инкрементальный: hash файла/чанка; неизменённые чанки не
   переэмбеддируются.
 - `stale=true`, если индекс старше последнего сканирования/HEAD; автоматическая
@@ -1830,15 +1855,16 @@ LLM-ответ с цитатами на источники. Использует
     }
   ],
   "model": "qwen2.5-coder-7b-instruct",
-  "embedding_model": "text-embedding-3-small",
+  "embedding_model": "nomic-embed-text",
   "took_ms": 120
 }
 ```
 
 **Правила:**
 
-- Только PostgreSQL + `pgvector`; на SQLite — `503 rag_unavailable`, остальное
-  приложение работает (KI-022).
+- PostgreSQL + `pgvector` или SQLite + `sqlite-vec` (v1.4.0); при недоступном
+  хранилище — `503 rag_unavailable`, остальное приложение работает (KI-022).
+  Эмбеддинги — только `embedding_model` активного профиля (§3.25).
 - Embedding запроса → top-k чанков (`limit`, `min_score`) → контекст с
   `repository/path/start_line/end_line`.
 - Промпт: отвечать только по переданным чанкам; если данных нет — явно сказать
@@ -2470,7 +2496,9 @@ ai_provider_profiles(       -- v0.8.0 (Sprint 39), GigaChat v0.9.0 (Sprint 43)
   provider_type TEXT DEFAULT 'openai_compatible', -- openai_compatible | gigachat
   auth_type TEXT DEFAULT 'api_key',              -- api_key | oauth
   client_id TEXT NULL, client_secret TEXT NULL,
-  oauth_scope TEXT NULL, oauth_expires_at, access_token TEXT NULL
+  oauth_scope TEXT NULL, oauth_expires_at, access_token TEXT NULL,
+  -- v1.4.2 (миграция 016):
+  embedding_model TEXT NULL  -- отдельная модель для /v1/embeddings; NULL = не настроена
 )
 
 code_chunks(                -- v0.9.0 (реализовано, Sprint 44; PostgreSQL + pgvector)
@@ -2536,7 +2564,7 @@ IaC-отчёты не персистятся между перезапускам
 | **Auth (v1.0.0, реализовано)** | **`AUTH_ENABLED` (default true), `ADMIN_USERNAME` (default `admin`), `ADMIN_PASSWORD` (default `admin`, хэшируется при bootstrap), `AUTH_JWT_SECRET` (≥32 байта), `AUTH_TOKEN_TTL_SECONDS` (default 604800 — 7 дней), `AUTH_LOGIN_RATE_LIMIT` (default 5), `AUTH_LOGIN_RATE_WINDOW_SECONDS` (default 60); cookie `iiruchating_session` HttpOnly/SameSite=Lax** |
 | **Desktop (v1.0.0, реализовано)** | **`TAURI_MODE=true` (sidecar) → SQLite в `TAURI_DATA_DIR`/AppData, `SCAN_ROOTS` по умолчанию `~/Projects`; `backend.log` в app-data; RAG только внешний PostgreSQL** |
 | **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
-| **RAG (v0.9.0, реализовано)** | **Только PostgreSQL + `pgvector`; `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL` (default `text-embedding-3-small`), `EMBEDDING_DIMENSIONS` (default 1536), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (default 524288), `RAG_MAX_CHUNKS_PER_REPO` (default 2000), `RAG_CHUNK_CHARS` (default 1000), `RAG_CHUNK_OVERLAP` (default 150); на SQLite — `503 rag_unavailable`** |
+| **RAG (v0.9.0; SQLite v1.4.0)** | **PostgreSQL + `pgvector` или SQLite + `sqlite-vec`; модель — `embedding_model` активного профиля (fallback `EMBEDDING_MODEL`, default `text-embedding-3-small`), `EMBEDDING_BASE_URL`, `EMBEDDING_DIMENSIONS` (default 1536; для `nomic-embed-text` — 768), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (524288), `RAG_MAX_CHUNKS_PER_REPO` (2000), `RAG_CHUNK_CHARS` (1000), `RAG_CHUNK_OVERLAP` (150); пустая модель → `503 embedding_model_not_configured`** |
 
 ---
 
@@ -2761,6 +2789,7 @@ IaC-отчёты не персистятся между перезапускам
 | v1.3.0 | .NET/NuGet, Team Edition (роли, audit log), SAST, автоматические PR | `TODO_V1.3.0.md` |
 | v1.4.0 | RAG на SQLite + `sqlite-vec` для desktop, Python-fallback, UX-фиксы | `docs/CHANGELOG.md` |
 | v1.4.1 | смена своего пароля, admin-сброс пароля | `docs/CHANGELOG.md` |
+| v1.4.2 | `chat_model`/`embedding_model` в профиле AI, отдельная проверка эмбеддингов, миграция 016 | `docs/CHANGELOG.md` |
 | v1.5.0 (план) | Global Tech Debt Dashboard, AI-отчёт по всей базе, IaC Scanning (`Dockerfile`/compose), global-iac | `TODO_V1.5.0.md` |
 
 ---

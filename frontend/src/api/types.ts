@@ -584,6 +584,7 @@ export interface AIProviderProfile {
   base_url: string
   api_key: string
   model_name: string
+  embedding_model: string | null
   is_active: boolean
   created_at: string
   provider_type: 'openai_compatible' | 'gigachat'
@@ -598,6 +599,7 @@ export interface AIProviderCreate {
   name: string
   base_url: string
   model_name: string
+  embedding_model?: string | null
   api_key?: string
   provider_type?: 'openai_compatible' | 'gigachat'
   auth_type?: 'api_key' | 'oauth'
@@ -610,6 +612,7 @@ export interface AIProviderUpdate {
   name?: string
   base_url?: string
   model_name?: string
+  embedding_model?: string | null
   api_key?: string
   provider_type?: 'openai_compatible' | 'gigachat'
   auth_type?: 'api_key' | 'oauth'
@@ -704,7 +707,15 @@ export interface CodeIndexJob {
   started_at: string
 }
 
+export interface LLMTestStatus {
+  status: 'ok' | 'error'
+  latency_ms: number
+  error: string | null
+}
+
 export interface LLMTestResult {
+  chat: LLMTestStatus
+  embedding: LLMTestStatus
   status: 'ok' | 'error'
   latency_ms: number
   error: string | null

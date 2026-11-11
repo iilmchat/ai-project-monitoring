@@ -1,8 +1,8 @@
 # TODO v1.5.0 — Global Analytics & IaC Scanning
 
 **Статус:** Sprint 62 — планирование завершено; спринты 63–65 — запланированы.
-**База:** v1.4.1 «RAG on SQLite & Password Management» (SQLite + `sqlite-vec`
-для desktop, Python-fallback, UX-фиксы поиска и логов, смена/сброс паролей).
+**База:** v1.4.2 «Chat/Embedding Model Split» (раздельные `model_name` и
+`embedding_model` в профиле AI, миграция 016).
 **Цель:** дать сводную картину технического долга по всем tracked-репозиториям
 и добавить read-only аудит инфраструктурных файлов (`Dockerfile`,
 `docker-compose.yml`) без запуска Docker, сборки образов и исполнения кода.

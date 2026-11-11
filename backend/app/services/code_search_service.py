@@ -35,7 +35,7 @@ from app.schemas.code_search import (
     CodeSearchResponse,
     CodeSearchResult,
 )
-from app.services.llm_service import CHAT_SYSTEM_PROMPT, LLMService
+from app.services.llm_service import CHAT_SYSTEM_PROMPT, EmbeddingError, LLMService
 from app.services.sqlite_vec_store import SqliteVecStore
 
 logger = structlog.get_logger(__name__)
@@ -128,8 +128,9 @@ class RagUnavailableError(Exception):
     """RAG is disabled (SQLite) or the embedding model is unavailable."""
 
     def __init__(self, code: str = "rag_unavailable", message: str | None = None) -> None:
-        super().__init__(message or code)
         self.code = code
+        self.message = message
+        super().__init__(message or code)
 
 
 class RagBusyError(Exception):
@@ -244,6 +245,7 @@ class CodeSearchService:
     ) -> CodeSearchResponse:
         self._require_available()
         started = time.perf_counter()
+        embedding_model = await self._embedding_model_name()
         vectors = await self._embed([query])
         query_vector = vectors[0]
 
@@ -271,7 +273,7 @@ class CodeSearchService:
             )
         return CodeSearchResponse(
             query=query,
-            model=self._settings.embedding_model,
+            model=embedding_model,
             took_ms=round((time.perf_counter() - started) * 1000, 1),
             indexed_repositories=int(indexed_repositories),
             stale=_is_stale(last_indexed, last_repository_change),
@@ -511,6 +513,7 @@ class CodeSearchService:
             min_score=min_score,
         )
         results = response.results
+        embedding_model = await self._embedding_model_name()
         config = await self._llm.resolve()
 
         if not results:
@@ -519,7 +522,7 @@ class CodeSearchService:
                 "sources": [],
                 "citations": [],
                 "model": config.model,
-                "embedding_model": self._settings.embedding_model,
+                "embedding_model": embedding_model,
                 "took_ms": round((time.perf_counter() - started) * 1000, 1),
             }
 
@@ -582,7 +585,7 @@ class CodeSearchService:
             ],
             "citations": [result.model_dump() for result in used],
             "model": config.model,
-            "embedding_model": self._settings.embedding_model,
+            "embedding_model": embedding_model,
             "took_ms": round((time.perf_counter() - started) * 1000, 1),
         }
 
@@ -623,6 +626,7 @@ class CodeSearchService:
         inserted = 0
         records: list[_VecRecord] = []
         deleted: list[int] = []
+        embedding_model: str | None = None
         for file_path in _iter_files(root):
             relative = file_path.relative_to(root).as_posix()
             content = _read_text(
@@ -655,9 +659,18 @@ class CodeSearchService:
             deleted.extend(
                 await self._delete_chunks(session, repository.id, relative)
             )
+            if embedding_model is None:
+                embedding_model = await self._embedding_model_name()
+            assert embedding_model is not None
             vectors = await self._embed([chunk.content for chunk in chunks])
             records.extend(
-                await self._insert_chunks(session, repository.id, chunks, vectors)
+                await self._insert_chunks(
+                    session,
+                    repository.id,
+                    chunks,
+                    vectors,
+                    embedding_model,
+                )
             )
             inserted += len(chunks)
         return inserted, records, deleted
@@ -725,12 +738,55 @@ class CodeSearchService:
         )
         return bool(existing) and existing == {chunk.content_hash for chunk in chunks}
 
+    async def _embedding_model_name(self) -> str:
+        resolver = getattr(self._llm, "embedding_model_name", None)
+        if resolver is not None:
+            model = await resolver()
+            if model:
+                return str(model)
+            raise RagUnavailableError(
+                "embedding_model_not_configured",
+                "укажите embedding-модель в настройках AI-провайдера",
+            )
+        model = (self._settings.embedding_model or "").strip()
+        if not model:
+            raise RagUnavailableError(
+                "embedding_model_not_configured",
+                "укажите embedding-модель в настройках AI-провайдера",
+            )
+        return model
+
     async def _embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         batch_size = max(self._settings.embedding_batch_size, 1)
+        embedder = getattr(self._llm, "embed_or_raise", None)
         for start in range(0, len(texts), batch_size):
             batch = texts[start : start + batch_size]
-            result = await self._llm.embed(batch)
+            try:
+                result = (
+                    await embedder(batch)
+                    if embedder is not None
+                    else await self._llm.embed(batch)
+                )
+            except EmbeddingError as exc:
+                if exc.code == "embedding_model_not_configured":
+                    raise RagUnavailableError(
+                        "embedding_model_not_configured",
+                        "укажите embedding-модель в настройках AI-провайдера",
+                    ) from exc
+                if exc.code in {
+                    "http_error",
+                    "timeout",
+                    "connection_error",
+                } or exc.code.startswith("http_"):
+                    raise RagUnavailableError(
+                        "embedding_model_unavailable",
+                        "проверьте настройки AI-провайдера",
+                    ) from exc
+                raise RagUnavailableError(
+                    "embedding_unavailable",
+                    "embedding model is unavailable",
+                ) from exc
             if result is None:
                 raise RagUnavailableError(
                     "embedding_unavailable",
@@ -740,7 +796,8 @@ class CodeSearchService:
                 if len(vector) != self._settings.embedding_dimensions:
                     raise RagUnavailableError(
                         "embedding_dimension_mismatch",
-                        "embedding dimension does not match the index",
+                        "embedding dimension does not match the index; "
+                        "check EMBEDDING_DIMENSIONS",
                     )
             vectors.extend(result)
         return vectors
@@ -751,6 +808,7 @@ class CodeSearchService:
         repository_id: int,
         chunks: list[_Chunk],
         vectors: list[list[float]],
+        embedding_model: str,
     ) -> list[_VecRecord]:
         if self._is_sqlite:
             statement = text(
@@ -783,7 +841,7 @@ class CodeSearchService:
                         "content": chunk.content,
                         "content_hash": chunk.content_hash,
                         "embedding": json.dumps(vector),
-                        "embedding_model": self._settings.embedding_model,
+                        "embedding_model": embedding_model,
                         "indexed_at": indexed_at,
                     },
                 )
@@ -822,7 +880,7 @@ class CodeSearchService:
                     "content": chunk.content,
                     "content_hash": chunk.content_hash,
                     "embedding": json.dumps(vector),
-                    "embedding_model": self._settings.embedding_model,
+                    "embedding_model": embedding_model,
                     "indexed_at": utcnow(),
                 },
             )

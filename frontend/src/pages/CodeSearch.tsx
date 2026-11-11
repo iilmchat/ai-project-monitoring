@@ -54,7 +54,16 @@ function CodeSearchContent() {
     if (text.includes('rag_unavailable')) {
       return t('search.ragUnavailable')
     }
-    if (text.includes('embedding_unavailable')) {
+    if (text.includes('embedding_model_not_configured')) {
+      return t('search.embeddingNotConfigured')
+    }
+    if (text.includes('embedding_dimension_mismatch')) {
+      return t('search.embeddingDimensionMismatch')
+    }
+    if (
+      text.includes('embedding_model_unavailable') ||
+      text.includes('embedding_unavailable')
+    ) {
       return t('search.embeddingUnavailable')
     }
     return t('search.error')

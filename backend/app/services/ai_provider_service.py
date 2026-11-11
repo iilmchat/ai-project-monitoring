@@ -61,6 +61,7 @@ class AIProviderService:
         name: str,
         base_url: str,
         model_name: str,
+        embedding_model: str | None = None,
         api_key: str | None = None,
         provider_type: str = "openai_compatible",
         auth_type: str | None = None,
@@ -78,6 +79,7 @@ class AIProviderService:
                 name=name.strip(),
                 base_url=base_url.strip(),
                 model_name=model_name.strip(),
+                embedding_model=(embedding_model or "").strip() or None,
                 api_key=(api_key or "").strip() or None,
                 provider_type=provider_type,
                 auth_type=(
@@ -110,6 +112,7 @@ class AIProviderService:
         name: str | None = None,
         base_url: str | None = None,
         model_name: str | None = None,
+        embedding_model: str | None = None,
         api_key: str | None = None,
         provider_type: str | None = None,
         auth_type: str | None = None,
@@ -129,6 +132,8 @@ class AIProviderService:
                 profile.base_url = base_url.strip()
             if model_name is not None and model_name.strip():
                 profile.model_name = model_name.strip()
+            if embedding_model is not None:
+                profile.embedding_model = embedding_model.strip() or None
             if api_key is not None and api_key.strip():
                 profile.api_key = api_key.strip()
             if provider_type is not None:
@@ -220,7 +225,7 @@ class AIProviderService:
             result = await session.execute(
                 delete(AIProviderProfile).where(AIProviderProfile.id == profile_id)
             )
-            if result.rowcount == 0:
+            if getattr(result, "rowcount", 0) == 0:
                 raise AIProviderNotFoundError(
                     f"provider {profile_id} not found"
                 )

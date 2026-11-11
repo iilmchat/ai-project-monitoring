@@ -44,6 +44,10 @@ export const settings = {
   'settings.llmOk': 'LLM is responding',
   'settings.llmError': 'LLM is unavailable',
   'settings.llmLatency': 'in {ms} ms',
+  'settings.llmChatStatus': 'Chat',
+  'settings.llmEmbeddingStatus': 'Embeddings',
+  'settings.llmOkShort': 'OK',
+  'settings.llmFailShort': 'Fail',
   'settings.aiProviders': 'AI Providers',
   'settings.aiProvidersHint':
     'OpenAI-compatible profiles: local (LM Studio/Ollama) and remote (DeepSeek, OpenRouter, Yandex, etc.).',
@@ -56,6 +60,10 @@ export const settings = {
   'settings.providerName': 'Name',
   'settings.providerBaseUrl': 'Base URL',
   'settings.providerModel': 'Model',
+  'settings.providerEmbeddingModel': 'Embedding model (RAG)',
+  'settings.providerEmbeddingModelHint':
+    'Enter the embedding model name from LM Studio (for example, nomic-embed-text). It is used only for RAG code search.',
+  'settings.embeddingModelNotSet': 'not configured',
   'settings.providerApiKey': 'API Key',
   'settings.providerApiKeyHint':
     'Leave empty when editing to keep the current key.',

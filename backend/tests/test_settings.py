@@ -9,8 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class FakeLLM:
-    async def test_connection(self) -> tuple[bool, float, str | None]:
+    async def test_chat(self) -> tuple[bool, float, str | None]:
         return True, 123.4, None
+
+    async def test_embedding(self) -> tuple[bool, float, str | None]:
+        return True, 45.6, None
 
 
 async def test_llm_test_endpoint(
@@ -22,7 +25,37 @@ async def test_llm_test_endpoint(
     response = await client.post("/api/v1/settings/llm/test")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "latency_ms": 123.4, "error": None}
+    assert response.json() == {
+        "chat": {"status": "ok", "latency_ms": 123.4, "error": None},
+        "embedding": {"status": "ok", "latency_ms": 45.6, "error": None},
+        "status": "ok",
+        "latency_ms": 123.4,
+        "error": None,
+    }
+
+
+async def test_llm_test_endpoint_reports_embedding_failure(
+    app,
+    client: AsyncClient,
+) -> None:
+    class EmbeddingFailLLM(FakeLLM):
+        async def test_embedding(self) -> tuple[bool, float, str | None]:
+            return False, 12.0, "embedding_model_not_configured"
+
+    app.state.llm_service = EmbeddingFailLLM()
+
+    response = await client.post("/api/v1/settings/llm/test")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["chat"] == {"status": "ok", "latency_ms": 123.4, "error": None}
+    assert payload["embedding"] == {
+        "status": "error",
+        "latency_ms": 12.0,
+        "error": "embedding_model_not_configured",
+    }
+    assert payload["status"] == "error"
+    assert payload["error"] == "embedding_model_not_configured"
 
 
 async def test_settings_are_masked_and_persisted(

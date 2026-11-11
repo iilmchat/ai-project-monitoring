@@ -87,6 +87,27 @@ class LLMConfig:
     allow_remote: bool
     provider_type: str = "openai_compatible"
     profile_id: int | None = None
+    embedding_model: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddingConfig:
+    """Effective configuration for ``/v1/embeddings`` requests."""
+
+    model: str
+    base_url: str
+    api_key: str
+    timeout: float
+    allow_remote: bool
+
+
+class EmbeddingError(Exception):
+    """Structured embedding failure used by RAG to return a useful message."""
+
+    def __init__(self, code: str, message: str | None = None) -> None:
+        self.code = code
+        self.message = message or code
+        super().__init__(self.message)
 
 
 class LLMService:
@@ -132,6 +153,7 @@ class LLMService:
                     allow_remote=self._settings.llm_allow_remote,
                     provider_type=provider_type,
                     profile_id=profile.id,
+                    embedding_model=profile.embedding_model,
                 )
         return LLMConfig(
             enabled=bool(self._settings.llm_enabled),
@@ -141,7 +163,50 @@ class LLMService:
             api_key=self._settings.llm_api_key,
             timeout=self._settings.llm_timeout_seconds,
             allow_remote=self._settings.llm_allow_remote,
+            embedding_model=self._settings.embedding_model,
         )
+
+    async def resolve_embedding(self) -> EmbeddingConfig:
+        """Return the effective embedding model and endpoint.
+
+        The active profile is the source of truth for the model id. A profile
+        with an empty ``embedding_model`` is a configuration error rather than a
+        silent fallback to the chat model: LM Studio serves chat and embedding
+        models separately.
+        """
+        config = await self.resolve()
+        if config.profile_id is not None:
+            model = (config.embedding_model or "").strip()
+        else:
+            model = (self._settings.embedding_model or "").strip()
+        if not model:
+            raise EmbeddingError(
+                "embedding_model_not_configured",
+                "embedding_model_not_configured",
+            )
+        base_url = (
+            self._settings.embedding_base_url.strip().rstrip("/")
+            or config.base_url.strip().rstrip("/")
+        )
+        api_key = (
+            self._settings.embedding_api_key
+            or config.api_key
+            or self._settings.llm_api_key
+        )
+        return EmbeddingConfig(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            timeout=self._settings.embedding_timeout_seconds,
+            allow_remote=self._settings.embedding_allow_remote,
+        )
+
+    async def embedding_model_name(self) -> str | None:
+        """Return the configured embedding model id, if any."""
+        config = await self.resolve()
+        if config.profile_id is not None:
+            return (config.embedding_model or "").strip() or None
+        return (self._settings.embedding_model or "").strip() or None
 
     async def availability(self) -> tuple[bool, str | None]:
         """Return ``(ok, error)`` for the effective configuration."""
@@ -423,66 +488,79 @@ class LLMService:
         )
 
     async def embed(self, texts: list[str]) -> list[list[float]] | None:
-        """Return embeddings for ``texts`` via an OpenAI-compatible endpoint."""
+        """Compatibility wrapper that swallows embedding failures.
+
+        RAG uses :meth:`embed_or_raise` so it can distinguish a missing
+        embedding model from a transport error and show a useful message.
+        """
+        try:
+            return await self.embed_or_raise(texts)
+        except EmbeddingError as exc:
+            logger.warning(
+                "embedding_request_failed",
+                reason=exc.code,
+            )
+            return None
+
+    async def embed_or_raise(self, texts: list[str]) -> list[list[float]]:
+        """Return embeddings, raising :class:`EmbeddingError` on failure."""
         if not texts:
             return []
-        base = self._settings.embedding_base_url.strip().rstrip("/")
-        if not _is_remote_allowed(base, self._settings.embedding_allow_remote):
-            logger.warning("embedding_request_blocked", reason="remote_not_allowed")
-            return None
+        config = await self.resolve_embedding()
+        if not _is_remote_allowed(config.base_url, config.allow_remote):
+            raise EmbeddingError(
+                "embedding_remote_not_allowed",
+                "embedding endpoint is not allowed",
+            )
         headers = {"Accept": "application/json"}
-        api_key = self._settings.embedding_api_key or self._settings.llm_api_key
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
         payload = {
-            "model": self._settings.embedding_model,
+            "model": config.model,
             "input": texts,
         }
         try:
             async with httpx.AsyncClient(
-                timeout=self._settings.embedding_timeout_seconds,
+                timeout=config.timeout,
                 transport=self._transport,
             ) as client:
                 response = await client.post(
-                    _embeddings_endpoint(base),
+                    _embeddings_endpoint(config.base_url),
                     json=payload,
                     headers=headers,
                 )
-        except httpx.TimeoutException:
-            logger.warning("embedding_request_failed", reason="timeout")
-            return None
-        except httpx.HTTPError:
-            logger.warning("embedding_request_failed", reason="http_error")
-            return None
+        except httpx.TimeoutException as exc:
+            raise EmbeddingError("timeout", "embedding request timed out") from exc
+        except httpx.HTTPError as exc:
+            raise EmbeddingError("http_error", "embedding request failed") from exc
         if response.status_code != 200:
-            logger.warning(
-                "embedding_request_failed",
-                status_code=response.status_code,
+            raise EmbeddingError(
+                f"http_{response.status_code}",
+                f"embedding endpoint returned {response.status_code}",
             )
-            return None
         try:
             body = response.json()
-        except ValueError:
-            return None
+        except ValueError as exc:
+            raise EmbeddingError("invalid_json", "invalid embedding response") from exc
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, list) or len(data) != len(texts):
-            return None
+            raise EmbeddingError("invalid_response", "invalid embedding response")
         vectors: list[list[float]] = []
         for index, item in enumerate(data):
             if not isinstance(item, dict):
-                return None
+                raise EmbeddingError("invalid_response", "invalid embedding response")
             vector = item.get("embedding")
             if not isinstance(vector, list) or not vector:
-                return None
+                raise EmbeddingError("invalid_response", "invalid embedding response")
             if not all(isinstance(value, int | float) for value in vector):
-                return None
+                raise EmbeddingError("invalid_response", "invalid embedding response")
             if item.get("index") not in (None, index):
-                return None
+                raise EmbeddingError("invalid_response", "invalid embedding response")
             vectors.append([float(value) for value in vector])
         return vectors
 
-    async def test_connection(self) -> tuple[bool, float, str | None]:
-        """Ping the configured model and return ``(ok, latency_ms, error)``."""
+    async def test_chat(self) -> tuple[bool, float, str | None]:
+        """Ping the configured chat model and return ``(ok, latency_ms, error)``."""
         config = await self.resolve()
         if not config.enabled:
             return False, 0.0, "llm_disabled"
@@ -528,6 +606,22 @@ class LLMService:
         except ValueError:
             return False, latency, "invalid_json"
         if _extract_message(body) is None:
+            return False, latency, "invalid_response"
+        return True, latency, None
+
+    async def test_connection(self) -> tuple[bool, float, str | None]:
+        """Backward-compatible alias for the chat-model ping."""
+        return await self.test_chat()
+
+    async def test_embedding(self) -> tuple[bool, float, str | None]:
+        """Ping the embedding model and return ``(ok, latency_ms, error)``."""
+        started = time.perf_counter()
+        try:
+            vectors = await self.embed_or_raise(["ping"])
+        except EmbeddingError as exc:
+            return False, _elapsed_ms(started), exc.code
+        latency = _elapsed_ms(started)
+        if len(vectors) != 1 or not vectors[0]:
             return False, latency, "invalid_response"
         return True, latency, None
 
@@ -795,6 +889,8 @@ __all__ = [
     "RELEASE_NOTES_SYSTEM_PROMPT",
     "SECURITY_SYSTEM_PROMPT",
     "UNIFICATION_SYSTEM_PROMPT",
+    "EmbeddingConfig",
+    "EmbeddingError",
     "LLMConfig",
     "LLMService",
 ]

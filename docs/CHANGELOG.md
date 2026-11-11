@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-11
+
+Разделение моделей чата и эмбеддингов: LM Studio больше не получает
+чат-модель в `/v1/embeddings`, RAG работает с `nomic-embed-text` при
+загруженном `qwen2.5-coder`.
+
+### Добавлено
+
+- feat(ai): `AIProviderProfile.embedding_model` — отдельная nullable-модель
+  для RAG; миграция `016` заполняет существующие OpenAI-совместимые профили
+  `text-embedding-nomic-embed-text-v1.5`.
+- feat(ai): `embedding_model` в `AIProviderRead`/`AIProviderCreate`/
+  `AIProviderUpdate`; создание, редактирование и очистка поля.
+- feat(ui): второе поле «Модель для эмбеддингов (RAG)» в модалке провайдера,
+  подсказка про LM Studio и отображение модели в списке профилей.
+- feat(llm): `EmbeddingConfig`/`EmbeddingError`, `resolve_embedding()` и
+  `embed_or_raise()`; `embed()` использует только `embedding_model`, а не
+  `model_name`.
+- feat(settings): `POST /settings/llm/test` проверяет чат и эмбеддинги
+  отдельно (`chat`, `embedding`), верхнеуровневый `status` — `ok` только при
+  успехе обеих моделей; UI показывает два бейджа «Чат» и «Эмбеддинги».
+- feat(rag): понятные ошибки `embedding_model_not_configured` и
+  `embedding_model_unavailable: проверьте настройки AI-провайдера`; на
+  `/search` показывается ссылка на «Настройки → AI Провайдеры».
+
+### Изменено
+
+- test: `test_code_search.py` (модель из активного профиля, missing model,
+  HTTP error), `test_ai_providers.py` (roundtrip `embedding_model`),
+  `test_settings.py` (два статуса), `test_sidecar_migrations.py` (016 +
+  backfill), `CodeSearch.test.tsx` (embedding error hint).
+- chore(release): версия `1.4.2` во всех манифестах.
+
 ## [1.4.1] - 2026-11-11
 
 Управление паролями: смена своего пароля и административный сброс.

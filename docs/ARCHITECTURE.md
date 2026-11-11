@@ -13,6 +13,7 @@
 [`TODO_V1.2.0.md`](../TODO_V1.2.0.md); §29–§32 — реализованы в v1.3.0
 (Sprints 57–59), см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md); §33–§34 —
 **план v1.5.0** (Sprints 63–64), см. [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
+v1.4.2 — разделение `model_name` (чат) и `embedding_model` (RAG) в §15.7/§21.
 
 ---
 
@@ -991,10 +992,13 @@ POST /repositories/{id}/ai/cve-explain
   dirty-счётчики, upstream, конфликтные файлы и темы последних 8 коммитов,
   затем просит LLM написать Markdown-задачу для DSH/OpenCode. Код, diff и
   секреты не отправляются.
-- `POST /settings/llm/test`: короткий `ping` к модели; возвращает
-  `{status, latency_ms, error}` (200 в обоих случаях), ошибки —
-  `llm_disabled`, `llm_remote_not_allowed`, `timeout`, `connection_error`,
-  `http_<code>`.
+- `POST /settings/llm/test`: два коротких `ping` — чат (`model_name`) и
+  эмбеддинги (`embedding_model`); возвращает
+  `{chat: {status, latency_ms, error}, embedding: {...}, status, latency_ms,
+  error}` (200 в обоих случаях). Ошибки чата — `llm_disabled`,
+  `llm_remote_not_allowed`, `timeout`, `connection_error`, `http_<code>`;
+  эмбеддингов — `embedding_model_not_configured`, `embedding_remote_not_allowed`,
+  `timeout`, `connection_error`, `http_<code>`.
 - UI: AI-дайджест и модалка задачи загружаются через `React.lazy`, чтобы не
   раздувать entry bundle.
 
@@ -1011,8 +1015,10 @@ POST /repositories/{id}/ai/cve-explain
 ### 15.7. AI provider profiles (Sprint 39)
 
 `AIProviderProfile` (`ai_provider_profiles`) хранит OpenAI-совместимые профили:
-`name`, `base_url`, `api_key`, `model_name`, `is_active`, `created_at`.
-`AIProviderService` выполняет CRUD и активацию (только один `is_active`).
+`name`, `base_url`, `api_key`, `model_name`, `embedding_model`, `is_active`,
+`created_at`. `model_name` — модель чата; `embedding_model` — отдельная модель
+для `/v1/embeddings` (RAG), nullable. `AIProviderService` выполняет CRUD и
+активацию (только один `is_active`).
 
 `LLMService.resolve()` при каждом AI-вызове читает активный профиль из БД и
 возвращает `LLMConfig`; при отсутствии активного профиля используется
@@ -1027,6 +1033,15 @@ POST /repositories/{id}/ai/cve-explain
 `provider_type="gigachat"` `LLMService` делегирует в `GigaChatProvider` (§22);
 остальные профили работают по текущему пути. Smart cache (§15.4) применяется ко
 всем AI-фичам, кроме `/settings/llm/test`.
+
+**v1.4.2 (split chat/embeddings):** `LLMService.resolve()` также отдаёт
+`embedding_model` активного профиля. `resolve_embedding()` — отдельный
+конфиг для `/v1/embeddings`; `embed_or_raise()` использует только его и
+бросает `EmbeddingError` (`embedding_model_not_configured`, `http_error`,
+`timeout`, …). Чат-методы продолжают использовать `model_name`; подмены
+чат-модели для RAG нет. Миграция `016` добавляет nullable-колонку и
+backfill'ит существующие OpenAI-совместимые профили
+`text-embedding-nomic-embed-text-v1.5`.
 
 ---
 
@@ -1243,9 +1258,12 @@ POST /api/v1/search/code/index {repository_ids?, force?}
 - индексы: `(repository_id)`, `(content_hash)`, HNSW по embedding.
 
 Размерность — `EMBEDDING_DIMENSIONS` (default 1536,
-`text-embedding-3-small`; локальная модель настраивается). Смена
-модели/размерности требует миграции и полной переиндексации; при старте
+`text-embedding-3-small`; для `nomic-embed-text` — 768). Модель берётся из
+`embedding_model` активного профиля (§15.7), fallback — `EMBEDDING_MODEL`.
+Смена модели/размерности требует миграции и полной переиндексации; при старте
 сервис сверяет длину вектора и возвращает `embedding_dimension_mismatch`.
+Если `embedding_model` не задан — `embedding_model_not_configured`; HTTP-ошибка
+эмбеддингов — `embedding_model_unavailable: проверьте настройки AI-провайдера`.
 
 SQLite (`015`, desktop):
 

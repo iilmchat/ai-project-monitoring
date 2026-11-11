@@ -174,7 +174,18 @@ function SettingsContent() {
     try {
       setLlmTest(await testLlm())
     } catch {
-      setLlmTest({ status: 'error', latency_ms: 0, error: 'request_failed' })
+      const failed = {
+        status: 'error' as const,
+        latency_ms: 0,
+        error: 'request_failed',
+      }
+      setLlmTest({
+        chat: failed,
+        embedding: failed,
+        status: 'error',
+        latency_ms: 0,
+        error: 'request_failed',
+      })
     } finally {
       setLlmTesting(false)
     }
@@ -584,19 +595,44 @@ function SettingsContent() {
         </div>
 
         {llmTest && (
-          <p
-            className={`mt-3 rounded-md px-3 py-2 text-sm ${
-              llmTest.status === 'ok'
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
-            }`}
-          >
-            {llmTest.status === 'ok'
-              ? `${t('settings.llmOk')} · ${t('settings.llmLatency', {
-                  ms: Math.round(llmTest.latency_ms),
-                })}`
-              : `${t('settings.llmError')}${llmTest.error ? ` (${llmTest.error})` : ''}`}
-          </p>
+          <div className="mt-3 space-y-1 rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  llmTest.chat.status === 'ok'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+                }`}
+              >
+                {t('settings.llmChatStatus')}:{' '}
+                {llmTest.chat.status === 'ok'
+                  ? t('settings.llmOkShort')
+                  : t('settings.llmFailShort')}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  llmTest.embedding.status === 'ok'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+                }`}
+              >
+                {t('settings.llmEmbeddingStatus')}:{' '}
+                {llmTest.embedding.status === 'ok'
+                  ? t('settings.llmOkShort')
+                  : t('settings.llmFailShort')}
+              </span>
+            </div>
+            {llmTest.chat.error && (
+              <p className="text-xs text-red-700 dark:text-red-300">
+                {t('settings.llmChatStatus')}: {llmTest.chat.error}
+              </p>
+            )}
+            {llmTest.embedding.error && (
+              <p className="text-xs text-red-700 dark:text-red-300">
+                {t('settings.llmEmbeddingStatus')}: {llmTest.embedding.error}
+              </p>
+            )}
+          </div>
         )}
 
         <div className="mt-4">
@@ -645,6 +681,10 @@ function SettingsContent() {
                       </div>
                       <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
                         {item.model_name}
+                      </p>
+                      <p className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {t('settings.providerEmbeddingModel')}:{' '}
+                        {item.embedding_model || t('settings.embeddingModelNotSet')}
                       </p>
                       <p className="truncate font-mono text-xs text-slate-400 dark:text-slate-500">
                         {item.base_url}
