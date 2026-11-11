@@ -35,6 +35,17 @@ export const admin = {
   'admin.pageInfo': 'Showing {from}–{to} of {total}',
   'admin.auditEmpty': 'No entries yet.',
   'admin.refresh': 'Refresh',
+  'admin.actions': 'Actions',
+  'admin.resetPassword': 'Reset password',
+  'admin.resetPasswordTitle': 'Reset password: {username}',
+  'admin.resetPasswordHint':
+    'Set a new password or generate a random one. The user can sign in with it immediately.',
+  'admin.newPassword': 'New password',
+  'admin.generatePassword': 'Generate',
+  'admin.savePassword': 'Save',
+  'admin.passwordTooShort': 'The password must be at least 8 characters.',
+  'admin.passwordResetError': 'Could not reset the password.',
+  'admin.passwordResetToast': 'Password for {username} has been reset',
 } as const
 
 export type AdminDictionary = typeof admin

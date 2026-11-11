@@ -35,6 +35,17 @@ export const admin = {
   'admin.pageInfo': 'Показано {from}–{to} из {total}',
   'admin.auditEmpty': 'Записей пока нет.',
   'admin.refresh': 'Обновить',
+  'admin.actions': 'Действия',
+  'admin.resetPassword': 'Сбросить пароль',
+  'admin.resetPasswordTitle': 'Сброс пароля: {username}',
+  'admin.resetPasswordHint':
+    'Задайте новый пароль или сгенерируйте случайный. Пользователь сможет войти с ним сразу.',
+  'admin.newPassword': 'Новый пароль',
+  'admin.generatePassword': 'Сгенерировать',
+  'admin.savePassword': 'Сохранить',
+  'admin.passwordTooShort': 'Пароль должен содержать не менее 8 символов.',
+  'admin.passwordResetError': 'Не удалось сбросить пароль.',
+  'admin.passwordResetToast': 'Пароль для {username} успешно сброшен',
 } as const
 
 export type AdminDictionary = typeof admin

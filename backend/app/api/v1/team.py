@@ -9,11 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin
+from app.api.deps import current_user, require_admin
 from app.db.session import get_session
 from app.models.entities import User
 from app.schemas.audit import AuditActor, AuditEntryRead, AuditLogPage
 from app.schemas.auth import (
+    PasswordChangeRequest,
+    PasswordOperationResponse,
+    PasswordResetRequest,
     UserCreate,
     UserInviteResponse,
     UserRead,
@@ -145,6 +148,65 @@ async def update_user(
         {"username": updated.username, **details},
     )
     return _read(updated)
+
+
+@router.patch("/users/me/password", response_model=PasswordOperationResponse)
+async def change_own_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+) -> PasswordOperationResponse:
+    """Change the password of the authenticated user (S61-004)."""
+    auth = _auth(request)
+    actor = current_user(request)
+    if actor is None:
+        # Local mode without auth has no request user; manage the bootstrap admin.
+        settings = request.app.state.settings
+        actor = await auth.get_by_username(settings.admin_username)
+    if actor is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if not auth.verify_password(payload.old_password, actor.hashed_password):
+        raise HTTPException(status_code=400, detail="invalid_old_password")
+
+    updated = await auth.update_user(actor.id, password=payload.new_password)
+    if updated is None:  # pragma: no cover - guarded by the lookup above
+        raise HTTPException(status_code=404, detail="user_not_found")
+    await _audit(request).log(
+        actor.id,
+        "password_changed",
+        "user",
+        actor.id,
+        {"username": updated.username},
+    )
+    return PasswordOperationResponse()
+
+
+@router.post(
+    "/users/{user_id}/reset-password",
+    response_model=PasswordOperationResponse,
+)
+async def reset_user_password(
+    user_id: int,
+    payload: PasswordResetRequest,
+    request: Request,
+    admin: Annotated[User | None, Depends(require_admin)],
+) -> PasswordOperationResponse:
+    """Admin-only password reset for another account (S61-004)."""
+    auth = _auth(request)
+    target = await auth.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+
+    updated = await auth.update_user(user_id, password=payload.new_password)
+    if updated is None:  # pragma: no cover - guarded by the lookup above
+        raise HTTPException(status_code=404, detail="user_not_found")
+    await _audit(request).log(
+        admin.id if admin is not None else None,
+        "user_password_reset",
+        "user",
+        user_id,
+        {"username": updated.username},
+    )
+    return PasswordOperationResponse()
 
 
 @router.get("/audit", response_model=AuditLogPage)

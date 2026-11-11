@@ -603,6 +603,26 @@ export async function updateUser(
   })
 }
 
+export async function changePassword(
+  oldPassword: string,
+  newPassword: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>('/users/me/password', {
+    method: 'PATCH',
+    body: { old_password: oldPassword, new_password: newPassword },
+  })
+}
+
+export async function resetUserPassword(
+  userId: number,
+  newPassword: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>(`/users/${userId}/reset-password`, {
+    method: 'POST',
+    body: { new_password: newPassword },
+  })
+}
+
 export async function getAuditLog(
   limit = 50,
   offset = 0,

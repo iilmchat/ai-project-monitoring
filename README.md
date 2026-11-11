@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.4.0 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.4.1 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -39,7 +39,7 @@
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
 - **Conversational RAG** — чат с кодовой базой на `/search`: векторный поиск (pgvector в PostgreSQL, `sqlite-vec` в desktop) по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
-- **Командная работа (v1.3.0)** — роли `Admin`/`Auditor`, приглашение пользователей с временным паролем, смена ролей и append-only журнал аудита действий с admin-страницами `/admin/users` и `/admin/audit`.
+- **Командная работа (v1.3.0)** — роли `Admin`/`Auditor`, приглашение пользователей с временным паролем, смена ролей, смена своего пароля и админский сброс пароля (v1.4.1), append-only журнал аудита действий с admin-страницами `/admin/users` и `/admin/audit`.
 - **Безопасность** — CVE-сканер зависимостей Python/Node/.NET через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **SAST** — статический анализ кода bandit/semgrep (eslint-fallback): command injection, SQL/инъекции, XSS; severity, `file:line`, кэш 24 ч и объяснение находки локальной LLM.
 - **Автоматические PR** — генерация `.github/dependabot.yml` или `renovate.json` для Python/Node/.NET с предпросмотром и копированием; приложение не коммитит и не пушит.
@@ -271,12 +271,12 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.4.0** (2026-11-11) |
-| Статус | **RAG on SQLite (sqlite-vec) + UX-фиксы** |
+| Версия | **v1.4.1** (2026-11-11) |
+| Статус | **Управление паролями + RAG on SQLite** |
 | Спринты | 1–61 |
-| Тесты backend | **339** (338 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **65** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **88.82 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
+| Тесты backend | **344** (343 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **66** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **88.87 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |

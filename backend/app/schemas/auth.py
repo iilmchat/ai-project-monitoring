@@ -43,6 +43,23 @@ class UserInviteResponse(BaseModel):
     temporary_password: str | None = None
 
 
+class PasswordChangeRequest(BaseModel):
+    """Self-service password change (S61-004)."""
+
+    old_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=8, max_length=1024)
+
+
+class PasswordResetRequest(BaseModel):
+    """Admin reset of another user's password (S61-004)."""
+
+    new_password: str = Field(min_length=8, max_length=1024)
+
+
+class PasswordOperationResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -63,6 +80,9 @@ class ResetDbResponse(BaseModel):
 __all__ = [
     "LoginRequest",
     "LoginResponse",
+    "PasswordChangeRequest",
+    "PasswordOperationResponse",
+    "PasswordResetRequest",
     "ResetDbRequest",
     "ResetDbResponse",
     "UserCreate",

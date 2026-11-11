@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react'
 
 import {
   activateAIProvider,
+  changePassword,
   deleteAIProvider,
   getAIProviders,
   getSettings,
@@ -68,6 +69,11 @@ function SettingsContent() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logsError, setLogsError] = useState<string | null>(null)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [updateChecking, setUpdateChecking] = useState(false)
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null)
   const [updateInstalling, setUpdateInstalling] = useState(false)
@@ -225,6 +231,36 @@ function SettingsContent() {
       }
     } catch {
       setLogsError(t('settings.openLogsError'))
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent) {
+    event.preventDefault()
+    setPasswordError(null)
+    if (newPassword.length < 8) {
+      setPasswordError(t('settings.passwordTooShort'))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('settings.passwordMismatch'))
+      return
+    }
+    setChangingPassword(true)
+    try {
+      await changePassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      showUpdateToast(t('settings.passwordChanged'))
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : ''
+      setPasswordError(
+        text.includes('invalid_old_password')
+          ? t('settings.invalidOldPassword')
+          : t('settings.passwordError'),
+      )
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -750,6 +786,80 @@ function SettingsContent() {
         <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
           {t('settings.workspaceFormat', { filename: WORKSPACE_FILENAME })}
         </p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {t('settings.security')}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {t('settings.securityHint')}
+        </p>
+        <form
+          onSubmit={(event) => void handleChangePassword(event)}
+          className="mt-4 grid max-w-md gap-3"
+        >
+          <label className="text-sm" htmlFor="current-password">
+            <span className="mb-1 block text-slate-600 dark:text-slate-300">
+              {t('settings.currentPassword')}
+            </span>
+            <input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
+            />
+          </label>
+          <label className="text-sm" htmlFor="new-password">
+            <span className="mb-1 block text-slate-600 dark:text-slate-300">
+              {t('settings.newPassword')}
+            </span>
+            <input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
+            />
+          </label>
+          <label className="text-sm" htmlFor="confirm-password">
+            <span className="mb-1 block text-slate-600 dark:text-slate-300">
+              {t('settings.confirmPassword')}
+            </span>
+            <input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
+            />
+          </label>
+          {passwordError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {passwordError}
+            </p>
+          )}
+          <div>
+            <button
+              type="submit"
+              disabled={
+                changingPassword ||
+                !currentPassword ||
+                !newPassword ||
+                !confirmPassword
+              }
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {changingPassword
+                ? t('settings.changingPassword')
+                : t('settings.changePassword')}
+            </button>
+          </div>
+        </form>
       </div>
 
       {providerModal && (

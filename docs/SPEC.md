@@ -1534,6 +1534,14 @@ running, errors[]}`.
 | POST | `/api/v1/auth/login` | `{username, password}` | `LoginResponse` + `Set-Cookie` |
 | GET | `/api/v1/auth/me` | — | `{id, username}` |
 | POST | `/api/v1/auth/logout` | — | `204`, cookie очищена |
+| PATCH | `/api/v1/users/me/password` | `{old_password, new_password}` | `{status: "ok"}` |
+| POST | `/api/v1/users/{id}/reset-password` | `{new_password}` | `{status: "ok"}`, только admin |
+
+- Смена своего пароля (S61-004): `old_password` проверяется через bcrypt; при
+  ошибке — `400 invalid_old_password`; `new_password` — 8–1024 символа; пишется
+  аудит `password_changed` (без пароля/hash).
+- Сброс пароля администратором: `403 insufficient_role` для аудитора,
+  `404 user_not_found` для неизвестного id, аудит `user_password_reset`.
 
 **`LoginResponse`:**
 
