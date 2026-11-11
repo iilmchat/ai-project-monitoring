@@ -32,6 +32,7 @@ from app.services.ci_service import CIService
 from app.services.code_search_service import CodeSearchService
 from app.services.compare_cache import CompareCache
 from app.services.dashboard_advice_service import DashboardAdviceService
+from app.services.database_reset_service import DatabaseResetService
 from app.services.dependency_service import DependencyService
 from app.services.dependency_update_service import DependencyUpdateService
 from app.services.docker_service import DockerService
@@ -213,6 +214,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notification_service=notification_service,
     )
     auth_service = AuthService(session_factory, resolved)
+    database_reset_service = DatabaseResetService(resolved, engine, auth_service)
     audit_service = AuditService(session_factory)
 
     @asynccontextmanager
@@ -275,6 +277,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.bulk_service = bulk_service
     application.state.settings_service = settings_service
     application.state.auth_service = auth_service
+    application.state.database_reset_service = database_reset_service
     application.state.audit_service = audit_service
     application.state.notification_service = notification_service
     application.add_middleware(RequestLoggingMiddleware)

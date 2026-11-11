@@ -1,6 +1,38 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.3.1 (2026-11-11)
+**Текущая версия:** v1.3.2 (2026-11-11)
+
+---
+
+## Релиз v1.3.2 — «UX Polish & Smart Digest»
+
+**Дата:** 2026-11-11 · **Тег:** `v1.3.2`
+
+Итоги спринта 60 (по результатам ручного UX-тестирования v1.3.1):
+
+- **S60-001 — умный AI-дайджест:** в промпт передаются конкретные списки
+  (`repos_with_ahead`, `repos_with_most_outdated`, `critical_cves`,
+  dirty/behind/diverged), LLM обязана назвать проекты в 3 рекомендациях.
+- **S60-002 — локализация:** «Обновить всё», «Синхр. зеркала»,
+  «Впереди / Позади», «Сборка».
+- **S60-003 — тултипы:** bulk-кнопки, «Мигрировать на GitFlic» и кнопки шапки.
+- **S60-004 — «Проверено»:** относительное время под статусом, точная дата в
+  `title`; локальная утилита `formatRelativeTime`, новых зависимостей нет.
+- **S60-005 — автодетект remote:** `parse_remote_url` понимает SSH/HTTPS и
+  GitFlic-раскладку, `GET /repositories?detect_remote=true` отдаёт
+  `detected_github_name` / `detected_gitflic_name`, модалка политики
+  подставляет значения с подсказкой «Определено автоматически из git remote».
+- **S60-Fix-001 — авто-хирургия БД:** база, где `alembic_version` уже 013/014,
+  но в `users` нет `role`, чинится точечным `ALTER TABLE` + `UPDATE` и повторным
+  `upgrade head`; данные не удаляются, событие `db_schema_repaired`.
+- **S60-Fix-002 — версия на UI:** `GET /api/v1/health` → версия на экране входа
+  и в шапке приложения.
+- **S60-Fix-003 — сброс БД:** `POST /api/v1/auth/reset-db` (loopback +
+  `confirm=true`) пересоздаёт SQLite и `admin/admin`; ссылка с подтверждением на
+  экране входа.
+- **Проверки:** backend pytest (все зелёные), `ruff`, `mypy`,
+  frontend `typecheck/lint/test/build`, entry bundle 88.83 kB gzip
+  (budget 90 kB).
 
 ---
 

@@ -87,6 +87,32 @@ def test_legacy_v110_database_is_stamped_and_upgraded(tmp_path: Path) -> None:
     assert "role" in user_columns
 
 
+def test_half_migrated_roles_are_repaired_without_data_loss(tmp_path: Path) -> None:
+    db_path = tmp_path / "half-migrated.db"
+    _apply_migrations(_url(db_path))
+    asyncio.run(
+        _execute(
+            _url(db_path),
+            "ALTER TABLE users DROP COLUMN role",
+            "INSERT INTO users (username, hashed_password, is_active, created_at) "
+            "VALUES ('admin', 'hash', 1, '2026-01-01 00:00:00')",
+        )
+    )
+
+    _apply_migrations(_url(db_path))
+
+    with sqlite3.connect(db_path) as connection:
+        columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(users)")
+        }
+        role = connection.execute(
+            "SELECT role FROM users WHERE username = 'admin'"
+        ).fetchone()
+    assert "role" in columns
+    assert role is not None and role[0] == "admin"
+    assert _revision(db_path) == "014"
+
+
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     db_path = tmp_path / "idempotent.db"
 

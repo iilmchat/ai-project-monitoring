@@ -50,9 +50,21 @@ class LoginResponse(BaseModel):
     user: UserRead
 
 
+class ResetDbRequest(BaseModel):
+    """Explicit confirmation for the destructive local reset (S60-Fix-003)."""
+
+    confirm: bool = False
+
+
+class ResetDbResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 __all__ = [
     "LoginRequest",
     "LoginResponse",
+    "ResetDbRequest",
+    "ResetDbResponse",
     "UserCreate",
     "UserInviteResponse",
     "UserRead",

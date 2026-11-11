@@ -20,6 +20,7 @@ AUTH_EXEMPT_PATHS = frozenset(
         "/api/v1/health",
         "/api/v1/metrics",
         "/api/v1/auth/login",
+        "/api/v1/auth/reset-db",
     }
 )
 

@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-11
+
+UX-полировка после ручного тестирования: умный AI-дайджест, локализация,
+тултипы, относительное время проверки и автодетект remote URL.
+
+### Добавлено
+
+- feat(ai): AI-дайджест получает конкретные проекты (`repos_with_ahead`,
+  `repos_with_most_outdated`, `critical_cves`, dirty/behind/diverged) и просит
+  3 actionable-рекомендации с обязательным указанием имён проектов (S60-001).
+- feat(ui): тултипы для «Обновить всё», «Синхр. зеркала», «Мигрировать на GitFlic»
+  и кнопок шапки (S60-003).
+- feat(ui): относительное время «Проверено» под статусом с точной датой в
+  `title`; утилита `formatRelativeTime` без новых зависимостей (S60-004).
+- feat(git): `parse_remote_url` / `detect_remote_names`, поля
+  `detected_github_name` / `detected_gitflic_name` и
+  `GET /repositories?detect_remote=true`; модалка политики подставляет их и
+  показывает «Определено автоматически из git remote» (S60-005).
+
+### Изменено
+
+- feat(i18n): RU — «Обновить всё», «Синхр. зеркала», «Впереди / Позади»,
+  «Сборка» вместо англоязычного хардкода (S60-002).
+- chore(release): версия `1.3.2` во всех манифестах.
+- test: `test_remote_detect.py`, расширены `test_dashboard_advice.py`,
+  `test_smart_cache.py`, `time.test.ts`, `Dashboard.test.tsx`.
+
+### Исправлено (S60-Fix, hotfix схемы БД)
+
+- fix(desktop): `_apply_migrations()` больше не падает на базе, где
+  `alembic_version` уже `013`/`014`, но в `users` нет `role` (последствие
+  обновления v1.1.0 → v1.3.0). Выполняется точечный
+  `ALTER TABLE users ADD COLUMN role ...` + `UPDATE ... role='admin'`, затем
+  повторный `upgrade head`; пишется событие `db_schema_repaired`. Файл БД не
+  удаляется, данные сохраняются.
+- refactor(db): логика миграций и починки вынесена в `app/db/migrations.py` и
+  используется и sidecar'ом, и API.
+- feat(auth): `POST /api/v1/auth/reset-db` — только для loopback-клиентов и при
+  `confirm=true`; удаляет SQLite-файл, прогоняет миграции и создаёт `admin/admin`.
+- feat(ui): версия из `GET /api/v1/health` показывается на экране входа и в шапке;
+  на `Login` добавлена ссылка «Сбросить базу данных» с подтверждением.
+- test: `test_reset_db.py` и тест авто-починки `users.role` в
+  `test_sidecar_migrations.py`.
+
 ## [1.3.1] - 2026-11-11
 
 Хотфикс десктопных миграций: обновление v1.1.0 → v1.3.1 больше не оставляет

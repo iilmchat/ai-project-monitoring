@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { resetDatabase } from '../api/client'
+import AppVersion from '../components/AppVersion'
 import { useI18n, useI18nNamespace } from '../i18n'
 import { useAuthStore } from '../store/useAuthStore'
 
@@ -24,6 +26,8 @@ function LoginForm() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
 
   const nextParam = searchParams.get('next')
   const target = nextParam?.startsWith('/') ? nextParam : '/'
@@ -44,6 +48,25 @@ function LoginForm() {
     setSubmitting(false)
     if (ok) {
       navigate(target, { replace: true })
+    }
+  }
+
+  async function handleResetDatabase() {
+    if (!window.confirm(t('auth.resetDbConfirm'))) {
+      return
+    }
+    setResetting(true)
+    setResetMessage(null)
+    try {
+      await resetDatabase()
+      setUsername('')
+      setPassword('')
+      clearError()
+      setResetMessage(t('auth.resetDbDone'))
+    } catch {
+      setResetMessage(t('auth.resetDbError'))
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -106,6 +129,27 @@ function LoginForm() {
         >
           {submitting ? t('auth.submitting') : t('auth.submit')}
         </button>
+
+        {resetMessage && (
+          <p
+            role="status"
+            className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+          >
+            {resetMessage}
+          </p>
+        )}
+
+        <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <button
+            type="button"
+            onClick={() => void handleResetDatabase()}
+            disabled={resetting}
+            className="underline-offset-2 hover:text-red-600 hover:underline disabled:opacity-60 dark:hover:text-red-400"
+          >
+            {resetting ? t('auth.resetting') : t('auth.resetDb')}
+          </button>
+          <AppVersion className="text-[11px] text-slate-400 dark:text-slate-500" />
+        </div>
       </form>
     </div>
   )

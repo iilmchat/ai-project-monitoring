@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigate } from 'react-router-dom'
 
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../store/useAuthStore'
+import AppVersion from './AppVersion'
 import LanguageToggle from './LanguageToggle'
 import ThemeToggle from './ThemeToggle'
 
@@ -97,6 +98,7 @@ export default function AppLayout() {
             )}
             <LanguageToggle />
             <ThemeToggle />
+            <AppVersion className="text-xs font-normal text-slate-400 dark:text-slate-500" />
             <button
               type="button"
               onClick={() => void handleLogout()}
