@@ -9,9 +9,14 @@ analytics §3.19 и dependency updates §3.20 — реализованы в Spri
 (Sprints 43–44). §3.28 (single-user auth) — реализовано в v1.0.0 (Sprint 47);
 §3.29 (AI Code Review, Conflict Resolver, Release Notes) — реализовано в
 Sprints 53–54; §3.30 (conversational RAG) — реализовано в Sprint 55;
-см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
+см. [`TODO_V1.2.0.md`](../TODO_V1.2.0.md). §3.31–§3.33 (Team Edition, SAST,
+автоматические PR) — реализованы в v1.3.0 (Sprints 57–59), см.
+[`TODO_V1.3.0.md`](../TODO_V1.3.0.md). v1.4.0–v1.4.1 — SQLite + `sqlite-vec`
+RAG и управление паролями (Sprint 61). §3.34 (Global Tech Debt Dashboard) и
+§3.35 (IaC Scanning) — **план v1.5.0** (Sprints 63–64), см.
+[`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
 
-**Версия:** v1.2.0 «AI Analytics & Cross-Platform» · **Обновлено:** 2026-11-09
+**Версия:** v1.4.1 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-11
 
 ---
 
@@ -40,6 +45,9 @@ Sprints 53–54; §3.30 (conversational RAG) — реализовано в Sprin
 | **R17** | **RAG-поиск по коду (v0.9.0): индексация README/docs/src в pgvector и семантический поиск без изменения репозиториев** |
 | **R18** | **Single-user auth (v1.0.0): защита API при доступе по LAN через bcrypt-пароль, JWT и httpOnly cookie; один пользователь без RBAC** |
 | **R19** | **Desktop app (v1.0.0, план): Tauri-обёртка с автоматическим запуском Python-sidecar; Docker остаётся серверной опцией** |
+| **R20** | **Global Tech Debt Dashboard (v1.5.0, план): агрегированная статистика outdated-пакетов, CVE, dirty-файлов и diverged-веток по всем tracked-репозиториям + AI-отчёт по всей кодовой базе** |
+| **R21** | **IaC Scanning (v1.5.0, план): read-only аудит `Dockerfile` и `docker-compose.yml` без запуска Docker, сборки образов и сетевых вызовов** |
+| **R22** | **Global IaC summary (v1.5.0, план): сводка инфраструктурных проблем по всем tracked-репозиториям на дашборде** |
 
 **Вне области v0.1.0:** автоматический merge/rebase, CI-интеграция, мобильное приложение, мультипользовательский режим.
 
@@ -160,6 +168,10 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 `summary`: `{total, clean, needs_attention, untracked, stale, errors, mirror_issues, by_state, by_mirror_status}` (mirror-счётчики — v0.2.0).
 
 **Секция «Не отслеживаются»** — `tracked=false`. **Секция «Зеркала»** — `mirror_status != in_sync | not_applicable`, см. §3.8.
+
+**v1.5.0 (план):** сводный технический долг по всем tracked-репозиториям
+отдаётся отдельным эндпоинтом `GET /dashboard/global-stats` (§3.34) и **не**
+утяжеляет `GET /dashboard`; IaC-сводка — `GET /dashboard/global-iac` (§3.35).
 
 ### 3.7. Рекомендации (action queue)
 
@@ -2050,6 +2062,306 @@ bootstrap-пользователь — `admin`. Нельзя понизить/о
 
 ---
 
+### 3.34. Global Tech Debt Dashboard (v1.5.0, Sprint 63 — план)
+
+> **Статус:** запланировано на v1.5.0 (Sprint 63). Контракт фиксируется до
+> реализации; `GET /dashboard` и `GET /dashboard/global-dependencies` не
+> меняются. Агрегация только читает существующие отчёты и кэши.
+
+Сводная картина технического долга по всем `tracked=true` репозиториям:
+outdated-пакеты, CVE, dirty-файлы, diverged-ветки и (с Sprint 64) IaC-проблемы.
+Тяжёлые проверки не запускаются на каждый запрос: сервис использует
+`repository_status`, `dependency_cache`, `security_cache` и in-memory кэш.
+
+#### 3.34.1. `GET /api/v1/dashboard/global-stats`
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/api/v1/dashboard/global-stats` | `refresh?: bool (default false)` | `GlobalStatsReport` |
+
+**`GlobalStatsReport`:**
+
+```json
+{
+  "checked_at": "2026-11-11T12:00:00Z",
+  "cached": false,
+  "scope": {"repositories": 34, "tracked": 30, "scanned": 28, "skipped": 2},
+  "summary": {
+    "outdated_packages": 42,
+    "unique_outdated_packages": 31,
+    "vulnerabilities": {
+      "critical": 1, "high": 5, "medium": 12, "low": 3, "unknown": 0,
+      "total": 21, "unique_cves": 18
+    },
+    "dirty_files": 18,
+    "diverged_branches": 4,
+    "iac_issues": 0,
+    "problem_types": [
+      {"type": "outdated_packages", "count": 42, "severity": "medium"},
+      {"type": "vulnerabilities", "count": 21, "severity": "high"},
+      {"type": "dirty_files", "count": 18, "severity": "medium"},
+      {"type": "diverged_branches", "count": 4, "severity": "high"},
+      {"type": "iac_issues", "count": 0, "severity": "low"}
+    ]
+  },
+  "repositories": [
+    {
+      "repository_id": 7,
+      "name": "alpha",
+      "path": "/projects/alpha",
+      "status": "ok",
+      "stale": false,
+      "outdated_packages": 12,
+      "vulnerabilities": {
+        "critical": 1, "high": 2, "medium": 3, "low": 0, "unknown": 0, "total": 6
+      },
+      "dirty_files": 3,
+      "diverged": true,
+      "iac_issues": 0,
+      "problem_score": 47,
+      "error": null
+    }
+  ],
+  "top_problematic": [
+    {"repository_id": 7, "name": "alpha", "problem_score": 47}
+  ],
+  "errors": [],
+  "error": null
+}
+```
+
+**Правила:**
+
+- `scope.repositories` — все репозитории, `scope.tracked` — `tracked=true`,
+  `scope.scanned` — хотя бы один источник ответил, `scope.skipped` — tracked,
+  но ни один источник не ответил (`status=error`).
+- Агрегируются только `repositories.tracked=true`. Нет tracked-репозиториев →
+  HTTP 200, `scope.tracked=0`, нулевые счётчики.
+- `outdated_packages` — число экземпляров пакетов
+  (`repository_id + ecosystem + name`) со `status="outdated"`;
+  `unique_outdated_packages` — уникальные `ecosystem:name`.
+- `vulnerabilities` — число advisory-записей по severity; `unique_cves` —
+  уникальные `osv_id`/CVE. Один advisory в разных репозиториях считается
+  экземпляром, но не уникальным CVE.
+- `dirty_files` — сумма `modified + staged + untracked + conflicted` из
+  `repository_status`; `diverged_branches` — число репозиториев в состоянии
+  `diverged` (в текущей модели одна отслеживаемая ветка на репозиторий).
+- `problem_score` = `outdated * 1 + critical * 10 + high * 5 + medium * 2 +
+  low * 1 + unknown * 1 + dirty_files * 1 + diverged * 5 + iac_critical * 10 +
+  iac_high * 5 + iac_medium * 2 + iac_low * 1`.
+- `top_problematic` — до `GLOBAL_STATS_TOP_LIMIT` (default **5**) записей
+  `{repository_id, name, problem_score}` по `problem_score` desc, затем
+  `name` asc. Полный список — в `repositories[]`.
+- `status ∈ {ok, partial, error}`: `partial` — хотя бы один источник
+  недоступен/устарел; `error` — репозиторий не читается. `stale=true` —
+  использован кэш с истёкшим TTL.
+- Ошибка одного репозитория/источника не скрывает остальные: `errors[]`,
+  HTTP 200. Ошибка всех источников → HTTP 200, нули,
+  `error="all_sources_unavailable"` (не 500).
+- In-memory кэш `GLOBAL_STATS_CACHE_TTL_SECONDS` (default **300** = 5 мин),
+  single-flight; `refresh=true` обходит кэш и передаётся источникам.
+  Concurrency ≤ `GLOBAL_STATS_CONCURRENCY` (default **4**). `dependency_cache`/
+  `security_cache` обновляются только при истёкшем TTL, не на каждый запрос.
+- `iac_issues` — additive-поле: до Sprint 64 всегда `0`; после — число
+  IaC-findings severity `high|critical`. Контракт обратно совместим.
+- Read-only: никаких `git fetch`, повторного сканирования диска, записи в
+  репозитории и изменения `repository_status`.
+- Ошибки: `422` — неверный `refresh`.
+- UI: блок «Tech Debt Overview» на главном дашборде — карточки, Pie Chart по
+  `problem_types`, Bar Chart по `top_problematic`; lazy charts, empty/partial/
+  error, RU/EN, `aria`, клавиатурная навигация. Entry bundle < 90 kB gzip.
+
+#### 3.34.2. `POST /api/v1/dashboard/global-stats/ai-advice`
+
+| Метод | Путь | Тело | Параметры | Ответ |
+|-------|------|------|-----------|-------|
+| POST | `/api/v1/dashboard/global-stats/ai-advice` | `{language?: "ru" \| "en"}` | `refresh?: bool` | `GlobalStatsAdvice` |
+
+**`GlobalStatsAdvice`:**
+
+```json
+{
+  "generated_at": "2026-11-11T12:01:00Z",
+  "summary": "Наибольший риск — 1 critical CVE и 4 diverged-репозитория…",
+  "priorities": [
+    {
+      "title": "Закрыть critical CVE",
+      "reason": "1 critical и 2 high advisory в двух репозиториях",
+      "repository_id": 7,
+      "action": "Обновить уязвимые пакеты и повторить CVE-скан"
+    }
+  ],
+  "model": "qwen2.5-coder-7b-instruct",
+  "cached": false
+}
+```
+
+- В LLM отправляются только агрегаты `GlobalStatsReport`, имена/алиасы
+  репозиториев и счётчики. Пути, код, diff, версии пакетов, описания CVE,
+  токены и секреты **не** отправляются.
+- `priorities[]` — до 5 записей `{title, reason, repository_id, action}`;
+  `summary` ≤ 2000 символов; `action` — текстовая рекомендация, не команда.
+- Ключ `ai_cache`: `global-stats-advice:<state_hash>:<model>:<prompt_version>:<language>`,
+  TTL `AI_CACHE_TTL_SECONDS` (default 7 дней). `refresh=true` обходит кэш;
+  `X-AI-Cache: hit|miss`; ошибки LLM не кэшируются.
+- `LLM_ENABLED=false`, remote-guard или ошибка LLM → `503 ai_unavailable`.
+  Тело необязательно; без тела — `language="ru"`. Доступ — `admin` и
+  `auditor` (read-only AI).
+- UI: панель «Что горит» с кнопкой генерации, индикатором кэша и
+  503-сообщением; `aria-live` для результата, RU/EN.
+
+---
+
+### 3.35. Infrastructure as Code (IaC) Scanning (v1.5.0, Sprint 64 — план)
+
+> **Статус:** запланировано на v1.5.0 (Sprint 64). Только локальный
+> read-only анализ; Docker daemon, registry, сеть и сборка образов не
+> используются.
+
+#### 3.35.1. `GET /api/v1/repositories/{id}/iac`
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/api/v1/repositories/{id}/iac` | `refresh?: bool (default false)` | `IacReport` |
+
+**Обнаружение файлов:** `Dockerfile`, `Dockerfile.*`, `*.Dockerfile`,
+`docker-compose.yml|yaml`, `compose.yml|yaml` в рабочей директории; глубина
+`IAC_MAX_DEPTH` (default **3**), исключения — `.git/`, `node_modules/`,
+`.venv/`, `vendor/`, `dist/`, `build/`, `target/`. Symlink'и не
+разыменовываются.
+
+**`IacReport`:**
+
+```json
+{
+  "repository_id": 1,
+  "checked_at": "2026-11-11T12:00:00Z",
+  "status": "ok",
+  "files": [
+    {"path": "Dockerfile", "kind": "dockerfile", "status": "ok", "error": null},
+    {"path": "docker-compose.yml", "kind": "compose", "status": "ok", "error": null}
+  ],
+  "summary": {
+    "total": 5, "critical": 1, "high": 2, "medium": 1, "low": 1,
+    "unknown": 0, "files_scanned": 2
+  },
+  "findings": [
+    {
+      "rule_id": "IAC001",
+      "severity": "high",
+      "category": "dockerfile",
+      "file": "Dockerfile",
+      "line": 3,
+      "message": "Container runs as root",
+      "evidence": "USER root",
+      "remediation": "Create an unprivileged user and switch with USER app",
+      "fingerprint": "sha256:..."
+    }
+  ],
+  "truncated": false,
+  "error": null,
+  "cached": false
+}
+```
+
+**Правила и лимиты:**
+
+| rule_id | severity | Файл | Условие |
+|---------|----------|------|---------|
+| `IAC001` | high | Dockerfile | финальный stage без `USER` или `USER root`/`USER 0` |
+| `IAC002` | medium | Dockerfile | нет `HEALTHCHECK` или `HEALTHCHECK NONE` |
+| `IAC003` | medium | Dockerfile | `FROM` без тега/digest или с `:latest` |
+| `IAC004` | critical | compose | `privileged: true` |
+| `IAC005` | high | compose | опубликованный порт слушает все интерфейсы (`0.0.0.0`/без `host_ip`); `127.0.0.1`/`::1` — безопасно |
+| `IAC006` | high | compose | `network_mode: host` |
+| `IAC007` | high | compose | bind-mount `/var/run/docker.sock` |
+| `IAC008` | low | compose | `image` без тега или с `:latest` |
+
+- `status ∈ {ok, partial, no_files, parse_error, unavailable}`: `no_files` —
+  IaC-файлы не найдены (HTTP 200); `partial` — часть файлов не разобрана или
+  превышен лимит; `parse_error` — все найденные файлы не разобраны;
+  `unavailable` — репозиторий недоступен. При `IAC_ENABLED=false` — HTTP 200,
+  `status="unavailable"`, `error="iac_disabled"`, `files=[]`.
+- `files[]` — все найденные файлы, включая `parse_error`, сортировка по пути;
+  `file.status ∈ {ok, parse_error}`, `error` — короткая причина без
+  содержимого файла; `findings[]` — severity desc (`critical→unknown`), затем
+  `file`, `line`.
+- `severity ∈ {critical, high, medium, low, unknown}` — общая шкала CVE/SAST.
+  `evidence` ≤ 300 символов, секреты маскируются; `fingerprint =
+  sha256(rule_id + file + line + normalized_evidence)`; дубли схлопываются.
+- Лимиты: `IAC_MAX_FILES` (default **100**) на репозиторий,
+  `IAC_MAX_FILE_BYTES` (default **1048576** = 1 MiB),
+  `IAC_MAX_FINDINGS` (default **200**), `IAC_TIMEOUT_SECONDS` (default **10**).
+  Превышение → `truncated=true`, `status=partial`.
+- Dockerfile: построчный state-machine (не один regex): BOM/CRLF, продолжения
+  `\`, комментарии `#`, case-insensitive инструкции, multi-stage; оценивается
+  финальный stage. `USER ${VAR}` не угадывается (правило не срабатывает);
+  `FROM scratch` не требует `USER`. `HEALTHCHECK NONE` = отсутствие
+  healthcheck. «Устаревший» `FROM` трактуется как unpinned/`:latest`;
+  проверка новых версий через registry — вне scope (нет сети).
+- compose: `yaml.safe_load` с лимитом размера, без custom constructors и
+  выполнения кода; до 200 сервисов; поддержка short/long form `ports`.
+  Ошибка YAML → `parse_error`.
+- In-memory кэш `IAC_CACHE_TTL_SECONDS` (default **300**), ключ
+  `repo_id + head_sha + dirty_hash + file_mtimes`; `refresh=true` обходит кэш.
+  Недоступный/`parse_error` результат не кэшируется.
+- Read-only и offline: `GIT_OPTIONAL_LOCKS=0`, `git status --porcelain` после
+  запроса не меняется; `docker`/registry не вызываются. Ошибки:
+  `404 repository_not_found`, `422` — неверный `refresh`; проблемы файлов
+  отражаются в отчёте, а не HTTP 500.
+- UI: блок «Инфраструктура» в деталях репозитория — severity, `file:line`,
+  message, evidence, remediation; empty-state «IaC-файлы не найдены»,
+  partial/error, `aria`, RU/EN, lazy-загрузка.
+
+#### 3.35.2. `GET /api/v1/dashboard/global-iac`
+
+| Метод | Путь | Параметры | Ответ |
+|-------|------|-----------|-------|
+| GET | `/api/v1/dashboard/global-iac` | `refresh?: bool (default false)` | `GlobalIacReport` |
+
+**`GlobalIacReport`:**
+
+```json
+{
+  "checked_at": "2026-11-11T12:00:00Z",
+  "cached": false,
+  "summary": {
+    "repositories": 30, "files_scanned": 44,
+    "total": 18, "critical": 1, "high": 6, "medium": 8, "low": 3, "unknown": 0
+  },
+  "repositories": [
+    {
+      "repository_id": 7, "name": "alpha", "path": "/projects/alpha",
+      "files_scanned": 2, "total": 3, "critical": 1, "high": 1,
+      "medium": 1, "low": 0, "unknown": 0, "status": "ok", "error": null
+    }
+  ],
+  "top_findings": [
+    {
+      "repository_id": 7, "name": "alpha", "rule_id": "IAC004",
+      "severity": "critical", "file": "docker-compose.yml", "line": 8,
+      "message": "Service runs in privileged mode"
+    }
+  ],
+  "errors": [],
+  "error": null
+}
+```
+
+- Агрегируются только `tracked=true`; `summary.repositories` — число
+  опрошенных, `files_scanned` — сумма по отчётам.
+- `top_findings` — до `IAC_GLOBAL_TOP_LIMIT` (default **10**) записей по
+  severity desc, затем `repository_id`, `file`, `line`.
+- Кэш `GLOBAL_IAC_CACHE_TTL_SECONDS` (default **300**), concurrency ≤
+  `IAC_CONCURRENCY` (default **4**), single-flight; `refresh=true` обходит кэш.
+- Ошибка одного репозитория → `status="partial"`/`error` в записи, HTTP 200;
+  ошибка всех → HTTP 200, нули, `error="all_repositories_failed"`.
+- На дашборде: компактная сводка «Инфраструктура» (critical/high/medium) и
+  переход к топ-находкам/репозиторию; `summary.iac_issues` в §3.34 считается
+  как число findings severity `high|critical`; RU/EN, `aria`.
+
+---
+
 ## 4. Схема БД (SQLite / PostgreSQL)
 ```
 repositories(
@@ -2179,6 +2491,12 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 
 Индексы: `repositories(path)`, `repositories(tracked)`, `repositories(github_full_name)`, `repositories(gitflic_full_name)`, `repository_status(repository_id)`, `repository_mirror_status(repository_id)`, `scan_runs(started_at)`, `webhook_events(received_at)`, `webhook_events(provider, event_type)`, `dependency_cache(checked_at)`, `security_cache(checked_at)`, `ai_cache(checked_at)`, `ai_provider_profiles(is_active)`; **v0.9.0 (реализовано):** `code_chunks(repository_id)`, `code_chunks(content_hash)`, HNSW/IVFFlat по `code_chunks.embedding vector_cosine_ops`; **v1.3.0 (реализовано):** `audit_log(user_id)`, `audit_log(action)`, `audit_log(created_at)`, `sast_cache(checked_at)`.
 
+**v1.5.0 (план):** новых таблиц и миграций нет. `GlobalStatsService` и
+`IacService` (включая агрегатор `global-iac`) используют существующие
+`repository_status`/`dependency_cache`/`security_cache` и in-memory кэш;
+IaC-отчёты не персистятся между перезапусками (парсинг локальных файлов
+дёшев). `audit_log` для read-only запросов не пишется.
+
 ---
 
 ## 5. Технические ограничения и политика
@@ -2210,6 +2528,8 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | **Team & audit (v1.3.0, реализовано)** | **`users.role ∈ {admin, auditor}` (default `auditor`, bootstrap — `admin`); `require_admin` на мутациях; `audit_log` append-only, admin-only; секреты/содержимое файлов не пишутся** |
 | **SAST (v1.3.0, реализовано)** | **`SAST_ENABLED` (default true), `SAST_TIMEOUT_SECONDS` (default 120), `SAST_MAX_FINDINGS` (default 500), `SAST_MAX_OUTPUT_BYTES` (8 MiB), `SAST_CACHE_TTL_SECONDS` (default 86400), `SAST_SEMGREP_CONFIG` (локальные правила); bandit/semgrep/eslint опциональны, сеть и `--config auto` запрещены** |
 | **Automation configs (v1.3.0, реализовано)** | **`POST /repositories/{id}/automation/generate` только возвращает текст Dependabot/Renovate; файлы не пишутся, commit/push не выполняются** |
+| **Global stats (v1.5.0, план)** | **`GLOBAL_STATS_CACHE_TTL_SECONDS` (default 300), `GLOBAL_STATS_CONCURRENCY` (default 4), `GLOBAL_STATS_TOP_LIMIT` (default 5); агрегация только по `tracked=true`, источники — существующие кэши, single-flight, `refresh=true` обходит кэш; AI-совет через `ai_cache`, промпт без кода/секретов** |
+| **IaC scanning (v1.5.0, план)** | **`IAC_ENABLED` (default true), `IAC_MAX_DEPTH` (default 3), `IAC_MAX_FILES` (default 100), `IAC_MAX_FILE_BYTES` (default 1048576), `IAC_MAX_FINDINGS` (default 200), `IAC_TIMEOUT_SECONDS` (default 10), `IAC_CACHE_TTL_SECONDS` (default 300), `IAC_CONCURRENCY` (default 4), `GLOBAL_IAC_CACHE_TTL_SECONDS` (default 300), `IAC_GLOBAL_TOP_LIMIT` (default 10); Docker daemon/registry/сеть не используются, файлы только читаются** |
 | **E2E и bundle (v0.9.0, реализовано)** | **Playwright (`@playwright/test`, dev-only), моки `page.route()`, dev-сервер 5173; entry bundle 89.85 kB gzip, budget-check без новой runtime-зависимости** |
 | **Settings UI (v0.9.0, реализовано)** | **`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATIONS_ENABLED`, `FETCH_TIMEOUT`, `STATUS_TTL_SECONDS`, `MIRROR_POLL_INTERVAL_SECONDS`; сид `app_settings` из `.env`; runtime-применение без перезапуска** |
 | **GigaChat OAuth (v0.9.0, реализовано)** | **`GIGACHAT_OAUTH_URL` (default `https://ngw.devices.sberbank.ru:9443/api/v2/oauth`), `GIGACHAT_SCOPE` (default `GIGACHAT_API_PERS`), `GIGACHAT_CA_BUNDLE`, `GIGACHAT_TIMEOUT_SECONDS` (default 30), `GIGACHAT_TOKEN_REFRESH_MARGIN_SECONDS` (default 60); токен ~30 мин, секреты не логируются** |
@@ -2380,6 +2700,23 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
       тег `v1.3.0`, артефакты Windows/macOS/Linux, KI-025 актуальна/закрыта.
 - [x] Документы: ADR-0018–0021, `TODO_V1.3.0.md`.
 
+### 6.9. v1.5.0 (спринты 63–65 — план)
+
+- [ ] Global stats (Sprint 63): `GET /dashboard/global-stats`, агрегация
+      outdated/CVE/dirty/diverged по `tracked=true`, partial/stale, кэш 5 мин,
+      `top_problematic` и `problem_score`.
+- [ ] AI Insights (Sprint 63): общий отчёт по кодовой базе через `ai_cache`,
+      только агрегаты, 503 при LLM off, до 5 приоритетов.
+- [ ] UI (Sprint 63): блок «Tech Debt Overview» с Pie/Bar (lazy), empty/partial/
+      error, RU/EN, `aria`, entry bundle < 90 kB gzip.
+- [ ] IaC (Sprint 64): `IacService` для `Dockerfile`/`docker-compose.yml`,
+      правила IAC001–IAC008, `GET /repositories/{id}/iac`, лимиты, read-only.
+- [ ] Global IaC (Sprint 64): `GET /dashboard/global-iac`, сводка на дашборде,
+      `iac_issues` в global-stats.
+- [ ] Release (Sprint 65): версии `1.5.0`, CHANGELOG/RELEASES/README/SPEC/
+      ARCHITECTURE, тег `v1.5.0`, артефакты, KI-026 актуальна/закрыта.
+- [ ] Документы: ADR-0023/0024, `TODO_V1.5.0.md`.
+
 ---
 
 ## 7. Совместимость и версии
@@ -2422,6 +2759,9 @@ code_chunks(                -- v0.9.0 (реализовано, Sprint 44; Postgr
 | v1.1.0 | onboarding, файловые логи, автообновления Tauri, GitHub Actions | — |
 | v1.2.0 | AI code review, conflict resolver, release notes, conversational RAG, кросс-платформенный релиз | `TODO_V1.2.0.md` |
 | v1.3.0 | .NET/NuGet, Team Edition (роли, audit log), SAST, автоматические PR | `TODO_V1.3.0.md` |
+| v1.4.0 | RAG на SQLite + `sqlite-vec` для desktop, Python-fallback, UX-фиксы | `docs/CHANGELOG.md` |
+| v1.4.1 | смена своего пароля, admin-сброс пароля | `docs/CHANGELOG.md` |
+| v1.5.0 (план) | Global Tech Debt Dashboard, AI-отчёт по всей базе, IaC Scanning (`Dockerfile`/compose), global-iac | `TODO_V1.5.0.md` |
 
 ---
 

@@ -383,6 +383,35 @@ pnpm --dir frontend exec playwright install chromium
   PR и не исполняет код проверяемых проектов; MSBuild-выражения в .NET не
   вычисляются (KI-025).
 
+**v1.4.0–v1.4.1 «RAG on Desktop & Password Management»** — релиз 2026-11-11
+([`CHANGELOG.md`](docs/CHANGELOG.md)):
+
+- **Sprint 61 — SQLite RAG & UX:** ✅ `sqlite-vec` (`vec0`) вместо обязательного
+  PostgreSQL в desktop-сборке, Python-fallback по JSON-эмбеддингам,
+  инфо-баннер при `rag_unavailable`, исправление открытия папки логов.
+- **Sprint 61 — Password Management:** ✅ смена своего пароля
+  (`PATCH /users/me/password`) и admin-сброс пароля
+  (`POST /users/{id}/reset-password`), аудит `password_changed`/
+  `user_password_reset`.
+
+**v1.5.0 «Global Analytics & IaC Scanning»** — планируется
+([`TODO_V1.5.0.md`](TODO_V1.5.0.md)):
+
+- **Sprint 63 — Global Tech Debt Dashboard:** сводка по всем tracked-проектам
+  (outdated-пакеты, CVE, dirty-файлы, diverged-ветки), эндпоинт
+  `GET /api/v1/dashboard/global-stats`, блок «Tech Debt Overview» с Pie/Bar
+  графиками и AI-отчёт «что горит» по всей кодовой базе.
+- **Sprint 64 — Infrastructure as Code (IaC) Scanning:** read-only анализ
+  `Dockerfile` (root, отсутствие `HEALTHCHECK`, unpinned/`:latest` base) и
+  `docker-compose.yml` (публичные порты, `privileged`, `network_mode: host`,
+  docker.sock), эндпоинты `GET /repositories/{id}/iac` и
+  `GET /dashboard/global-iac`, блок «Инфраструктура» в деталях и на дашборде.
+- **Sprint 65 — Release v1.5.0:** финальный аудит read-only, версии `1.5.0`,
+  CHANGELOG/RELEASES, кросс-платформенная сборка и публикация релиза.
+- **Ограничение:** IaC-анализ — эвристики без Docker daemon/registry/сети;
+  парсинг сложных Dockerfile/compose может давать ложные срабатывания
+  (KI-026), исправления не применяются автоматически.
+
 ---
 
 ## Лицензия

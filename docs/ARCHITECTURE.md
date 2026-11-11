@@ -10,7 +10,9 @@
 §22 (`GigaChatProvider`) — реализованы в v0.9.0 (Sprints 43–44); §23 — дальнейшее;
 §24 (`AuthService`) и §25 (Tauri desktop) — реализованы в v1.0.0 (Sprints 47–48);
 §26–§28 — реализованы в v1.2.0 (Sprints 53–55), см.
-[`TODO_V1.2.0.md`](../TODO_V1.2.0.md).
+[`TODO_V1.2.0.md`](../TODO_V1.2.0.md); §29–§32 — реализованы в v1.3.0
+(Sprints 57–59), см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md); §33–§34 —
+**план v1.5.0** (Sprints 63–64), см. [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
 
 ---
 
@@ -29,7 +31,8 @@ FastAPI (backend)
   │                            ai commit/cve, update-dependencies (v0.7.0)
   ├─ /api/v1/mirror          — candidates, poll
   ├─ /api/v1/webhooks        — GitHub / GitFlic (HMAC)
-  ├─ /api/v1/dashboard       — агрегированная сводка, global-dependencies (v0.7.0)
+  ├─ /api/v1/dashboard       — агрегированная сводка, global-dependencies (v0.7.0),
+  │                            global-stats/global-iac (v1.5.0, план)
   ├─ /api/v1/settings        — настройки, AI-провайдеры (v0.8.0), GigaChat OAuth (v0.9.0, план)
   ├─ /api/v1/search          — code search/RAG (v0.9.0, план)
   └─ /api/v1/health
@@ -48,6 +51,8 @@ FastAPI (backend)
   ├─ LLM Service (v0.7.0)       — local OpenAI-compatible LLM: commit draft, CVE explain
   ├─ AI Provider Service (v0.8.0) — профили провайдеров; GigaChatProvider (v0.9.0, план)
   ├─ Global Analytics (v0.7.0)  — версии пакетов по всем tracked-репозиториям
+  ├─ Global Stats (v1.5.0, план) — техдолг по всем tracked: outdated/CVE/dirty/diverged
+  ├─ IaC Service (v1.5.0, план) — read-only Dockerfile/compose: root, ports, privileged
   ├─ Dependency Update (v0.7.0) — pip/pnpm/npm update с preflight и audit
   ├─ Code Search Service (v0.9.0, план) — chunking, embeddings, pgvector, поиск
   └─ SQLite / PostgreSQL + pgvector (v0.9.0, план)
@@ -76,6 +81,8 @@ app/services/*          бизнес-логика:
                           insights_service        ← NEW (v0.6.0)
                           llm_service             ← NEW (v0.7.0)
                           global_analytics_service ← NEW (v0.7.0)
+                          global_stats_service    ← NEW (v1.5.0, план)
+                          iac_service             ← NEW (v1.5.0, план)
                           dependency_update_service ← NEW (v0.7.0)
 app/providers/*         клиенты внешних API:
                           github_client (REST v3)
@@ -1964,3 +1971,217 @@ POST /repositories/{id}/automation/generate {tool}
 - Сгенерированный контент не содержит токенов и приватных URL; секреты не
   логируются.
 - UI: lazy-модалка «Автоматизация» с предпросмотром и кнопкой «Скопировать».
+
+---
+
+## 33. GlobalStatsService — техдолг по всем репозиториям (v1.5.0, Sprint 63 — план)
+
+> **Статус:** план v1.5.0. Контракт — SPEC §3.34. Новых таблиц нет;
+> агрегация только читает существующие кэши и in-memory кэш ответа.
+
+**Задача.** Ответить на вопрос «что горит во всей кодовой базе» одним
+экраном, не замедляя основной дашборд и не запуская тяжёлые проверки на
+каждый запрос.
+
+### 33.1. Поток
+
+```
+GET /dashboard/global-stats?refresh=false
+  → GlobalStatsService
+      ├─ cache lookup (in-memory, key="global-stats", TTL 300 s, single-flight)
+      ├─ tracked repositories (repositories.tracked=true)
+      ├─ per repo (concurrency ≤ GLOBAL_STATS_CONCURRENCY):
+      │    ├─ repository_status → dirty_files, state=diverged
+      │    ├─ DependencyService.get_report(ecosystem="all", refresh=false)
+      │    │    └─ dependency_cache (stale-while-revalidate)
+      │    ├─ SecurityService.get_report(...)
+      │    │    └─ security_cache (OSV, TTL 6 ч)
+      │    └─ IacService.get_report(...) — с Sprint 64, только кэш
+      ├─ aggregate summary + per-repo counters
+      ├─ problem_score → sort → top_problematic (≤5)
+      └─ GlobalStatsReport + cache write
+```
+
+`GET /dashboard` не вызывает `GlobalStatsService`: основной дашборд остаётся
+прежним, тяжёлая сводка загружается отдельным запросом (лениво).
+
+### 33.2. Источники и семантика
+
+| Поле | Источник | Правило |
+|------|----------|---------|
+| `outdated_packages` | `DependencyService`/`dependency_cache` | экземпляры `repo + ecosystem + name` со `status=outdated` |
+| `unique_outdated_packages` | тот же | уникальные `ecosystem:name` |
+| `vulnerabilities` | `SecurityService`/`security_cache` | advisory-записи по severity, `unique_cves` — уникальные OSV/CVE |
+| `dirty_files` | `repository_status` | `modified + staged + untracked + conflicted` |
+| `diverged_branches` | `repository_status.state` | число репозиториев в `diverged` |
+| `iac_issues` | `IacService` (Sprint 64) | findings severity `high|critical`; до 64 — `0` |
+
+- `stale=true`, если использовано значение из кэша с истёкшим TTL;
+  `status=partial`, если хотя бы один источник недоступен/устарел.
+- Ошибка репозитория не прерывает агрегацию: запись получает `status=error`,
+  `error`, попадает в `errors[]`; HTTP 200.
+- Ошибка всех источников → нули + `error="all_sources_unavailable"`, HTTP 200.
+- `problem_score` — детерминированная формула SPEC §3.34.1; используется
+  только для ранжирования и `top_problematic`, не является «истиной» и не
+  сохраняется в БД.
+
+### 33.3. Кэш и производительность
+
+- In-memory кэш **300 с** (`GLOBAL_STATS_CACHE_TTL_SECONDS`), ключ
+  `global-stats`; `refresh=true` обходит кэш.
+- Single-flight: параллельные запросы ждут один расчёт; отменённый запрос не
+  ломает остальные.
+- Concurrency ≤ `GLOBAL_STATS_CONCURRENCY` (default 4); `asyncio.gather` с
+  возвратом исключений, агрегация не блокирует event loop.
+- `DependencyService`/`SecurityService` вызываются с `refresh=false`; даже при
+  `refresh=true` обновляются только записи с истёкшим TTL, а не все подряд.
+- Никаких новых таблиц: `dependency_cache`/`security_cache` уже персистентны;
+  агрегат пересобирается после рестарта.
+- Метрики: `global_stats_duration_seconds`,
+  `global_stats_cache_hits_total`, `global_stats_partial_total`; логи — только
+  ids/счётчики, без путей и секретов.
+
+### 33.4. AI Insights
+
+```
+POST /dashboard/global-stats/ai-advice {language}
+  → GlobalStatsService.get_ai_advice()
+      ├─ state_hash = sha256(summary + top_problematic + language)
+      ├─ ai_cache lookup (global-stats-advice:<hash>:<model>:<prompt>:<lang>)
+      ├─ prompt = allowlist aggregates (no code/diff/paths/secrets)
+      ├─ LLMService.chat(...) → summary ≤2000 chars + priorities ≤5
+      └─ cache write (errors not cached)
+```
+
+- В промпт попадают только счётчики, имена/алиасы репозиториев и топ проблем.
+  Пути, код, diff, версии пакетов, CVE-описания, токены и секреты запрещены.
+- `priorities[]` — `{title, reason, repository_id, action}`; `action` —
+  рекомендация, не команда для выполнения.
+- `LLM_ENABLED=false`, remote-guard или ошибка → `503 ai_unavailable`;
+  `X-AI-Cache: hit|miss`; ошибки не кэшируются.
+- `auditor` имеет доступ (read-only AI); мутаций нет.
+
+### 33.5. Инварианты и frontend
+
+- Read-only: нет `git fetch`, повторного сканирования диска, записи в
+  репозитории, изменения `repository_status` и `audit_log`.
+- `GET /dashboard` и `GET /dashboard/global-dependencies` не меняются;
+  global-stats — отдельный эндпоинт.
+- UI: блок «Tech Debt Overview» на главном дашборде; карточки + Pie
+  (`problem_types`) + Bar (`top_problematic`); lazy charts, empty/partial/
+  error, клики к фильтрам/деталям, RU/EN, `aria`, `aria-live` для AI-панели.
+- Entry bundle < 90 kB gzip; новых runtime-зависимостей нет.
+
+---
+
+## 34. IacService — read-only аудит Dockerfile/compose (v1.5.0, Sprint 64 — план)
+
+> **Статус:** план v1.5.0. Контракт — SPEC §3.35. Только локальный текст:
+> без Docker daemon, registry, сети и сборки образов. Ограничения и ложные
+> срабатывания — KI-026.
+
+**Задача.** Найти рискованные настройки контейнеров (`root`, отсутствие
+`HEALTHCHECK`, unpinned base, привилегированные режимы, открытые порты) до
+запуска и без изменения файлов.
+
+### 34.1. Поток
+
+```
+GET /repositories/{id}/iac?refresh=false
+  → IacService
+      ├─ cache lookup (repo + head_sha + dirty_hash + file_mtimes, TTL 300 s)
+      ├─ discover IaC files (depth ≤3, ignore .git/node_modules/.venv/...)
+      ├─ for each file (≤100, ≤1 MiB):
+      │    ├─ Dockerfile → DockerfileParser (state-machine)
+      │    └─ compose    → ComposeParser (yaml.safe_load)
+      ├─ rules IAC001–IAC008 → normalize + fingerprint + dedupe
+      ├─ severity summary; truncated при лимитах
+      └─ IacReport + cache write (ok/partial only)
+```
+
+`GET /dashboard/global-iac` вызывает `IacService` для всех `tracked=true`
+(concurrency ≤ `IAC_CONCURRENCY`, single-flight, кэш 300 с) и агрегирует
+severity/топ-находки. `GlobalStatsService` (Sprint 64) читает только готовый
+кэш/отчёт, а не парсит файлы повторно.
+
+### 34.2. Обнаружение файлов
+
+- `Dockerfile`, `Dockerfile.*`, `*.Dockerfile` → `kind=dockerfile`.
+- `docker-compose.yml|yaml`, `compose.yml|yaml` → `kind=compose`.
+- Глубина `IAC_MAX_DEPTH` (default 3) от корня; исключения — `.git/`,
+  `node_modules/`, `.venv/`, `vendor/`, `dist/`, `build/`, `target/`.
+- Symlink'и не разыменовываются; файлы вне корня репозитория игнорируются.
+- Лимиты: `IAC_MAX_FILES` (100), `IAC_MAX_FILE_BYTES` (1 MiB),
+  `IAC_MAX_FINDINGS` (200), `IAC_TIMEOUT_SECONDS` (10). Превышение →
+  `truncated=true`, `status=partial`.
+- Файлы только читаются; `docker`/`docker compose`/registry не вызываются;
+  `GIT_OPTIONAL_LOCKS=0`. `IAC_ENABLED=false` → `status=unavailable`,
+  `error=iac_disabled`, HTTP 200 (без парсинга).
+
+### 34.3. DockerfileParser
+
+- Построчный **state-machine**, а не один regex: BOM/CRLF, склейка
+  продолжений `\`, комментарии `#`, case-insensitive инструкции.
+- `FROM ... AS alias` открывает stage; для `USER`/`HEALTHCHECK` оценивается
+  финальный stage (multi-stage). `USER` — последний в stage.
+- `USER root`, `USER 0`, `USER root:root` → root. `USER ${VAR}` **не
+  угадывается** — правило root-user не срабатывает (избегаем false positive).
+- `FROM scratch` не требует `USER` (нет passwd/пользователей).
+- `HEALTHCHECK NONE` = отсутствие healthcheck.
+- `FROM` без тега/digest или `:latest` → `IAC003` («unpinned/outdated
+  base»). Проверка новых версий через registry API — вне scope v1.5.0.
+- Ошибка чтения/разбора → `file.status=parse_error`, остальные файлы
+  продолжают обрабатываться.
+
+### 34.4. ComposeParser
+
+- `yaml.safe_load` с лимитом размера; без custom constructors, тегов
+  `!!python/*` и выполнения кода. Ошибка YAML → `parse_error`.
+- До 200 сервисов на файл; YAML-алиасы ограничены размером файла.
+- `ports`: short form (`"8080:80"`, `"127.0.0.1:8080:80"`) и long form
+  (`{target, published, host_ip, protocol}`). Публикация без `host_ip` или с
+  `0.0.0.0` — public; `127.0.0.1`/`::1` — локально; только container-port —
+  random host port (public по умолчанию Docker).
+- `privileged`, `network_mode`, `volumes` читаются как данные; ничего не
+  запускается.
+
+### 34.5. Правила, нормализация и агрегация
+
+| rule_id | severity | Условие |
+|---------|----------|---------|
+| `IAC001` | high | финальный stage без `USER`/`USER root` |
+| `IAC002` | medium | нет `HEALTHCHECK`/`HEALTHCHECK NONE` |
+| `IAC003` | medium | `FROM` без тега/digest или `:latest` |
+| `IAC004` | critical | compose `privileged: true` |
+| `IAC005` | high | published port на всех интерфейсах |
+| `IAC006` | high | compose `network_mode: host` |
+| `IAC007` | high | bind-mount `/var/run/docker.sock` |
+| `IAC008` | low | compose `image` без тега/`:latest` |
+
+- Общая шкала `critical|high|medium|low|unknown`; `summary` считается по
+  полному набору findings.
+- `fingerprint = sha256(rule_id + file + line + normalized_evidence)`;
+  дубли схлопываются; `evidence` ≤ 300 символов, секреты маскируются.
+- `files[]` включает все найденные файлы (включая `parse_error`);
+  `findings[]` — severity desc, затем `file`, `line`.
+- Кэш `IAC_CACHE_TTL_SECONDS` (300), ключ
+  `repo_id + head_sha + dirty_hash + file_mtimes`; `refresh=true` обходит кэш.
+  `parse_error`/`unavailable` не кэшируются.
+- `GlobalIacReport` агрегирует `summary`, `repositories[]` и
+  `top_findings[]` (≤10) по severity; ошибка репозитория — `partial`, HTTP 200.
+
+### 34.6. Безопасность, read-only и ограничения
+
+- Код проекта не исполняется; Docker daemon/registry/сеть не используются.
+- `git status --porcelain` после запроса не меняется; файлы не пишутся.
+- Полные файлы, env-значения и пути вне репозитория не логируются; ошибки
+  редактируются.
+- **Регулярки/state-machine не являются полноценным Docker-парсером:**
+  сложные макросы, `ONBUILD`, вычисляемые `ARG`/`ENV`, include-механизмы и
+  нестандартный YAML могут дать ложные/пропущенные findings (KI-026).
+  Поэтому severity/`evidence` показываются с `file:line`, а `unknown` не
+  трактуется как «безопасно»; исправления не применяются автоматически.
+- UI: блок «Инфраструктура» в деталях (severity, `file:line`, evidence,
+  remediation), empty-state «IaC-файлы не найдены», partial/error, RU/EN,
+  `aria`, lazy; глобальная сводка — на дашборде.
+- `auditor` имеет доступ к чтению; мутаций/`refresh`-аудита нет.
