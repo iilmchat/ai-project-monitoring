@@ -1194,8 +1194,9 @@ status codes) не переводятся; RU-значения сохраняю�
 
 ## 21. CodeSearchService — RAG по коду (v0.9.0, Sprint 44 — реализовано)
 
-> **Статус:** реализовано для PostgreSQL + `pgvector`. На SQLite сервис
-> возвращает `503 rag_unavailable`, остальное приложение работает.
+> **Статус:** реализовано. PostgreSQL использует `pgvector`; desktop/SQLite —
+> `sqlite-vec` (`vec0`) с Python-fallback. Остальное приложение работает при
+> недоступной модели эмбеддингов (поиск отвечает `503`).
 
 **Задача.** Находить по смыслу фрагменты README, `docs/` и исходного кода всех
 tracked-репозиториев (в текущем демо — 34 проекта), не изменяя ни один
@@ -1206,7 +1207,7 @@ tracked-репозиториев (в текущем демо — 34 проект
 ```
 POST /api/v1/search/code/index {repository_ids?, force?}
   → CodeSearchService.index()
-      ├─ tracked repositories (PostgreSQL; на SQLite — 503 rag_unavailable)
+      ├─ tracked repositories (PostgreSQL; SQLite + sqlite-vec в desktop)
       ├─ FileWalker: README*, docs/**/*.md, src/**/*.{py,ts,tsx,js,jsx,cs,csproj,...}
       │    ignore: .git, node_modules, .venv, dist, build, target, vendor,
       │            bin, obj, .vs, .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
@@ -1239,11 +1240,25 @@ POST /api/v1/search/code/index {repository_ids?, force?}
 модели/размерности требует миграции и полной переиндексации; при старте
 сервис сверяет длину вектора и возвращает `embedding_dimension_mismatch`.
 
+SQLite (`015`, desktop):
+
+- та же таблица `code_chunks`, но `embedding TEXT` (JSON) — источник истины для
+  Python-fallback и переиндексации;
+- виртуальная таблица `vec_chunks USING vec0(embedding float[1536]
+  distance_metric=cosine, repository_id integer, language text)` создаётся
+  лениво через отдельное `sqlite3`-соединение с загруженным `vec0`;
+- `repository_id`/`language` — partition keys, поэтому фильтры входят в KNN;
+- векторы пишутся после коммита метаданных, чтобы не конкурировать с
+  транзакцией SQLAlchemy.
+
 ### 21.3. Поиск
 
 ```
 POST /api/v1/search/code {query, repository_ids?, limit?, min_score?, language?}
-  → embed(query) → SELECT ... ORDER BY embedding <=> :q LIMIT :limit
+  → embed(query)
+  → PostgreSQL: SELECT ... ORDER BY embedding <=> :q LIMIT :limit
+  → SQLite: vec_chunks MATCH :q AND k = ... (partition filters)
+            или Python-cosine при недоступном расширении
   → score = 1 - cosine_distance; фильтры repository/language/min_score
   → snippet ≤ 400 символов + path/start_line/end_line/repository_name
 ```
@@ -1268,8 +1283,7 @@ POST /api/v1/search/code {query, repository_ids?, limit?, min_score?, language?}
 ### 21.5. Read-only и деградация
 
 - Сервис только читает рабочую директорию; `git`, индекс и `.git` не меняются.
-- SQLite (dev/CI без PostgreSQL) — `503 rag_unavailable`, остальные функции
-  работают.
+- SQLite без `sqlite-vec` — Python-cosine fallback, остальные функции работают.
 - Недоступная модель эмбеддингов не ломает дашборд: поиск возвращает
   `503`, статус индексации показывает `errors[]`.
 - Интеграционные тесты pgvector — `@pytest.mark.postgres` (skip с причиной,

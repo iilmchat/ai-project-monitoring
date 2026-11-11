@@ -89,6 +89,7 @@ export const settings = {
     'Desktop logs are written to app.log and rotated once the file reaches 5 MB.',
   'settings.openLogs': 'Open logs folder',
   'settings.openLogsError': 'Could not open the logs folder.',
+  'settings.logsPathCopied': 'Path copied',
   'settings.updates': 'Updates',
   'settings.updatesHint':
     'The app checks GitHub Releases and installs signed updates.',

@@ -15,7 +15,9 @@ export const search = {
   'search.refreshStatus': 'Refresh status',
   'search.status': 'Indexed: {chunks} chunks across {repos} repositories.',
   'search.unavailable':
-    'RAG is unavailable: PostgreSQL + pgvector and an embedding model are required.',
+    'RAG is unavailable. Check the database and embedding model settings.',
+  'search.ragUnavailable':
+    'Code search is unavailable. Check the database settings.',
   'search.embeddingUnavailable':
     'The embedding model is unavailable. Check the EMBEDDING_* settings.',
   'search.error': 'Could not run the search.',

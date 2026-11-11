@@ -49,6 +49,25 @@ def sidecar_binary_name() -> str:
     return f"iiruchating-backend-{target_triple()}{sidecar_suffix()}"
 
 
+def sqlite_vec_binary() -> Path | None:
+    """Return the ``vec0`` loadable extension shipped inside the wheel.
+
+    PyInstaller only freezes Python modules; the ``.dll``/``.so``/``.dylib``
+    must be added explicitly, otherwise the frozen sidecar logs
+    ``sqlite_vec_unavailable_fallback_to_python`` and loses KNN search.
+    """
+    try:
+        import sqlite_vec
+    except ImportError:
+        return None
+    base = Path(sqlite_vec.__file__).resolve().parent
+    for name in ("vec0.dll", "vec0.so", "vec0.dylib"):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def main() -> int:
     backend = Path(__file__).resolve().parent
     frontend = backend.parent / "frontend"
@@ -111,6 +130,21 @@ def main() -> int:
         "tkinter",
         str(backend / "sidecar_entry.py"),
     ]
+    vec_binary = sqlite_vec_binary()
+    if vec_binary is not None:
+        entry_point = args.index(str(backend / "sidecar_entry.py"))
+        args[entry_point:entry_point] = [
+            "--hidden-import",
+            "sqlite_vec",
+            "--add-binary",
+            f"{vec_binary}{os.pathsep}sqlite_vec",
+        ]
+        print(f"sqlite-vec extension: {vec_binary}")
+    else:
+        print(
+            "sqlite-vec extension not found: RAG will use the Python fallback",
+            file=sys.stderr,
+        )
     if sys.platform == "win32":
         args.insert(4, "--noconsole")
     # macOS/Linux sidecars must stay plain executables: PyInstaller's

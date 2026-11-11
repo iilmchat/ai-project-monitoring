@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 from app.config import Settings
+from app.models.entities import Repository
 from app.services.code_search_service import (
     CodeSearchService,
     RagUnavailableError,
@@ -17,6 +18,7 @@ from app.services.code_search_service import (
     _mask_snippet,
 )
 from app.services.llm_service import LLMService
+from app.services.sqlite_vec_store import SqliteVecStore
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -90,7 +92,68 @@ def test_stale_detection() -> None:
     assert _is_stale(now, now + timedelta(seconds=1)) is True
 
 
-async def test_sqlite_search_and_index_are_unavailable(
+def _fake_vectors(texts: list[str]) -> list[list[float]]:
+    vectors: list[list[float]] = []
+    for text in texts:
+        lowered = text.lower()
+        if "redis" in lowered:
+            vectors.append([1.0, 0.0, 0.0, 0.0])
+        elif "postgres" in lowered:
+            vectors.append([0.0, 1.0, 0.0, 0.0])
+        else:
+            vectors.append([0.0, 0.0, 1.0, 0.0])
+    return vectors
+
+
+def _rag_service(
+    session_factory: object,
+    settings: Settings,
+    *,
+    vec_store: SqliteVecStore | None = None,
+) -> CodeSearchService:
+    rag_settings = settings.model_copy(update={"embedding_dimensions": 4})
+    service = CodeSearchService(
+        session_factory,  # type: ignore[arg-type]
+        rag_settings,
+        LLMService(rag_settings),
+        database_url=rag_settings.database_url,
+        vec_store=vec_store,
+    )
+
+    async def embed(texts: list[str]) -> list[list[float]]:
+        return _fake_vectors(texts)
+
+    service._llm.embed = embed  # type: ignore[method-assign]
+    return service
+
+
+class _PythonFallbackStore(SqliteVecStore):
+    """Pretends the C extension failed to load."""
+
+    def __init__(self) -> None:
+        self._available = False
+
+    @property
+    def available(self) -> bool:
+        return False
+
+    def search(self, *args: object, **kwargs: object) -> None:
+        return None
+
+    def write(self, records: list[tuple[int, list[float], int, str]]) -> bool:
+        return False
+
+    def delete(self, chunk_ids: list[int]) -> bool:
+        return False
+
+
+async def test_sqlite_status_creates_schema(app: FastAPI, client: AsyncClient) -> None:
+    status = await client.get("/api/v1/search/code/status")
+    assert status.status_code == 200, status.text
+    assert status.json()["indexed_chunks"] == 0
+
+
+async def test_sqlite_search_requires_embedding_model(
     app: FastAPI,
     client: AsyncClient,
 ) -> None:
@@ -99,18 +162,94 @@ async def test_sqlite_search_and_index_are_unavailable(
         json={"query": "where is redis configured"},
     )
     assert search.status_code == 503
-    assert search.json()["detail"] == "rag_unavailable"
+    assert search.json()["detail"] == "embedding_unavailable"
 
     index = await client.post("/api/v1/search/code/index", json={})
-    assert index.status_code == 503
-    assert index.json()["detail"] == "rag_unavailable"
-
-    status = await client.get("/api/v1/search/code/status")
-    assert status.status_code == 503
-    assert status.json()["detail"] == "rag_unavailable"
+    assert index.status_code == 202
+    assert index.json()["status"] == "started"
 
 
-async def test_service_raises_on_sqlite(
+async def test_sqlite_vec_store_roundtrip(settings: Settings) -> None:
+    pytest.importorskip("sqlite_vec")
+    store = SqliteVecStore(settings.database_url, 4)
+    assert store.available is True
+    assert store.write(
+        [
+            (1, [1.0, 0.0, 0.0, 0.0], 10, "python"),
+            (2, [0.0, 1.0, 0.0, 0.0], 10, "python"),
+            (3, [0.9, 0.1, 0.0, 0.0], 20, "ts"),
+        ]
+    )
+    assert store.search([1.0, 0.0, 0.0, 0.0], 1) == [(1, 0.0)]
+    filtered = store.search([1.0, 0.0, 0.0, 0.0], 2, [20])
+    assert filtered and filtered[0][0] == 3
+    by_language = store.search([1.0, 0.0, 0.0, 0.0], 3, None, "python")
+    assert by_language and {rowid for rowid, _ in by_language} == {1, 2}
+    assert store.delete([1, 2, 3]) is True
+
+
+async def test_sqlite_index_and_search_use_vector_store(
+    session_factory,
+    settings: Settings,
+    make_repo,
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path / "rag")
+    (repo / "cache.py").write_text("redis client setup\n", encoding="utf-8")
+    (repo / "db.py").write_text("postgres connection pool\n", encoding="utf-8")
+    async with session_factory() as session:
+        session.add(Repository(path=str(repo.resolve()), tracked=True))
+        await session.commit()
+
+    service = _rag_service(session_factory, settings)
+    assert service.available is True
+    assert service._vec.available is True
+
+    status = await service.index()
+    assert status.indexed_chunks > 0
+
+    response = await service.search("redis configuration", limit=5, min_score=0.1)
+    assert response.indexed_repositories == 1
+    assert response.results
+    assert response.results[0].path == "cache.py"
+    assert response.results[0].score > 0.9
+
+    filtered = await service.search(
+        "redis configuration",
+        limit=5,
+        min_score=0.1,
+        language="python",
+    )
+    assert filtered.results
+    assert filtered.results[0].path == "cache.py"
+
+
+async def test_sqlite_python_fallback_finds_chunks(
+    session_factory,
+    settings: Settings,
+    make_repo,
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path / "fallback")
+    (repo / "cache.py").write_text("redis client setup\n", encoding="utf-8")
+    async with session_factory() as session:
+        session.add(Repository(path=str(repo.resolve()), tracked=True))
+        await session.commit()
+
+    service = _rag_service(
+        session_factory,
+        settings,
+        vec_store=_PythonFallbackStore(),
+    )
+    await service.index()
+
+    response = await service.search("redis configuration", limit=5, min_score=0.1)
+    assert response.results
+    assert response.results[0].path == "cache.py"
+    assert response.results[0].score > 0.9
+
+
+async def test_service_accepts_sqlite(
     session_factory,
     settings: Settings,
 ) -> None:
@@ -120,6 +259,7 @@ async def test_service_raises_on_sqlite(
         LLMService(settings),
         database_url="sqlite+aiosqlite:///./test.db",
     )
+    assert service.available is True
     with pytest.raises(RagUnavailableError):
         await service.search("redis")
 

@@ -219,7 +219,10 @@ function SettingsContent() {
   async function handleOpenLogs() {
     setLogsError(null)
     try {
-      await openLogsFolder()
+      const result = await openLogsFolder()
+      if (!result.opened) {
+        showUpdateToast(t('settings.logsPathCopied'))
+      }
     } catch {
       setLogsError(t('settings.openLogsError'))
     }

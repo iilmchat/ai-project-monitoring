@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.3.2 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.4.0 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -34,11 +34,11 @@
 - **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter, GigaChat OAuth) с активацией без перезапуска.
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
-- **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев на PostgreSQL + `pgvector`; на SQLite API отвечает `503 rag_unavailable`.
+- **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев: PostgreSQL + `pgvector` на сервере и SQLite + `sqlite-vec` в desktop-сборке (с Python-fallback, если расширение недоступно).
 - **Desktop-приложение (v1.0.0+)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
-- **Conversational RAG** — чат с кодовой базой на `/search`: pgvector-поиск по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
+- **Conversational RAG** — чат с кодовой базой на `/search`: векторный поиск (pgvector в PostgreSQL, `sqlite-vec` в desktop) по README/docs/src, ответ LLM только по найденным фрагментам и ссылки на источники.
 - **Командная работа (v1.3.0)** — роли `Admin`/`Auditor`, приглашение пользователей с временным паролем, смена ролей и append-only журнал аудита действий с admin-страницами `/admin/users` и `/admin/audit`.
 - **Безопасность** — CVE-сканер зависимостей Python/Node/.NET через OSV.dev (High/Critical, `fixed_version`) и поиск секретов (AWS, GitHub token, JWT, private key) с маскированием.
 - **SAST** — статический анализ кода bandit/semgrep (eslint-fallback): command injection, SQL/инъекции, XSS; severity, `file:line`, кэш 24 ч и объяснение находки локальной LLM.
@@ -130,7 +130,8 @@ pnpm --dir frontend desktop:build
 
 Sidecar запускается на свободном `127.0.0.1:<port>`; данные и логи —
 в `%APPDATA%/IIRuchating` (`backend.log`). Desktop по умолчанию использует
-SQLite; RAG доступен только при внешнем PostgreSQL + `pgvector`. Вход по
+SQLite с расширением `sqlite-vec` для RAG; серверный режим — PostgreSQL +
+`pgvector`. Вход по
 умолчанию `admin` / `admin` (смените `ADMIN_PASSWORD`/`AUTH_JWT_SECRET`).
 Для разработки: `pnpm --dir frontend desktop:dev`.
 
@@ -207,9 +208,10 @@ pnpm --dir frontend desktop:build
 
 ### Ограничения desktop
 
-- **RAG:** desktop по умолчанию использует SQLite, поэтому RAG недоступен
-  (`503 rag_unavailable`). Для RAG задайте внешний
-  `DATABASE_URL=postgresql+asyncpg://...` с `pgvector` и `EMBEDDING_*` (KI-022).
+- **RAG:** desktop использует SQLite + `sqlite-vec` (`vec0` упакован в sidecar).
+  Если расширение не загрузилось, поиск автоматически переходит на Python-косинус
+  (`sqlite_vec_unavailable_fallback_to_python`). В обоих случаях нужна модель
+  эмбеддингов (`EMBEDDING_*`). Серверный вариант — PostgreSQL + `pgvector`.
 - **Auth:** desktop использует Bearer-токен в памяти; после перезапуска может
   потребоваться повторный вход (KI-020). Для стабильных сессий задайте
   `AUTH_JWT_SECRET`.
@@ -269,12 +271,12 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.3.2** (2026-11-11) |
-| Статус | **UX Polish & Smart Digest + hotfix схемы БД** |
-| Спринты | 1–60 |
-| Тесты backend | **335** (334 passed, 1 skipped; pytest, реальные tmp-репозитории) |
-| Тесты frontend | **63** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
-| Entry bundle | **88.83 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.1 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
+| Версия | **v1.4.0** (2026-11-11) |
+| Статус | **RAG on SQLite (sqlite-vec) + UX-фиксы** |
+| Спринты | 1–61 |
+| Тесты backend | **339** (338 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Тесты frontend | **65** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
+| Entry bundle | **88.82 kB gzip** (+ lazy charts 100.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
 | Покрытие | не измерялось (`pytest-cov` не подключён) |
 | Лицензия | MIT |

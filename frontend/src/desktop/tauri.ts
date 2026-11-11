@@ -20,17 +20,22 @@ export async function pickDirectory(): Promise<string | null> {
 }
 
 /** Reveal the application log directory in the OS file manager. */
-export async function openLogsFolder(): Promise<void> {
+export interface LogsFolderResult {
+  opened: boolean
+  path: string
+}
+
+export async function openLogsFolder(): Promise<LogsFolderResult> {
   if (!isTauri()) {
     throw new Error('tauri_unavailable')
   }
-  const [{ invoke }, { open }] = await Promise.all([
-    import('@tauri-apps/api/core'),
-    import('@tauri-apps/plugin-shell'),
-  ])
-  const directory = await invoke<string>('logs_dir')
-  if (!directory) {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const result = await invoke<LogsFolderResult>('open_logs_folder')
+  if (!result.path) {
     throw new Error('logs_dir_empty')
   }
-  await open(directory)
+  if (!result.opened) {
+    await navigator.clipboard.writeText(result.path)
+  }
+  return result
 }

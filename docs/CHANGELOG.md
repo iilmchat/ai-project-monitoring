@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-11
+
+RAG-поиск по коду в desktop-сборке: SQLite + `sqlite-vec` вместо обязательного
+PostgreSQL, плюс UX-фиксы ошибок поиска и кнопки логов.
+
+### Добавлено
+
+- feat(rag): SQLite-бэкенд поиска на `sqlite-vec` (`vec0`) — виртуальная таблица
+  `vec_chunks` с `distance_metric=cosine`, KNN через `MATCH ... k`, фильтры по
+  проекту/языку (partition keys). PostgreSQL-путь на `pgvector` сохранён
+  (S61-001).
+- feat(rag): pure-Python fallback по JSON-эмбеддингам из `code_chunks`, если
+  расширение не загрузилось; событие
+  `sqlite_vec_unavailable_fallback_to_python` (S61-001).
+- feat(desktop): `build_sidecar.py` находит `vec0.dll`/`.so`/`.dylib` и добавляет
+  его в PyInstaller-бандл через `--add-binary` (S61-002).
+- feat(ui): при `rag_unavailable` на `/search` показывается синий инфо-баннер
+  «Поиск по коду недоступен. Проверьте настройки БД», кнопки «Найти» и
+  «Индексировать» блокируются (S61-003).
+- feat(desktop): команда `open_logs_folder` создаёт папку логов перед открытием,
+  а при ошибке нативного opener'а путь копируется в буфер обмена с тостом
+  «Путь скопирован» (S61-003).
+
+### Изменено
+
+- feat(db): миграция `015` создаёт `code_chunks` для SQLite (JSON-эмбеддинги);
+  legacy-базы с этой таблицей штампуются на ревизию `015`.
+- chore(deps): `sqlite-vec==0.1.9` в `backend/requirements.txt`
+  ([ADR-0022](adr/0022-sqlite-vec-desktop-rag.md)).
+- chore(release): версия `1.4.0` во всех манифестах.
+- test: `test_code_search.py` (sqlite-vec roundtrip, индекс/поиск, Python
+  fallback), `CodeSearch.test.tsx` (баннер и disabled-кнопки), обновлены
+  `test_sidecar_migrations.py`, `test_health.py`.
+
 ## [1.3.2] - 2026-11-11
 
 UX-полировка после ручного тестирования: умный AI-дайджест, локализация,

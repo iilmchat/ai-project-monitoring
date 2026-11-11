@@ -79,6 +79,10 @@ def detect_legacy_revision(db_path: Path, tables: set[str]) -> str | None:
     never wrote ``alembic_version``.  Stamping such a database before running
     ``upgrade head`` avoids replaying migrations whose tables already exist.
     """
+    if db_path is None or not tables:
+        return None
+    if "code_chunks" in tables:
+        return "015"
     if "sast_cache" in tables:
         return "014"
     if "audit_log" in tables:

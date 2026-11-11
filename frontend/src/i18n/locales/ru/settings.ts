@@ -89,6 +89,7 @@ export const settings = {
     'Логи desktop-приложения сохраняются в app.log и ротируются при достижении 5 МБ.',
   'settings.openLogs': 'Открыть папку с логами',
   'settings.openLogsError': 'Не удалось открыть папку с логами.',
+  'settings.logsPathCopied': 'Путь скопирован',
   'settings.updates': 'Обновления',
   'settings.updatesHint':
     'Приложение проверяет GitHub Releases и устанавливает подписанные обновления.',

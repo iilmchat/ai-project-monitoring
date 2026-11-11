@@ -45,6 +45,32 @@ fn logs_dir() -> String {
     logs_dir_path().to_string_lossy().into_owned()
 }
 
+#[derive(serde::Serialize)]
+struct LogsOpenResult {
+    opened: bool,
+    path: String,
+}
+
+/// Create the log directory (when missing) and reveal it in the OS file
+/// manager.  When the native opener fails the path is returned so the
+/// frontend can copy it to the clipboard and show a toast.
+#[tauri::command]
+fn open_logs_folder(app: tauri::AppHandle) -> Result<LogsOpenResult, String> {
+    let directory = logs_dir_path();
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.to_string_lossy().into_owned();
+    match app.shell().open(path.clone(), None::<String>) {
+        Ok(()) => Ok(LogsOpenResult { opened: true, path }),
+        Err(error) => {
+            eprintln!("open logs folder failed: {error}");
+            Ok(LogsOpenResult {
+                opened: false,
+                path,
+            })
+        }
+    }
+}
+
 fn main() {
     let log_level = if cfg!(debug_assertions) {
         log::LevelFilter::Debug
@@ -106,7 +132,11 @@ fn main() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![backend_url, logs_dir])
+        .invoke_handler(tauri::generate_handler![
+            backend_url,
+            logs_dir,
+            open_logs_folder
+        ])
         .build(tauri::generate_context!())
         .expect("error while building IIRuchating");
 

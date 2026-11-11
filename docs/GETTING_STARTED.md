@@ -73,8 +73,8 @@ Backend при старте выполняет `alembic upgrade head` через
 на PostgreSQL). Nginx проксирует `/api` на сервис `backend`.
 
 PostgreSQL-данные сохраняются в `./pgdata/` (добавлен в `.gitignore`). SQLite
-по-прежнему поддерживается для локального запуска без Docker, но RAG на нём
-недоступен (`503 rag_unavailable`).
+поддерживается для локального запуска без Docker: RAG на нём работает через
+`sqlite-vec`, а при недоступном расширении — через Python-fallback.
 
 Каталог с проектами монтируется в контейнер: по умолчанию
 `${PROJECTS_ROOT:-C:/Projects}:/projects`, а `SCAN_ROOTS=/projects`. Если ваши
@@ -192,8 +192,10 @@ curl -X POST http://127.0.0.1:8000/api/v1/search/code \
   -d '{"query":"где у меня настроен Redis?","limit":5}'
 ```
 
-RAG работает только на PostgreSQL + `pgvector`. На SQLite эндпоинты отвечают
-`503 rag_unavailable`; остальные функции приложения продолжают работать.
+RAG работает на PostgreSQL + `pgvector` и на SQLite + `sqlite-vec` (desktop).
+Если `sqlite-vec` не загрузился, поиск автоматически считает косинус в Python;
+без модели эмбеддингов эндпоинты отвечают `503 embedding_unavailable`, остальные
+функции приложения продолжают работать.
 Интеграционный тест: `TEST_DATABASE_URL=postgresql+asyncpg://... pytest -q
 tests/test_rag_postgres.py`.
 

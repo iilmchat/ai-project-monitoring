@@ -16,7 +16,8 @@ export const search = {
   'search.status':
     'Проиндексировано: {chunks} чанков в {repos} репозиториях.',
   'search.unavailable':
-    'RAG недоступен: нужен PostgreSQL + pgvector и модель эмбеддингов.',
+    'RAG недоступен. Проверьте настройки базы данных и модели эмбеддингов.',
+  'search.ragUnavailable': 'Поиск по коду недоступен. Проверьте настройки БД',
   'search.embeddingUnavailable':
     'Модель эмбеддингов недоступна. Проверьте EMBEDDING_* настройки.',
   'search.error': 'Не удалось выполнить поиск.',

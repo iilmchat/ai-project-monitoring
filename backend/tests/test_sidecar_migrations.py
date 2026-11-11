@@ -56,8 +56,14 @@ def test_fresh_database_migrates_to_head(tmp_path: Path) -> None:
     _apply_migrations(_url(db_path))
 
     assert db_path.exists()
-    assert {"repositories", "users", "audit_log", "sast_cache"} <= _tables(db_path)
-    assert _revision(db_path) == "014"
+    assert {
+        "repositories",
+        "users",
+        "audit_log",
+        "sast_cache",
+        "code_chunks",
+    } <= _tables(db_path)
+    assert _revision(db_path) == "015"
 
 
 def test_legacy_v110_database_is_stamped_and_upgraded(tmp_path: Path) -> None:
@@ -78,8 +84,8 @@ def test_legacy_v110_database_is_stamped_and_upgraded(tmp_path: Path) -> None:
     _apply_migrations(_url(db_path))
 
     tables = _tables(db_path)
-    assert {"users", "audit_log", "sast_cache"} <= tables
-    assert _revision(db_path) == "014"
+    assert {"users", "audit_log", "sast_cache", "code_chunks"} <= tables
+    assert _revision(db_path) == "015"
     with sqlite3.connect(db_path) as connection:
         user_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(users)")
@@ -110,7 +116,7 @@ def test_half_migrated_roles_are_repaired_without_data_loss(tmp_path: Path) -> N
         ).fetchone()
     assert "role" in columns
     assert role is not None and role[0] == "admin"
-    assert _revision(db_path) == "014"
+    assert _revision(db_path) == "015"
 
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
@@ -120,7 +126,7 @@ def test_migrations_are_idempotent(tmp_path: Path) -> None:
     _apply_migrations(_url(db_path))
 
     assert "users" in _tables(db_path)
-    assert _revision(db_path) == "014"
+    assert _revision(db_path) == "015"
 
 
 def test_legacy_revision_detection(tmp_path: Path) -> None:

@@ -1,22 +1,26 @@
-"""RAG code search over tracked repositories (SPEC §3.26, S44).
+"""RAG code search over tracked repositories (SPEC §3.26, S44; S61-001).
 
-The service is intentionally PostgreSQL-only: embeddings are stored in a
-pgvector column and searched with the cosine-distance operator. On SQLite the
-API returns ``503 rag_unavailable`` and the rest of the application keeps
-working.
+PostgreSQL stores embeddings in a pgvector column and searches with the
+cosine-distance operator.  The desktop build runs on SQLite and uses the
+``sqlite-vec`` extension (``vec_chunks`` virtual table) with a pure-Python
+cosine fallback when the extension cannot be loaded.  Both backends expose the
+same API, so the rest of the application is backend-agnostic.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import math
 import os
 import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 import structlog
@@ -32,6 +36,7 @@ from app.schemas.code_search import (
     CodeSearchResult,
 )
 from app.services.llm_service import CHAT_SYSTEM_PROMPT, LLMService
+from app.services.sqlite_vec_store import SqliteVecStore
 
 logger = structlog.get_logger(__name__)
 
@@ -95,6 +100,28 @@ SECRET_PATTERN = re.compile(
     r"(\s*[:=]\s*)(['\"]?)([^'\"\s,;]+)"
 )
 MAX_SNIPPET_CHARS = 400
+SQLITE_CODE_CHUNKS_DDL = """
+CREATE TABLE IF NOT EXISTS code_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    language TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    embedding_model TEXT NOT NULL,
+    indexed_at TEXT NOT NULL
+)
+"""
+SQLITE_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS ix_code_chunks_repository_id "
+    "ON code_chunks (repository_id)",
+    "CREATE INDEX IF NOT EXISTS ix_code_chunks_lookup "
+    "ON code_chunks (repository_id, path)",
+)
 
 
 class RagUnavailableError(Exception):
@@ -127,8 +154,11 @@ class _RepoInfo:
     github_full_name: str | None
 
 
+_VecRecord = tuple[int, list[float], int, str]
+
+
 class CodeSearchService:
-    """Index repository code into pgvector and search it semantically."""
+    """Index repository code and search it semantically on SQLite or Postgres."""
 
     def __init__(
         self,
@@ -137,20 +167,26 @@ class CodeSearchService:
         llm_service: LLMService,
         *,
         database_url: str,
+        vec_store: SqliteVecStore | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
         self._llm = llm_service
         self._database_url = database_url
+        self._is_sqlite = database_url.lower().startswith("sqlite")
+        self._vec = vec_store or SqliteVecStore(
+            database_url,
+            settings.embedding_dimensions,
+        )
+        self._sqlite_schema_ready = False
         self._running = False
         self._last_indexed_at: datetime | None = None
         self._errors: list[str] = []
 
     @property
     def available(self) -> bool:
-        return self._database_url.lower().startswith(
-            ("postgresql", "postgres")
-        )
+        lowered = self._database_url.lower()
+        return self._is_sqlite or lowered.startswith(("postgresql", "postgres"))
 
     async def index(
         self,
@@ -158,7 +194,8 @@ class CodeSearchService:
         *,
         force: bool = False,
     ) -> CodeIndexStatus:
-        self._require_postgres()
+        self._require_available()
+        await self._ensure_sqlite_schema()
         if self._running:
             raise RagBusyError("indexing already running")
         self._running = True
@@ -176,10 +213,13 @@ class CodeSearchService:
                     repository_id = repository.id
                     repository_path = repository.path
                     try:
-                        indexed_chunks += await self._index_repository(
+                        inserted, records, deleted = await self._index_repository(
                             session, repository, force=force
                         )
                         await session.commit()
+                        if self._is_sqlite:
+                            await self._flush_vectors(deleted, records)
+                        indexed_chunks += inserted
                     except Exception as exc:
                         await session.rollback()
                         self._errors.append(f"{repository_path}: {exc}")
@@ -202,11 +242,51 @@ class CodeSearchService:
         min_score: float = 0.2,
         language: str | None = None,
     ) -> CodeSearchResponse:
-        self._require_postgres()
+        self._require_available()
         started = time.perf_counter()
         vectors = await self._embed([query])
         query_vector = vectors[0]
 
+        if self._is_sqlite:
+            await self._ensure_sqlite_schema()
+            results = await self._search_sqlite(
+                query_vector,
+                repository_ids=repository_ids,
+                limit=limit,
+                min_score=min_score,
+                language=language,
+            )
+        else:
+            results = await self._search_postgres(
+                query_vector,
+                repository_ids=repository_ids,
+                limit=limit,
+                min_score=min_score,
+                language=language,
+            )
+
+        async with self._session_factory() as session:
+            indexed_repositories, last_indexed, last_repository_change = (
+                await self._collect_stats(session)
+            )
+        return CodeSearchResponse(
+            query=query,
+            model=self._settings.embedding_model,
+            took_ms=round((time.perf_counter() - started) * 1000, 1),
+            indexed_repositories=int(indexed_repositories),
+            stale=_is_stale(last_indexed, last_repository_change),
+            results=results,
+        )
+
+    async def _search_postgres(
+        self,
+        query_vector: list[float],
+        *,
+        repository_ids: list[int] | None,
+        limit: int,
+        min_score: float,
+        language: str | None,
+    ) -> list[CodeSearchResult]:
         params: dict[str, object] = {
             "embedding": json.dumps(query_vector),
             "limit": limit,
@@ -246,46 +326,171 @@ class CodeSearchService:
         )
         async with self._session_factory() as session:
             rows = (await session.execute(sql, params)).all()
-            indexed_repositories = (
-                await session.scalar(
-                    text("SELECT count(DISTINCT repository_id) FROM code_chunks")
-                )
-                or 0
-            )
-            last_indexed = await session.scalar(
-                text("SELECT max(indexed_at) FROM code_chunks")
-            )
-            last_repository_change = await session.scalar(
-                text(
-                    "SELECT max(updated_at) FROM repositories WHERE tracked = true"
-                )
-            )
+        return [self._row_to_result(row, float(row.score)) for row in rows]
 
-        results = [
-            CodeSearchResult(
-                repository_id=row.repository_id,
-                repository_name=row.alias
-                or Path(row.repository_path).name
-                or row.repository_path,
-                path=row.path,
-                start_line=row.start_line,
-                end_line=row.end_line,
-                language=row.language,
-                snippet=_mask_snippet(row.content[:MAX_SNIPPET_CHARS]),
-                score=round(float(row.score), 4),
-                url=_github_url(row.github_full_name, row.path, row.start_line),
-            )
-            for row in rows
-        ]
-        stale = _is_stale(last_indexed, last_repository_change)
-        return CodeSearchResponse(
-            query=query,
-            model=self._settings.embedding_model,
-            took_ms=round((time.perf_counter() - started) * 1000, 1),
-            indexed_repositories=int(indexed_repositories),
-            stale=stale,
-            results=results,
+    async def _search_sqlite(
+        self,
+        query_vector: list[float],
+        *,
+        repository_ids: list[int] | None,
+        limit: int,
+        min_score: float,
+        language: str | None,
+    ) -> list[CodeSearchResult]:
+        hits = await asyncio.to_thread(
+            self._vec.search,
+            query_vector,
+            max(limit * 4, 24),
+            repository_ids,
+            language,
         )
+        if hits is None:
+            return await self._search_python(
+                query_vector,
+                repository_ids=repository_ids,
+                limit=limit,
+                min_score=min_score,
+                language=language,
+            )
+        if not hits:
+            return []
+
+        order = {rowid: distance for rowid, distance in hits}
+        placeholders = ", ".join(f":id_{index}" for index in range(len(order)))
+        params: dict[str, object] = {
+            f"id_{index}": rowid for index, rowid in enumerate(order)
+        }
+        sql = text(
+            f"""
+            SELECT c.id,
+                   c.repository_id,
+                   r.alias,
+                   r.path AS repository_path,
+                   r.github_full_name,
+                   c.path,
+                   c.start_line,
+                   c.end_line,
+                   c.language,
+                   c.content
+            FROM code_chunks c
+            JOIN repositories r ON r.id = c.repository_id
+            WHERE c.id IN ({placeholders})
+              AND r.tracked = true
+            """
+        )
+        async with self._session_factory() as session:
+            rows = (await session.execute(sql, params)).all()
+        results: list[CodeSearchResult] = []
+        for row in sorted(rows, key=lambda item: order[int(item.id)]):
+            score = 1.0 - order[int(row.id)]
+            if score < min_score:
+                continue
+            results.append(self._row_to_result(row, score))
+        return results[:limit]
+
+    async def _search_python(
+        self,
+        query_vector: list[float],
+        *,
+        repository_ids: list[int] | None,
+        limit: int,
+        min_score: float,
+        language: str | None,
+    ) -> list[CodeSearchResult]:
+        """Fallback when sqlite-vec is unavailable: cosine in pure Python."""
+        filters = ["r.tracked = 1"]
+        params: dict[str, object] = {}
+        if language:
+            filters.append("c.language = :language")
+            params["language"] = language
+        if repository_ids:
+            placeholders = []
+            for index, repo_id in enumerate(repository_ids):
+                name = f"repo_{index}"
+                placeholders.append(f":{name}")
+                params[name] = repo_id
+            filters.append(f"c.repository_id IN ({', '.join(placeholders)})")
+        sql = text(
+            f"""
+            SELECT c.id,
+                   c.repository_id,
+                   r.alias,
+                   r.path AS repository_path,
+                   r.github_full_name,
+                   c.path,
+                   c.start_line,
+                   c.end_line,
+                   c.language,
+                   c.content,
+                   c.embedding
+            FROM code_chunks c
+            JOIN repositories r ON r.id = c.repository_id
+            WHERE {' AND '.join(filters)}
+            """
+        )
+        async with self._session_factory() as session:
+            rows = (await session.execute(sql, params)).all()
+
+        scored: list[tuple[float, Any]] = []
+        for row in rows:
+            try:
+                stored = json.loads(row.embedding)
+                vector = [float(value) for value in stored]
+            except (TypeError, ValueError):
+                continue
+            score = _cosine_similarity(query_vector, vector)
+            if score < min_score:
+                continue
+            scored.append((score, row))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [
+            self._row_to_result(row, score)
+            for score, row in scored[:limit]
+        ]
+
+    def _row_to_result(self, row: Any, score: float) -> CodeSearchResult:
+        return CodeSearchResult(
+            repository_id=row.repository_id,
+            repository_name=row.alias
+            or Path(row.repository_path).name
+            or row.repository_path,
+            path=row.path,
+            start_line=row.start_line,
+            end_line=row.end_line,
+            language=row.language,
+            snippet=_mask_snippet(row.content[:MAX_SNIPPET_CHARS]),
+            score=round(float(score), 4),
+            url=_github_url(row.github_full_name, row.path, row.start_line),
+        )
+
+    async def _collect_stats(
+        self, session: AsyncSession
+    ) -> tuple[int, datetime | None, datetime | None]:
+        indexed_repositories = (
+            await session.scalar(
+                text("SELECT count(DISTINCT repository_id) FROM code_chunks")
+            )
+            or 0
+        )
+        last_indexed = _as_datetime(
+            await session.scalar(text("SELECT max(indexed_at) FROM code_chunks"))
+        )
+        last_repository_change = _as_datetime(
+            await session.scalar(
+                text("SELECT max(updated_at) FROM repositories WHERE tracked = true")
+            )
+        )
+        return int(indexed_repositories), last_indexed, last_repository_change
+
+    async def _ensure_sqlite_schema(self) -> None:
+        if not self._is_sqlite or self._sqlite_schema_ready:
+            return
+        async with self._session_factory() as session:
+            await session.execute(text(SQLITE_CODE_CHUNKS_DDL))
+            for statement in SQLITE_INDEXES:
+                await session.execute(text(statement))
+            await session.commit()
+        self._sqlite_schema_ready = True
 
     async def chat_with_code(
         self,
@@ -297,7 +502,7 @@ class CodeSearchService:
         min_score: float = 0.2,
     ) -> dict[str, object]:
         """Answer a question using retrieved code chunks (Conversational RAG)."""
-        self._require_postgres()
+        self._require_available()
         started = time.perf_counter()
         response = await self.search(
             query,
@@ -382,7 +587,8 @@ class CodeSearchService:
         }
 
     async def status(self) -> CodeIndexStatus:
-        self._require_postgres()
+        self._require_available()
+        await self._ensure_sqlite_schema()
         async with self._session_factory() as session:
             indexed_repositories = (
                 await session.scalar(
@@ -393,8 +599,8 @@ class CodeSearchService:
             chunks = (
                 await session.scalar(text("SELECT count(*) FROM code_chunks")) or 0
             )
-            last_indexed = await session.scalar(
-                text("SELECT max(indexed_at) FROM code_chunks")
+            last_indexed = _as_datetime(
+                await session.scalar(text("SELECT max(indexed_at) FROM code_chunks"))
             )
         return CodeIndexStatus(
             indexed_repositories=int(indexed_repositories),
@@ -410,11 +616,13 @@ class CodeSearchService:
         repository: Repository,
         *,
         force: bool,
-    ) -> int:
+    ) -> tuple[int, list[_VecRecord], list[int]]:
         root = Path(repository.path)
         if not root.is_dir():
             raise RagUnavailableError("repository_unavailable", "path is not a directory")
         inserted = 0
+        records: list[_VecRecord] = []
+        deleted: list[int] = []
         for file_path in _iter_files(root):
             relative = file_path.relative_to(root).as_posix()
             content = _read_text(
@@ -444,17 +652,58 @@ class CodeSearchService:
                     limit=self._settings.rag_max_chunks_per_repo,
                 )
                 break
-            await session.execute(
-                text(
-                    "DELETE FROM code_chunks "
-                    "WHERE repository_id = :repository_id AND path = :path"
-                ),
-                {"repository_id": repository.id, "path": relative},
+            deleted.extend(
+                await self._delete_chunks(session, repository.id, relative)
             )
             vectors = await self._embed([chunk.content for chunk in chunks])
-            await self._insert_chunks(session, repository.id, chunks, vectors)
+            records.extend(
+                await self._insert_chunks(session, repository.id, chunks, vectors)
+            )
             inserted += len(chunks)
-        return inserted
+        return inserted, records, deleted
+
+    async def _flush_vectors(
+        self,
+        deleted: list[int],
+        records: list[_VecRecord],
+    ) -> None:
+        """Update sqlite-vec after the metadata transaction is committed.
+
+        A second SQLite connection cannot write while the async session holds a
+        write transaction, so vector writes are deferred to this point.
+        """
+        if deleted:
+            await asyncio.to_thread(self._vec.delete, deleted)
+        if records:
+            await asyncio.to_thread(self._vec.write, records)
+
+    async def _delete_chunks(
+        self,
+        session: AsyncSession,
+        repository_id: int,
+        path: str,
+    ) -> list[int]:
+        """Delete chunk rows; return their ids for the deferred vec cleanup."""
+        deleted: list[int] = []
+        if self._is_sqlite:
+            ids = (
+                await session.scalars(
+                    text(
+                        "SELECT id FROM code_chunks "
+                        "WHERE repository_id = :repository_id AND path = :path"
+                    ),
+                    {"repository_id": repository_id, "path": path},
+                )
+            ).all()
+            deleted = [int(value) for value in ids]
+        await session.execute(
+            text(
+                "DELETE FROM code_chunks "
+                "WHERE repository_id = :repository_id AND path = :path"
+            ),
+            {"repository_id": repository_id, "path": path},
+        )
+        return deleted
 
     async def _is_unchanged(
         self,
@@ -491,7 +740,7 @@ class CodeSearchService:
                 if len(vector) != self._settings.embedding_dimensions:
                     raise RagUnavailableError(
                         "embedding_dimension_mismatch",
-                        "embedding dimension does not match the pgvector column",
+                        "embedding dimension does not match the index",
                     )
             vectors.extend(result)
         return vectors
@@ -502,7 +751,52 @@ class CodeSearchService:
         repository_id: int,
         chunks: list[_Chunk],
         vectors: list[list[float]],
-    ) -> None:
+    ) -> list[_VecRecord]:
+        if self._is_sqlite:
+            statement = text(
+                """
+                INSERT INTO code_chunks
+                    (repository_id, path, chunk_index, start_line, end_line,
+                     language, content, content_hash, embedding, embedding_model,
+                     indexed_at)
+                VALUES
+                    (:repository_id, :path, :chunk_index, :start_line, :end_line,
+                     :language, :content, :content_hash,
+                     :embedding, :embedding_model, :indexed_at)
+                RETURNING id
+                """
+            )
+            indexed_at = utcnow().isoformat()
+            records: list[tuple[int, list[float], int, str]] = []
+            for index, (chunk, vector) in enumerate(
+                zip(chunks, vectors, strict=True)
+            ):
+                result = await session.execute(
+                    statement,
+                    {
+                        "repository_id": repository_id,
+                        "path": chunk.path,
+                        "chunk_index": index,
+                        "start_line": chunk.start_line,
+                        "end_line": chunk.end_line,
+                        "language": chunk.language,
+                        "content": chunk.content,
+                        "content_hash": chunk.content_hash,
+                        "embedding": json.dumps(vector),
+                        "embedding_model": self._settings.embedding_model,
+                        "indexed_at": indexed_at,
+                    },
+                )
+                records.append(
+                    (
+                        int(result.scalar_one()),
+                        vector,
+                        repository_id,
+                        chunk.language,
+                    )
+                )
+            return records
+
         statement = text(
             """
             INSERT INTO code_chunks
@@ -532,8 +826,9 @@ class CodeSearchService:
                     "indexed_at": utcnow(),
                 },
             )
+        return []
 
-    def _require_postgres(self) -> None:
+    def _require_available(self) -> None:
         if not self.available:
             raise RagUnavailableError()
 
@@ -671,6 +966,32 @@ def _is_stale(
     if last_repository_change is None:
         return False
     return last_repository_change > last_indexed
+
+
+def _as_datetime(value: object) -> datetime | None:
+    """SQLite returns ``max(indexed_at)`` as text; normalise it for comparisons."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    if len(left) != len(right):
+        return 0.0
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
+    norm_left = math.sqrt(sum(value * value for value in left))
+    norm_right = math.sqrt(sum(value * value for value in right))
+    if norm_left == 0.0 or norm_right == 0.0:
+        return 0.0
+    return dot / (norm_left * norm_right)
 
 
 __all__ = [

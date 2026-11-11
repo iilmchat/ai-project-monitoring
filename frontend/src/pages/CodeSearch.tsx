@@ -47,11 +47,12 @@ function CodeSearchContent() {
   const [indexing, setIndexing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [ragUnavailable, setRagUnavailable] = useState(false)
 
   function describeError(cause: unknown): string {
     const text = cause instanceof Error ? cause.message : ''
     if (text.includes('rag_unavailable')) {
-      return t('search.unavailable')
+      return t('search.ragUnavailable')
     }
     if (text.includes('embedding_unavailable')) {
       return t('search.embeddingUnavailable')
@@ -59,13 +60,23 @@ function CodeSearchContent() {
     return t('search.error')
   }
 
+  function isRagUnavailable(cause: unknown): boolean {
+    return cause instanceof Error && cause.message.includes('rag_unavailable')
+  }
+
   async function loadStatus() {
     try {
       setStatus(await getCodeSearchStatus())
       setStatusError(null)
+      setRagUnavailable(false)
     } catch (cause) {
       setStatus(null)
-      setStatusError(describeError(cause))
+      if (isRagUnavailable(cause)) {
+        setRagUnavailable(true)
+        setStatusError(null)
+      } else {
+        setStatusError(describeError(cause))
+      }
     }
   }
 
@@ -92,7 +103,12 @@ function CodeSearchContent() {
       )
     } catch (cause) {
       setResponse(null)
-      setError(describeError(cause))
+      if (isRagUnavailable(cause)) {
+        setRagUnavailable(true)
+        setError(null)
+      } else {
+        setError(describeError(cause))
+      }
     } finally {
       setLoading(false)
     }
@@ -119,7 +135,12 @@ function CodeSearchContent() {
         }
       }
     } catch (cause) {
-      setError(describeError(cause))
+      if (isRagUnavailable(cause)) {
+        setRagUnavailable(true)
+        setError(null)
+      } else {
+        setError(describeError(cause))
+      }
     } finally {
       setIndexing(false)
     }
@@ -172,6 +193,15 @@ function CodeSearchContent() {
         </div>
       </div>
 
+      {ragUnavailable && (
+        <div
+          role="status"
+          className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-200"
+        >
+          {t('search.ragUnavailable')}
+        </div>
+      )}
+
       {mode === 'chat' && (
         <Suspense fallback={<p className="text-sm text-slate-500">{t('common.loading')}</p>}>
           <CodeChat />
@@ -215,7 +245,7 @@ function CodeSearchContent() {
           </label>
           <button
             type="submit"
-            disabled={loading || query.trim().length < 3}
+            disabled={loading || ragUnavailable || query.trim().length < 3}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? t('search.searching') : t('search.submit')}
@@ -243,7 +273,7 @@ function CodeSearchContent() {
           <button
             type="button"
             onClick={() => void startIndexing()}
-            disabled={indexing || status?.running}
+            disabled={indexing || ragUnavailable || status?.running}
             className="rounded-md border border-primary px-2 py-1 text-xs font-medium text-primary disabled:opacity-60"
           >
             {indexing || status?.running ? t('search.indexing') : t('search.index')}

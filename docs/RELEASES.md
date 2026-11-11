@@ -1,6 +1,32 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.3.2 (2026-11-11)
+**Текущая версия:** v1.4.0 (2026-11-11)
+
+---
+
+## Релиз v1.4.0 — «RAG on SQLite»
+
+**Дата:** 2026-11-11 · **Тег:** `v1.4.0`
+
+Итоги спринта 61:
+
+- **S61-001 — sqlite-vec для desktop RAG:** `vec_chunks` (`vec0`,
+  `distance_metric=cosine`) + `code_chunks` с JSON-эмбеддингами; KNN-поиск с
+  фильтрами по проекту/языку; PostgreSQL/pgvector-путь без изменений.
+  Если расширение не загрузилось — Python-косинус и лог
+  `sqlite_vec_unavailable_fallback_to_python`.
+- **S61-002 — упаковка:** `build_sidecar.py` кладёт `vec0.dll` в
+  `PyInstaller`-бандл (`--add-binary`); frozen-бинарник проходит индексацию и
+  поиск без `no such module: vec0`.
+- **S61-003 — UX:** синий баннер и disabled-кнопки при `rag_unavailable`;
+  «Открыть папку с логами» создаёт каталог, а при ошибке копирует путь в
+  буфер с тостом «Путь скопирован».
+- **Проверки:** backend **339** (338 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **65** unit, `typecheck/lint/test/build`; entry bundle **88.82 kB**
+  gzip (budget 90 kB); frozen sidecar прошёл индексацию и поиск без
+  `no such module: vec0`.
+- **Зависимости:** `sqlite-vec==0.1.9`
+  ([ADR-0022](adr/0022-sqlite-vec-desktop-rag.md)).
 
 ---
 

@@ -1368,8 +1368,9 @@ oauth_scope, oauth_expires_at}`.
 
 ### 3.26. Code search / RAG (v0.9.0, Sprint 44 — реализовано)
 
-> **Статус:** реализовано. RAG доступен только на PostgreSQL + `pgvector`;
-> на SQLite эндпоинты отвечают `503 rag_unavailable`.
+> **Статус:** реализовано. PostgreSQL использует `pgvector`, desktop/SQLite —
+> расширение `sqlite-vec` (`vec0`) с Python-fallback; при отсутствии обоих
+> бэкендов эндпоинты отвечают `503 rag_unavailable`.
 
 Семантический поиск по README, `docs/` и исходному коду tracked-репозиториев.
 Индексация **read-only**: файлы читаются, рабочая директория, индекс Git и
@@ -1427,8 +1428,10 @@ oauth_scope, oauth_expires_at}`.
 
 **Инварианты:**
 
-- Векторное хранилище — PostgreSQL + `pgvector`; на SQLite поиск возвращает
-  `503 rag_unavailable`, остальное приложение работает.
+- Векторное хранилище — PostgreSQL + `pgvector` (сервер) или SQLite +
+  `sqlite-vec` (`vec_chunks`, cosine KNN) в desktop; если C-расширение не
+  загрузилось, поиск считает косинус в Python по JSON-эмбеддингам
+  (`sqlite_vec_unavailable_fallback_to_python`).
 - Эмбеддинги — OpenAI-compatible `/v1/embeddings` (`EMBEDDING_BASE_URL`,
   `EMBEDDING_MODEL`, default `text-embedding-3-small`, 1536 измерений;
   локальная модель настраивается через `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS`);

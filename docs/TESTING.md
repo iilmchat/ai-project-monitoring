@@ -65,8 +65,10 @@ frontend/
 ## 6. RAG (code search)
 
 - Unit-тесты (`backend/tests/test_code_search.py`) проверяют file walker,
-  ignore-лист, чанкинг с перекрытием, hash, маскирование секретов и деградацию
-  на SQLite (`503 rag_unavailable`).
+  ignore-лист, чанкинг с перекрытием, hash, маскирование секретов,
+  `sqlite-vec` roundtrip, индекс/поиск на SQLite и Python-fallback.
+- PyInstaller-сборка проверяется smoke-тестом sidecar: индексация и поиск без
+  `no such module: vec0` (расширение `vec0` кладётся в бандл).
 - Реальный pgvector-поиск требует PostgreSQL с расширением `vector` и
   `POSTGRES_TEST_URL`; без него интеграционные проверки пропускаются.
 - Индексация только читает файлы: `.git`, индекс Git и рабочие файлы не
