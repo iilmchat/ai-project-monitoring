@@ -1,9 +1,9 @@
 # TODO v1.5.0 — Global Analytics & IaC Scanning
 
 **Статус:** Sprint 62 — планирование завершено; Sprint 63 — реализован
-(v1.4.3); спринты 64–65 — запланированы.
-**База:** v1.4.2 «Chat/Embedding Model Split» (раздельные `model_name` и
-`embedding_model` в профиле AI, миграция 016).
+(v1.4.3); S63-Fix-4 — реализован (v1.4.4); спринты 64–65 — запланированы.
+**База:** v1.4.4 «RAG Settings & Diagnostics» (раздельные `model_name` и
+`embedding_model`, настройки RAG в UI, проверка размерности).
 **Цель:** дать сводную картину технического долга по всем tracked-репозиториям
 и добавить read-only аудит инфраструктурных файлов (`Dockerfile`,
 `docker-compose.yml`) без запуска Docker, сборки образов и исполнения кода.

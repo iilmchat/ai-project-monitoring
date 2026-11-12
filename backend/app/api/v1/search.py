@@ -43,9 +43,10 @@ async def _run_index(
     service: CodeSearchService,
     repository_ids: list[int] | None,
     force: bool,
+    probe: bool = True,
 ) -> None:
     try:
-        await service.index(repository_ids, force=force)
+        await service.index(repository_ids, force=force, probe=probe)
     except RagBusyError:
         return
     except RagUnavailableError:
@@ -101,7 +102,17 @@ async def index_code(
     service = _service(request)
     if not service.available:
         raise _unavailable(RagUnavailableError())
-    background.add_task(_run_index, service, payload.repository_ids, payload.force)
+    try:
+        await service.check_embedding_dimensions()
+    except RagUnavailableError as exc:
+        raise _unavailable(exc) from exc
+    background.add_task(
+        _run_index,
+        service,
+        payload.repository_ids,
+        payload.force,
+        False,
+    )
     return CodeIndexJob(
         status="started",
         message="indexing started",

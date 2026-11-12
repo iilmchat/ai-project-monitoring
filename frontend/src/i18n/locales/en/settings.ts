@@ -87,6 +87,14 @@ export const settings = {
   'settings.fetchTimeout': 'FETCH_TIMEOUT, s',
   'settings.statusTtl': 'STATUS_TTL_SECONDS, s',
   'settings.mirrorPollInterval': 'MIRROR_POLL_INTERVAL_SECONDS, s',
+  'settings.ragSection': 'RAG settings (code search)',
+  'settings.ragHint':
+    'Changes apply on the next indexing run. After changing the model or dimensions, re-index the code.',
+  'settings.embeddingDimensionsHint':
+    'Use 768 for nomic-embed-text. Use 1536 for OpenAI text-embedding-3-small.',
+  'settings.ragChunkSizeHint': 'Chunk size in characters (default 1000).',
+  'settings.ragChunkOverlapHint':
+    'Overlap between adjacent chunks in characters (default 150).',
   'settings.providerType': 'Provider type',
   'settings.providerTypeOpenai': 'OpenAI-compatible',
   'settings.providerTypeGigachat': 'GigaChat (OAuth)',

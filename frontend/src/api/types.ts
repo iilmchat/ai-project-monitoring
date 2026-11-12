@@ -458,6 +458,9 @@ export interface AppSettings {
   fetch_timeout: number
   status_ttl_seconds: number
   mirror_poll_interval_seconds: number
+  embedding_dimensions: number
+  rag_chunk_size: number
+  rag_chunk_overlap: number
 }
 
 export interface SettingsUpdate {
@@ -479,6 +482,9 @@ export interface SettingsUpdate {
   fetch_timeout?: number
   status_ttl_seconds?: number
   mirror_poll_interval_seconds?: number
+  embedding_dimensions?: number
+  rag_chunk_size?: number
+  rag_chunk_overlap?: number
 }
 
 export interface CommitMessageSuggestion {

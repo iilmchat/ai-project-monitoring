@@ -55,6 +55,9 @@ function SettingsContent() {
   const [fetchTimeout, setFetchTimeout] = useState(30)
   const [statusTtl, setStatusTtl] = useState(60)
   const [mirrorPoll, setMirrorPoll] = useState(300)
+  const [embeddingDimensions, setEmbeddingDimensions] = useState(768)
+  const [ragChunkSize, setRagChunkSize] = useState(1000)
+  const [ragChunkOverlap, setRagChunkOverlap] = useState(150)
   const [provider, setProvider] = useState<'github' | 'gitflic'>('github')
   const [providers, setProviders] = useState<AIProviderProfile[]>([])
   const [providersLoading, setProvidersLoading] = useState(true)
@@ -102,6 +105,9 @@ function SettingsContent() {
         setFetchTimeout(data.fetch_timeout ?? 30)
         setStatusTtl(data.status_ttl_seconds ?? 60)
         setMirrorPoll(data.mirror_poll_interval_seconds ?? 300)
+        setEmbeddingDimensions(data.embedding_dimensions ?? 768)
+        setRagChunkSize(data.rag_chunk_size ?? 1000)
+        setRagChunkOverlap(data.rag_chunk_overlap ?? 150)
         setProviders(providerData)
       })
       .catch(() => {
@@ -148,6 +154,9 @@ function SettingsContent() {
         fetch_timeout: fetchTimeout,
         status_ttl_seconds: statusTtl,
         mirror_poll_interval_seconds: mirrorPoll,
+        embedding_dimensions: embeddingDimensions,
+        rag_chunk_size: ragChunkSize,
+        rag_chunk_overlap: ragChunkOverlap,
       }
       if (githubToken.trim()) payload.github_token = githubToken.trim()
       if (gitflicToken.trim()) payload.gitflic_token = gitflicToken.trim()
@@ -532,6 +541,62 @@ function SettingsContent() {
                   }
                   className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 />
+              </label>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {t('settings.ragSection')}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t('settings.ragHint')}
+            </p>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                EMBEDDING_DIMENSIONS
+                <input
+                  type="number"
+                  min={1}
+                  value={embeddingDimensions}
+                  onChange={(event) =>
+                    setEmbeddingDimensions(Number(event.target.value) || 768)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">
+                  {t('settings.embeddingDimensionsHint')}
+                </span>
+              </label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                RAG_CHUNK_SIZE
+                <input
+                  type="number"
+                  min={1}
+                  value={ragChunkSize}
+                  onChange={(event) =>
+                    setRagChunkSize(Number(event.target.value) || 1000)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">
+                  {t('settings.ragChunkSizeHint')}
+                </span>
+              </label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                RAG_CHUNK_OVERLAP
+                <input
+                  type="number"
+                  min={0}
+                  value={ragChunkOverlap}
+                  onChange={(event) =>
+                    setRagChunkOverlap(Number(event.target.value) || 0)
+                  }
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">
+                  {t('settings.ragChunkOverlapHint')}
+                </span>
               </label>
             </div>
           </div>

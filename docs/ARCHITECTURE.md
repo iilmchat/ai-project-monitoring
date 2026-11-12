@@ -11,9 +11,11 @@
 §24 (`AuthService`) и §25 (Tauri desktop) — реализованы в v1.0.0 (Sprints 47–48);
 §26–§28 — реализованы в v1.2.0 (Sprints 53–55), см.
 [`TODO_V1.2.0.md`](../TODO_V1.2.0.md); §29–§32 — реализованы в v1.3.0
-(Sprints 57–59), см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md); §33–§34 —
-**план v1.5.0** (Sprints 63–64), см. [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
-v1.4.2 — разделение `model_name` (чат) и `embedding_model` (RAG) в §15.7/§21.
+(Sprints 57–59), см. [`TODO_V1.3.0.md`](../TODO_V1.3.0.md); §33 реализован в
+v1.4.3; §34 — **план v1.5.0** (Sprint 64), см.
+[`TODO_V1.5.0.md`](../TODO_V1.5.0.md). v1.4.2 — разделение `model_name` (чат) и
+`embedding_model` (RAG) в §15.7/§21; v1.4.4 — настройки RAG в UI и диагностика
+эмбеддингов.
 
 ---
 
@@ -1043,6 +1045,16 @@ POST /repositories/{id}/ai/cve-explain
 backfill'ит существующие OpenAI-совместимые профили
 `text-embedding-nomic-embed-text-v1.5`.
 
+**v1.4.4 (RAG settings & diagnostics):** `app_settings` принимает
+`embedding_dimensions`, `rag_chunk_size` и `rag_chunk_overlap`; при старте
+`SettingsService.load_into_config()` применяет их к `Settings`, поэтому UI
+меняет RAG без перезапуска. `RAG_CHUNK_SIZE` — публичное имя, legacy
+`RAG_CHUNK_CHARS` используется как fallback. Для HTTP-ошибок `/v1/embeddings`
+`LLMService` логирует `status_code` и `response_text` (≤ 2000 символов), а
+текст ошибки возвращается в `test_embedding`. Перед индексацией
+`CodeSearchService` делает пробный `embed("test")` и возвращает
+`dimension_mismatch` с фактической/ожидаемой длиной.
+
 ---
 
 ## 16. GlobalAnalyticsService (v0.7.0, Sprint 33)
@@ -1234,7 +1246,7 @@ POST /api/v1/search/code/index {repository_ids?, force?}
       │    ignore: .git, node_modules, .venv, dist, build, target, vendor,
       │            bin, obj, .vs, .env*, lock-файлы, бинарники; лимит RAG_MAX_FILE_BYTES
       ├─ Chunker: Markdown — заголовки + окно; код — функции/классы + окно
-      │    RAG_CHUNK_CHARS (1000), RAG_CHUNK_OVERLAP (150), start/end line
+      │    RAG_CHUNK_SIZE (1000), RAG_CHUNK_OVERLAP (150), start/end line
       ├─ content_hash = sha256(нормализованный чанк)
       ├─ Incremental: file hash (sha256+size/mtime) → неизменённые файлы skip;
       │    изменившиеся чанки переэмбеддируются, старые удаляются
@@ -1257,11 +1269,12 @@ POST /api/v1/search/code/index {repository_ids?, force?}
 - `UNIQUE(repository_id, path, chunk_index, content_hash)` — защита от дублей;
 - индексы: `(repository_id)`, `(content_hash)`, HNSW по embedding.
 
-Размерность — `EMBEDDING_DIMENSIONS` (default 1536,
-`text-embedding-3-small`; для `nomic-embed-text` — 768). Модель берётся из
-`embedding_model` активного профиля (§15.7), fallback — `EMBEDDING_MODEL`.
-Смена модели/размерности требует миграции и полной переиндексации; при старте
-сервис сверяет длину вектора и возвращает `embedding_dimension_mismatch`.
+Размерность — `EMBEDDING_DIMENSIONS` (default 1536 для OpenAI
+`text-embedding-3-small`; для `nomic-embed-text` — 768, значение задаётся в
+UI «Настройки RAG»). Модель берётся из `embedding_model` активного профиля
+(§15.7), fallback — `EMBEDDING_MODEL`. Смена модели/размерности требует
+переиндексации; перед индексацией сервис делает пробный `embed("test")` и при
+несовпадении возвращает `dimension_mismatch` с фактической и ожидаемой длиной.
 Если `embedding_model` не задан — `embedding_model_not_configured`; HTTP-ошибка
 эмбеддингов — `embedding_model_unavailable: проверьте настройки AI-провайдера`.
 
@@ -1820,7 +1833,7 @@ class NuGetClient:
   `.targets`; `bin/`, `obj/`, `.vs/`, `packages.lock.json`,
   `project.assets.json` фильтруются.
 - RAG: `.cs` → `csharp`, `.fs/.fsx` → `fsharp`, XML-манифесты → `xml`;
-  чанкинг — общее окно `RAG_CHUNK_CHARS`/`RAG_CHUNK_OVERLAP` (эвристика по
+  чанкинг — общее окно `RAG_CHUNK_SIZE`/`RAG_CHUNK_OVERLAP` (эвристика по
   классам/методам — кандидат v1.4).
 - Строки подключения (`Password=`, `AccountKey=`) маскируются; `.env` и
   lock-файлы не индексируются.
@@ -1992,10 +2005,11 @@ POST /repositories/{id}/automation/generate {tool}
 
 ---
 
-## 33. GlobalStatsService — техдолг по всем репозиториям (v1.5.0, Sprint 63 — план)
+## 33. GlobalStatsService — техдолг по всем репозиториям (v1.4.3, Sprint 63 — реализовано)
 
-> **Статус:** план v1.5.0. Контракт — SPEC §3.34. Новых таблиц нет;
-> агрегация только читает существующие кэши и in-memory кэш ответа.
+> **Статус:** реализовано в v1.4.3 (`GlobalStatsService`, Sprint 63). Контракт —
+> SPEC §3.34. Новых таблиц нет; агрегация только читает существующие кэши и
+> in-memory кэш ответа.
 
 **Задача.** Ответить на вопрос «что горит во всей кодовой базе» одним
 экраном, не замедляя основной дашборд и не запуская тяжёлые проверки на

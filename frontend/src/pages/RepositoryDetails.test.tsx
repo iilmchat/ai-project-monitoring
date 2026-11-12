@@ -253,6 +253,9 @@ const appSettings: AppSettings = {
   fetch_timeout: 30,
   status_ttl_seconds: 60,
   mirror_poll_interval_seconds: 300,
+  embedding_dimensions: 768,
+  rag_chunk_size: 1000,
+  rag_chunk_overlap: 150,
 }
 
 function renderDetails() {

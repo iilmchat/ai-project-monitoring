@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     embedding_timeout_seconds: float = 30.0
     rag_max_file_bytes: int = 524288
     rag_max_chunks_per_repo: int = 2000
+    rag_chunk_size: int = 0  # 0 = fall back to RAG_CHUNK_CHARS (legacy name)
     rag_chunk_chars: int = 1000
     rag_chunk_overlap: int = 150
     auth_enabled: bool = True
@@ -132,7 +133,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.4.3"
+    app_version: str = "1.4.4"
 
     @property
     def scan_root_paths(self) -> list[str]:
@@ -167,6 +168,13 @@ class Settings(BaseSettings):
         if self.scan_roots.strip() in {"", "/projects"}:
             projects = Path.home() / "Projects"
             self.scan_roots = str(projects if projects.exists() else Path.home())
+        return self
+
+    @model_validator(mode="after")
+    def _apply_rag_defaults(self) -> Settings:
+        """Keep ``RAG_CHUNK_SIZE`` compatible with the legacy ``RAG_CHUNK_CHARS``."""
+        if self.rag_chunk_size <= 0:
+            self.rag_chunk_size = self.rag_chunk_chars
         return self
 
 

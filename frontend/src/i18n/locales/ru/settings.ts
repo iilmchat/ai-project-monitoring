@@ -87,6 +87,14 @@ export const settings = {
   'settings.fetchTimeout': 'FETCH_TIMEOUT, с',
   'settings.statusTtl': 'STATUS_TTL_SECONDS, с',
   'settings.mirrorPollInterval': 'MIRROR_POLL_INTERVAL_SECONDS, с',
+  'settings.ragSection': 'Настройки RAG (Поиск по коду)',
+  'settings.ragHint':
+    'Параметры применяются при следующей индексации. После смены модели или размерности переиндексируйте код.',
+  'settings.embeddingDimensionsHint':
+    'Для nomic-embed-text укажите 768. Для OpenAI text-embedding-3-small — 1536.',
+  'settings.ragChunkSizeHint': 'Размер чанка в символах (по умолчанию 1000).',
+  'settings.ragChunkOverlapHint':
+    'Перекрытие соседних чанков в символах (по умолчанию 150).',
   'settings.providerType': 'Тип провайдера',
   'settings.providerTypeOpenai': 'OpenAI-совместимый',
   'settings.providerTypeGigachat': 'GigaChat (OAuth)',

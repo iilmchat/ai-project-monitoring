@@ -189,16 +189,23 @@ class CodeSearchService:
         lowered = self._database_url.lower()
         return self._is_sqlite or lowered.startswith(("postgresql", "postgres"))
 
+    async def check_embedding_dimensions(self) -> None:
+        """Probe the embedding model and fail early on a dimension mismatch."""
+        await self._embed(["test"])
+
     async def index(
         self,
         repository_ids: list[int] | None = None,
         *,
         force: bool = False,
+        probe: bool = True,
     ) -> CodeIndexStatus:
         self._require_available()
         await self._ensure_sqlite_schema()
         if self._running:
             raise RagBusyError("indexing already running")
+        if probe:
+            await self.check_embedding_dimensions()
         self._running = True
         self._errors = []
         indexed_chunks = 0
@@ -640,7 +647,7 @@ class CodeSearchService:
                 content,
                 path=relative,
                 language=language,
-                max_chars=self._settings.rag_chunk_chars,
+                max_chars=self._settings.rag_chunk_size,
                 overlap=self._settings.rag_chunk_overlap,
             )
             if not chunks:
@@ -797,9 +804,11 @@ class CodeSearchService:
             for vector in result:
                 if len(vector) != self._settings.embedding_dimensions:
                     raise RagUnavailableError(
-                        "embedding_dimension_mismatch",
-                        "embedding dimension does not match the index; "
-                        "check EMBEDDING_DIMENSIONS",
+                        "dimension_mismatch",
+                        f"модель вернула вектор длиной {len(vector)}, "
+                        f"а в настройках указано "
+                        f"{self._settings.embedding_dimensions}. "
+                        "Измените настройки RAG.",
                     )
             vectors.extend(result)
         return vectors

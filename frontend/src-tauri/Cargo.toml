@@ -1,6 +1,6 @@
 [package]
 name = "iiruchating-desktop"
-version = "1.4.3"
+version = "1.4.4"
 description = "IIRuchating desktop shell"
 authors = ["IIRuchating"]
 edition = "2021"

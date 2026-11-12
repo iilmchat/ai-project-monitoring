@@ -2,7 +2,7 @@
 
 Интеллектуальный ассистент для разработчика, который держит десятки локальных репозиториев. **Показывает**, что не закоммичено, не запушено и где вы отклонились от удалённого репозитория — вместо того чтобы полагаться на память и ежедневный ритуал `git pull / git push`.
 
-**Версия:** v1.4.3 · **© 2026 RuChating (iilmchat)**
+**Версия:** v1.4.4 · **© 2026 RuChating (iilmchat)**
 
 ---
 
@@ -34,7 +34,7 @@
 - **Интеграция с AI-агентами** — генерация Markdown-задач для DSH/OpenCode; **профили AI-провайдеров** (LM Studio, DeepSeek, OpenRouter, GigaChat OAuth) с активацией без перезапуска и раздельными моделями чата (`model_name`) и эмбеддингов (`embedding_model`, RAG).
 - **E2E-тесты** — Playwright-сценарии onboarding/сканирования, RU/EN + темы и AI-коммита на моках API/LLM; `pnpm --dir frontend test:e2e`.
 - **Smart Cache** — LLM-ответы кэшируются по `state_hash` (dashboard, unification, CVE, commit message) и не вызывают модель при неизменном состоянии.
-- **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев: PostgreSQL + `pgvector` на сервере и SQLite + `sqlite-vec` в desktop-сборке (с Python-fallback, если расширение недоступно).
+- **RAG-поиск по коду** — семантический поиск по README/docs/src всех tracked-репозиториев: PostgreSQL + `pgvector` на сервере и SQLite + `sqlite-vec` в desktop-сборке (с Python-fallback, если расширение недоступно); размерность вектора, размер чанка и перекрытие настраиваются в UI.
 - **Desktop-приложение (v1.0.0+)** — Tauri + Python sidecar, Windows `.msi`/`.exe`, SQLite в AppData, автоматический запуск/остановка backend без Docker; мастер первичной настройки (папки сканирования, токены), файловые логи `%APPDATA%/IIRuchating/logs/app.log` с ротацией 5 МБ и автообновления через Tauri Updater (подписанные релизы GitHub Actions).
 - **AI Code Review** — ревью незакоммиченных изменений (`git diff HEAD`) локальной LLM: баги, безопасность, улучшения; чанкинг больших diff, кэш и отдельная модалка в карточке репозитория.
 - **AI Conflict Resolver & Release Notes** — предложение объединённого кода для `<<<<<<<`-блоков (read-only, без автозаписи) и черновик CHANGELOG в Keep a Changelog по коммитам между тегами.
@@ -271,10 +271,10 @@ pnpm --dir frontend exec playwright install chromium
 
 | Показатель | Значение |
 |------------|----------|
-| Версия | **v1.4.3** (2026-11-11) |
-| Статус | **Global Tech Debt Dashboard + единое отображение времени** |
-| Спринты | 1–63 |
-| Тесты backend | **361** (360 passed, 1 skipped; pytest, реальные tmp-репозитории) |
+| Версия | **v1.4.4** (2026-11-12) |
+| Статус | **Настройки RAG в UI + диагностика эмбеддингов** |
+| Спринты | 1–63 + hotfix S63-Fix-4 |
+| Тесты backend | **362** (361 passed, 1 skipped; pytest, реальные tmp-репозитории) |
 | Тесты frontend | **73** unit (Vitest + Testing Library) + **3** E2E (Playwright) |
 | Entry bundle | **89.88 kB gzip** (+ lazy charts 100.9 kB, GlobalStats 2.9 kB, SAST 1.9 kB, automation 1.1 kB, admin 1.8/3.9 kB, поиск кода 2.5 kB, настройки 2.1 kB, onboarding 1.6 kB, логин 1.3 kB) |
 | Desktop | Windows `.msi` + NSIS `.exe`, автообновления через Tauri Updater; macOS — сборка на macOS (CI/notarization) |
@@ -383,7 +383,7 @@ pnpm --dir frontend exec playwright install chromium
   PR и не исполняет код проверяемых проектов; MSBuild-выражения в .NET не
   вычисляются (KI-025).
 
-**v1.4.0–v1.4.2 «RAG on Desktop & Model Split»** — релиз 2026-11-11
+**v1.4.0–v1.4.4 «RAG, Model Split & RAG Settings»** — релиз 2026-11-12
 ([`CHANGELOG.md`](docs/CHANGELOG.md)):
 
 - **Sprint 61 — SQLite RAG & UX:** ✅ `sqlite-vec` (`vec0`) вместо обязательного
@@ -396,6 +396,12 @@ pnpm --dir frontend exec playwright install chromium
 - **S63-Fix-3 — Chat & Embedding Models:** ✅ `embedding_model` в профиле
   AI-провайдера и миграция `016`; чат и RAG используют разные модели; проверка
   `/settings/llm/test` показывает статусы чата и эмбеддингов отдельно.
+- **Sprint 63 — Global Tech Debt Dashboard:** ✅ сводка outdated/CVE/dirty/
+  diverged по всем tracked-репозиториям, AI-обзор и графики на дашборде.
+- **S63-Fix-4 — RAG Settings & Diagnostics:** ✅ `EMBEDDING_DIMENSIONS`,
+  `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP` в настройках; тело HTTP-ошибки
+  эмбеддингов пишется в structlog и показывается в тесте LLM; перед
+  индексацией выполняется проверка размерности (`dimension_mismatch`).
 
 **v1.5.0 «Global Analytics & IaC Scanning»** — планируется
 ([`TODO_V1.5.0.md`](TODO_V1.5.0.md)):

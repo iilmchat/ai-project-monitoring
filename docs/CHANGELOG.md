@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-11-12
+
+Настройки RAG вынесены в UI, а HTTP-ошибки эмбеддингов теперь логируются с
+точным телом ответа LM Studio; перед индексацией проверяется размерность.
+
+### Добавлено
+
+- feat(settings): блок **«Настройки RAG (Поиск по коду)»** —
+  `EMBEDDING_DIMENSIONS`, `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP` с подсказками
+  для `nomic-embed-text` (768) и OpenAI `text-embedding-3-small` (1536).
+- feat(settings): ключи `embedding_dimensions`, `rag_chunk_size`,
+  `rag_chunk_overlap` в `AppSetting`/`GET|PATCH /settings`; при старте
+  `SettingsService.load_into_config()` применяет их к `Settings`.
+  `RAG_CHUNK_SIZE` — публичное имя, legacy `RAG_CHUNK_CHARS` — fallback.
+- feat(rag): перед индексацией выполняется пробный `embed("test")`; при
+  несовпадении длины вектора возвращается `dimension_mismatch` с фактическим
+  и ожидаемым значением.
+- feat(rag): `POST /search/code/index` делает preflight и возвращает `503` с
+  понятной ошибкой вместо «молчаливого» фонового запуска.
+
+### Изменено
+
+- feat(llm): при `status_code >= 400` от `/v1/embeddings` в structlog пишется
+  `embedding_request_failed` c `status_code` и `response_text` (≤ 2000
+  символов); текст ответа также попадает в ошибку `test_embedding`.
+- chore(release): версия `1.4.4` во всех манифестах; sidecar пересобран.
+- test: `test_settings.py` (сохранение RAG-ключей), `test_code_search.py`
+  (dimension mismatch, тело HTTP-ошибки, preflight индексации).
+
 ## [1.4.3] - 2026-11-11
 
 Глобальный дашборд технического долга: один экран показывает outdated-пакеты,

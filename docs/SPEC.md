@@ -13,11 +13,12 @@ Sprints 53–54; §3.30 (conversational RAG) — реализовано в Sprin
 автоматические PR) — реализованы в v1.3.0 (Sprints 57–59), см.
 [`TODO_V1.3.0.md`](../TODO_V1.3.0.md). v1.4.0–v1.4.1 — SQLite + `sqlite-vec`
 RAG и управление паролями (Sprint 61); v1.4.2 — разделение `model_name` (чат) и
-`embedding_model` (RAG), миграция 016. §3.34 (Global Tech Debt Dashboard) и
-§3.35 (IaC Scanning) — **план v1.5.0** (Sprints 63–64), см.
+`embedding_model` (RAG), миграция 016; v1.4.3 — Global Tech Debt Dashboard
+(§3.34, Sprint 63); v1.4.4 — настройки RAG в UI (§3.12) и диагностика
+эмбеддингов. §3.35 (IaC Scanning) — **план v1.5.0** (Sprint 64), см.
 [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
 
-**Версия:** v1.4.2 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-11
+**Версия:** v1.4.4 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-12
 
 ---
 
@@ -341,7 +342,7 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 
 | Метод | Путь | Тело / Ответ |
 |-------|------|--------------|
-| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote, telegram_bot_token, telegram_chat_id, notifications_enabled, fetch_timeout, status_ttl_seconds, mirror_poll_interval_seconds}` |
+| GET | `/settings` | `{scan_roots, github_token, gitflic_token, webhook_secret, default_canonical_provider, llm_enabled, llm_base_url, llm_model, llm_api_key, llm_timeout_seconds, llm_max_diff_chars, llm_allow_remote, telegram_bot_token, telegram_chat_id, notifications_enabled, fetch_timeout, status_ttl_seconds, mirror_poll_interval_seconds, embedding_dimensions, rag_chunk_size, rag_chunk_overlap}` |
 | PATCH | `/settings` | те же поля (все опциональны) → обновлённые значения |
 | GET | `/settings/status` | `{is_configured: bool}` — `true`, если `SCAN_ROOTS` непустой (v1.1.0, S50) |
 
@@ -351,17 +352,21 @@ CI-статусы кэшируются (60 с) и не блокируют заг
 `llm_enabled`, `llm_base_url`, `llm_model`, `llm_api_key`,
 `llm_timeout_seconds`, `llm_max_diff_chars`, `llm_allow_remote`,
 `telegram_bot_token`, `telegram_chat_id`, `notifications_enabled`,
-`fetch_timeout`, `status_ttl_seconds`, `mirror_poll_interval_seconds`. Значения
+`fetch_timeout`, `status_ttl_seconds`, `mirror_poll_interval_seconds`,
+`embedding_dimensions`, `rag_chunk_size`, `rag_chunk_overlap`. Значения
 хранятся в `app_settings`; при старте подхватываются в конфиг
 (fallback — `config.py`). Если таблица `app_settings` пуста, при старте она
 **сидируется** значениями из `.env`/`config.py` (S43-001), поэтому все
 параметры видны и редактируются в UI без ручного PATCH.
 
 **Группы UI:** «Уведомления» (`telegram_bot_token`, `telegram_chat_id`,
-`notifications_enabled`) и «Производительность» (`fetch_timeout`,
-`status_ttl_seconds`, `mirror_poll_interval_seconds`). Изменения применяются к
-`NotificationService`, `RemoteService`, `StatusService` и `MirrorScheduler`
-без перезапуска.
+`notifications_enabled`), «Производительность» (`fetch_timeout`,
+`status_ttl_seconds`, `mirror_poll_interval_seconds`) и «Настройки RAG»
+(`embedding_dimensions`, `rag_chunk_size`, `rag_chunk_overlap`). Изменения
+применяются к `NotificationService`, `RemoteService`, `StatusService`,
+`MirrorScheduler` и `CodeSearchService` без перезапуска (RAG — со следующей
+индексации). `RAG_CHUNK_SIZE` — публичное имя; legacy `RAG_CHUNK_CHARS`
+поддерживается как fallback.
 
 **LLM-настройки (v0.7.0, Sprint 32 — реализовано):**
 
@@ -2088,11 +2093,11 @@ bootstrap-пользователь — `admin`. Нельзя понизить/о
 
 ---
 
-### 3.34. Global Tech Debt Dashboard (v1.5.0, Sprint 63 — план)
+### 3.34. Global Tech Debt Dashboard (v1.4.3, Sprint 63 — реализовано)
 
-> **Статус:** запланировано на v1.5.0 (Sprint 63). Контракт фиксируется до
-> реализации; `GET /dashboard` и `GET /dashboard/global-dependencies` не
-> меняются. Агрегация только читает существующие отчёты и кэши.
+> **Статус:** реализовано в v1.4.3 (`GlobalStatsService`, Sprint 63);
+> `GET /dashboard` и `GET /dashboard/global-dependencies` не меняются.
+> Агрегация только читает существующие отчёты и кэши.
 
 Сводная картина технического долга по всем `tracked=true` репозиториям:
 outdated-пакеты, CVE, dirty-файлы, diverged-ветки и (с Sprint 64) IaC-проблемы.
@@ -2564,7 +2569,7 @@ IaC-отчёты не персистятся между перезапускам
 | **Auth (v1.0.0, реализовано)** | **`AUTH_ENABLED` (default true), `ADMIN_USERNAME` (default `admin`), `ADMIN_PASSWORD` (default `admin`, хэшируется при bootstrap), `AUTH_JWT_SECRET` (≥32 байта), `AUTH_TOKEN_TTL_SECONDS` (default 604800 — 7 дней), `AUTH_LOGIN_RATE_LIMIT` (default 5), `AUTH_LOGIN_RATE_WINDOW_SECONDS` (default 60); cookie `iiruchating_session` HttpOnly/SameSite=Lax** |
 | **Desktop (v1.0.0, реализовано)** | **`TAURI_MODE=true` (sidecar) → SQLite в `TAURI_DATA_DIR`/AppData, `SCAN_ROOTS` по умолчанию `~/Projects`; `backend.log` в app-data; RAG только внешний PostgreSQL** |
 | **Smart AI cache (v0.9.0, реализовано)** | **`AI_PROMPT_VERSION` (default `v1`), state hash в ключе `ai_cache`, single-flight, `X-AI-Cache: hit\|miss`; `refresh=true` обходит кэш; ошибки LLM не кэшируются** |
-| **RAG (v0.9.0; SQLite v1.4.0)** | **PostgreSQL + `pgvector` или SQLite + `sqlite-vec`; модель — `embedding_model` активного профиля (fallback `EMBEDDING_MODEL`, default `text-embedding-3-small`), `EMBEDDING_BASE_URL`, `EMBEDDING_DIMENSIONS` (default 1536; для `nomic-embed-text` — 768), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (524288), `RAG_MAX_CHUNKS_PER_REPO` (2000), `RAG_CHUNK_CHARS` (1000), `RAG_CHUNK_OVERLAP` (150); пустая модель → `503 embedding_model_not_configured`** |
+| **RAG (v0.9.0; SQLite v1.4.0; UI v1.4.4)** | **PostgreSQL + `pgvector` или SQLite + `sqlite-vec`; модель — `embedding_model` активного профиля (fallback `EMBEDDING_MODEL`, default `text-embedding-3-small`), `EMBEDDING_BASE_URL`, `EMBEDDING_DIMENSIONS` (default в UI 768; для `nomic-embed-text` — 768, для OpenAI — 1536), `EMBEDDING_ALLOW_REMOTE` (default false), `EMBEDDING_BATCH_SIZE` (default 32), `RAG_MAX_FILE_BYTES` (524288), `RAG_MAX_CHUNKS_PER_REPO` (2000), `RAG_CHUNK_SIZE` (1000; legacy alias `RAG_CHUNK_CHARS`), `RAG_CHUNK_OVERLAP` (150); пустая модель → `503 embedding_model_not_configured`; размерность — `dimension_mismatch`** |
 
 ---
 
@@ -2728,22 +2733,22 @@ IaC-отчёты не персистятся между перезапускам
       тег `v1.3.0`, артефакты Windows/macOS/Linux, KI-025 актуальна/закрыта.
 - [x] Документы: ADR-0018–0021, `TODO_V1.3.0.md`.
 
-### 6.9. v1.5.0 (спринты 63–65 — план)
+### 6.9. v1.5.0 (спринты 64–65 — план; Sprint 63 реализован в v1.4.3)
 
-- [ ] Global stats (Sprint 63): `GET /dashboard/global-stats`, агрегация
+- [x] Global stats (Sprint 63, v1.4.3): `GET /dashboard/global-stats`, агрегация
       outdated/CVE/dirty/diverged по `tracked=true`, partial/stale, кэш 5 мин,
       `top_problematic` и `problem_score`.
-- [ ] AI Insights (Sprint 63): общий отчёт по кодовой базе через `ai_cache`,
-      только агрегаты, 503 при LLM off, до 5 приоритетов.
-- [ ] UI (Sprint 63): блок «Tech Debt Overview» с Pie/Bar (lazy), empty/partial/
-      error, RU/EN, `aria`, entry bundle < 90 kB gzip.
+- [x] AI Insights (Sprint 63, v1.4.3): общий отчёт по кодовой базе через
+      `ai_cache`, только агрегаты, 503 при LLM off, до 5 приоритетов.
+- [x] UI (Sprint 63, v1.4.3): блок «Tech Debt Overview» с Pie/Bar (lazy),
+      empty/partial/error, RU/EN, `aria`, entry bundle < 90 kB gzip.
 - [ ] IaC (Sprint 64): `IacService` для `Dockerfile`/`docker-compose.yml`,
       правила IAC001–IAC008, `GET /repositories/{id}/iac`, лимиты, read-only.
 - [ ] Global IaC (Sprint 64): `GET /dashboard/global-iac`, сводка на дашборде,
       `iac_issues` в global-stats.
 - [ ] Release (Sprint 65): версии `1.5.0`, CHANGELOG/RELEASES/README/SPEC/
       ARCHITECTURE, тег `v1.5.0`, артефакты, KI-026 актуальна/закрыта.
-- [ ] Документы: ADR-0023/0024, `TODO_V1.5.0.md`.
+- [x] Документы: ADR-0023, `TODO_V1.5.0.md`; [ ] ADR-0024.
 
 ---
 
@@ -2790,6 +2795,8 @@ IaC-отчёты не персистятся между перезапускам
 | v1.4.0 | RAG на SQLite + `sqlite-vec` для desktop, Python-fallback, UX-фиксы | `docs/CHANGELOG.md` |
 | v1.4.1 | смена своего пароля, admin-сброс пароля | `docs/CHANGELOG.md` |
 | v1.4.2 | `chat_model`/`embedding_model` в профиле AI, отдельная проверка эмбеддингов, миграция 016 | `docs/CHANGELOG.md` |
+| v1.4.3 | Global Tech Debt Dashboard, AI-обзор и графики | `docs/CHANGELOG.md` |
+| v1.4.4 | настройки RAG в UI, диагностика HTTP-ошибок эмбеддингов, проверка размерности | `docs/CHANGELOG.md` |
 | v1.5.0 (план) | Global Tech Debt Dashboard, AI-отчёт по всей базе, IaC Scanning (`Dockerfile`/compose), global-iac | `TODO_V1.5.0.md` |
 
 ---

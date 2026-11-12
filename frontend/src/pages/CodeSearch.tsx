@@ -57,7 +57,7 @@ function CodeSearchContent() {
     if (text.includes('embedding_model_not_configured')) {
       return t('search.embeddingNotConfigured')
     }
-    if (text.includes('embedding_dimension_mismatch')) {
+    if (text.includes('dimension_mismatch')) {
       return t('search.embeddingDimensionMismatch')
     }
     if (

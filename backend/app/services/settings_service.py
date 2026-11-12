@@ -39,6 +39,9 @@ ALLOWED_KEYS = frozenset(
         "fetch_timeout",
         "status_ttl_seconds",
         "mirror_poll_interval_seconds",
+        "embedding_dimensions",
+        "rag_chunk_size",
+        "rag_chunk_overlap",
     }
 )
 SECRET_KEYS = frozenset(
@@ -58,6 +61,9 @@ INT_KEYS = frozenset(
         "fetch_timeout",
         "status_ttl_seconds",
         "mirror_poll_interval_seconds",
+        "embedding_dimensions",
+        "rag_chunk_size",
+        "rag_chunk_overlap",
     }
 )
 CANONICAL_PROVIDERS = frozenset({"github", "gitflic"})
@@ -174,7 +180,7 @@ class SettingsService:
                     number = int(value)
                 except (TypeError, ValueError) as exc:
                     raise ValueError(f"{key} must be an integer") from exc
-                if number <= 0:
+                if number < 0 or (number == 0 and key != "rag_chunk_overlap"):
                     raise ValueError(f"{key} must be positive")
                 updates[key] = str(number)
                 continue

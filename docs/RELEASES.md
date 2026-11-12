@@ -1,6 +1,31 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.4.3 (2026-11-11)
+**Текущая версия:** v1.4.4 (2026-11-12)
+
+---
+
+## Хотфикс v1.4.4 — настройки RAG в UI и диагностика эмбеддингов
+
+**Дата:** 2026-11-12 · **Тег:** `v1.4.4`
+
+Настройки RAG больше не требуют редактирования `.env`, а ошибки LM Studio
+видны в логах и в тесте LLM.
+
+- **UI:** блок «Настройки RAG (Поиск по коду)» — `EMBEDDING_DIMENSIONS`
+  (default 768), `RAG_CHUNK_SIZE` (1000), `RAG_CHUNK_OVERLAP` (150) с
+  подсказками для nomic/OpenAI.
+- **Backend:** новые ключи `app_settings` (`embedding_dimensions`,
+  `rag_chunk_size`, `rag_chunk_overlap`) в `GET|PATCH /settings`; при старте
+  применяются через `SettingsService.load_into_config()`. Legacy
+  `RAG_CHUNK_CHARS` поддерживается как fallback.
+- **Диагностика:** `LLMService` логирует `status_code` и `response_text`
+  (≤ 2000 символов) для `>= 400`; `test_embedding` возвращает текст ответа.
+- **Размерность:** перед индексацией — пробный `embed("test")`; при
+  несовпадении `dimension_mismatch` с фактической/ожидаемой длиной.
+  `POST /search/code/index` делает preflight и возвращает `503`.
+- **Проверки:** backend **362** (361 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **73** unit, `typecheck/lint/test/build`; entry bundle **89.88 kB**
+  gzip (budget 90 kB); sidecar пересобран.
 
 ---
 

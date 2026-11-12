@@ -568,9 +568,16 @@ class LLMService:
         except httpx.HTTPError as exc:
             raise EmbeddingError("http_error", "embedding request failed") from exc
         if response.status_code != 200:
+            response_text = response.text[:2000]
+            logger.warning(
+                "embedding_request_failed",
+                status_code=response.status_code,
+                response_text=response_text,
+            )
+            detail = response_text.strip() or f"HTTP {response.status_code}"
             raise EmbeddingError(
                 f"http_{response.status_code}",
-                f"embedding endpoint returned {response.status_code}",
+                f"http_{response.status_code}: {detail}",
             )
         try:
             body = response.json()
@@ -653,7 +660,7 @@ class LLMService:
         try:
             vectors = await self.embed_or_raise(["ping"])
         except EmbeddingError as exc:
-            return False, _elapsed_ms(started), exc.code
+            return False, _elapsed_ms(started), exc.message or exc.code
         latency = _elapsed_ms(started)
         if len(vectors) != 1 or not vectors[0]:
             return False, latency, "invalid_response"

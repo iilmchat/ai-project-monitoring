@@ -172,6 +172,9 @@ async def test_new_settings_apply_to_runtime_services(
             "fetch_timeout": 55,
             "status_ttl_seconds": 90,
             "mirror_poll_interval_seconds": 120,
+            "embedding_dimensions": 768,
+            "rag_chunk_size": 800,
+            "rag_chunk_overlap": 100,
         },
     )
 
@@ -183,11 +186,17 @@ async def test_new_settings_apply_to_runtime_services(
     assert payload["fetch_timeout"] == 55
     assert payload["status_ttl_seconds"] == 90
     assert payload["mirror_poll_interval_seconds"] == 120
+    assert payload["embedding_dimensions"] == 768
+    assert payload["rag_chunk_size"] == 800
+    assert payload["rag_chunk_overlap"] == 100
     assert "123456:abcdefghijklmnop" not in response.text
 
     assert app.state.settings.fetch_timeout == 55
     assert app.state.settings.status_ttl_seconds == 90
     assert app.state.settings.mirror_poll_interval_seconds == 120
+    assert app.state.settings.embedding_dimensions == 768
+    assert app.state.settings.rag_chunk_size == 800
+    assert app.state.settings.rag_chunk_overlap == 100
     assert app.state.remote_service.timeout_seconds == 55
     assert app.state.status_service.ttl_seconds == 90
     assert app.state.mirror_scheduler.interval_seconds == 120

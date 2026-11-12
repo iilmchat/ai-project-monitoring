@@ -170,8 +170,11 @@ async def test_sqlite_search_requires_embedding_model(
     )
 
     index = await client.post("/api/v1/search/code/index", json={})
-    assert index.status_code == 202
-    assert index.json()["status"] == "started"
+    assert index.status_code == 503
+    assert (
+        index.json()["detail"]
+        == "embedding_model_unavailable: проверьте настройки AI-провайдера"
+    )
 
 
 async def test_sqlite_vec_store_roundtrip(settings: Settings) -> None:
@@ -372,6 +375,7 @@ async def test_embedding_http_error_is_structured() -> None:
         await service.embed_or_raise(["redis"])
 
     assert error.value.code == "http_404"
+    assert "model not found" in error.value.message
     assert await service.embed(["redis"]) is None
 
 
@@ -424,6 +428,34 @@ async def test_llm_test_pings_chat_and_embedding_models_separately() -> None:
             {"model": "nomic-embed-text", "input": ["ping"]},
         ),
     ]
+
+
+async def test_index_rejects_dimension_mismatch(
+    session_factory,
+    settings: Settings,
+) -> None:
+    rag_settings = settings.model_copy(update={"embedding_dimensions": 5})
+    service = CodeSearchService(
+        session_factory,
+        rag_settings,
+        LLMService(rag_settings),
+        database_url=rag_settings.database_url,
+        vec_store=_PythonFallbackStore(),
+    )
+
+    async def embed(texts: list[str]) -> list[list[float]]:
+        return _fake_vectors(texts)
+
+    service._llm.embed_or_raise = embed  # type: ignore[method-assign]
+
+    with pytest.raises(RagUnavailableError) as error:
+        await service.index()
+
+    assert error.value.code == "dimension_mismatch"
+    assert error.value.message is not None
+    assert "длиной 4" in error.value.message
+    assert "указано 5" in error.value.message
+    assert "Измените настройки RAG" in error.value.message
 
 
 async def test_rag_index_and_search_use_profile_embedding_model(

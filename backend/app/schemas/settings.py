@@ -30,6 +30,9 @@ class SettingsResponse(BaseModel):
     fetch_timeout: int = 30
     status_ttl_seconds: int = 60
     mirror_poll_interval_seconds: int = 300
+    embedding_dimensions: int = 768
+    rag_chunk_size: int = 1000
+    rag_chunk_overlap: int = 150
 
 
 class SettingsUpdate(BaseModel):
@@ -51,6 +54,9 @@ class SettingsUpdate(BaseModel):
     fetch_timeout: int | None = None
     status_ttl_seconds: int | None = None
     mirror_poll_interval_seconds: int | None = None
+    embedding_dimensions: int | None = None
+    rag_chunk_size: int | None = None
+    rag_chunk_overlap: int | None = None
 
 
 __all__ = ["SettingsResponse", "SettingsStatusResponse", "SettingsUpdate"]

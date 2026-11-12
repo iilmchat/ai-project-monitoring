@@ -45,6 +45,9 @@ def _response(values: dict[str, str | None]) -> SettingsResponse:
         mirror_poll_interval_seconds=_as_int(
             values.get("mirror_poll_interval_seconds"), 300
         ),
+        embedding_dimensions=_as_int(values.get("embedding_dimensions"), 768),
+        rag_chunk_size=_as_int(values.get("rag_chunk_size"), 1000),
+        rag_chunk_overlap=_as_int(values.get("rag_chunk_overlap"), 150),
     )
 
 
