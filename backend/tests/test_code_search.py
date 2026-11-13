@@ -335,7 +335,7 @@ async def test_embedding_uses_active_profile_model(
     assert vectors == [[0.1, 0.2, 0.3]]
     assert captured["body"] == {
         "model": "nomic-embed-text",
-        "input": ["redis"],
+        "input": "redis",
     }
 
 
@@ -377,6 +377,81 @@ async def test_embedding_http_error_is_structured() -> None:
     assert error.value.code == "http_404"
     assert "model not found" in error.value.message
     assert await service.embed(["redis"]) is None
+
+
+async def test_embedding_single_text_falls_back_to_array_on_400() -> None:
+    bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if isinstance(body["input"], str):
+            return httpx.Response(400, json={"error": "input must be an array"})
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [0.1, 0.2]}]},
+        )
+
+    service = LLMService(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    vectors = await service.embed_or_raise(["redis"])
+
+    assert vectors == [[0.1, 0.2]]
+    assert bodies == [
+        {"model": "test-embed", "input": "redis"},
+        {"model": "test-embed", "input": ["redis"]},
+    ]
+
+
+async def test_embedding_batch_uses_array_input() -> None:
+    bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"index": index, "embedding": [0.1]}
+                    for index, _ in enumerate(body["input"])
+                ]
+            },
+        )
+
+    service = LLMService(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await service.embed_or_raise(["redis", "postgres"])
+
+    assert bodies == [
+        {"model": "test-embed", "input": ["redis", "postgres"]},
+    ]
+
+
+async def test_embedding_sends_authorization_header() -> None:
+    seen_auth: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_auth.append(request.headers.get("Authorization"))
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [0.1]}]},
+        )
+
+    service = LLMService(
+        _settings(llm_api_key="lm-token"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await service.embed_or_raise(["redis"])
+
+    assert seen_auth == ["Bearer lm-token"]
 
 
 async def test_llm_test_pings_chat_and_embedding_models_separately() -> None:
@@ -425,7 +500,7 @@ async def test_llm_test_pings_chat_and_embedding_models_separately() -> None:
         ),
         (
             "/v1/embeddings",
-            {"model": "nomic-embed-text", "input": ["ping"]},
+            {"model": "nomic-embed-text", "input": "ping"},
         ),
     ]
 
@@ -495,12 +570,14 @@ async def test_rag_index_and_search_use_profile_embedding_model(
         assert request.url.path == "/v1/embeddings"
         body = json.loads(request.content)
         embedded_models.append(str(body["model"]))
+        raw_input = body["input"]
+        texts = [raw_input] if isinstance(raw_input, str) else raw_input
         return httpx.Response(
             200,
             json={
                 "data": [
                     {"index": index, "embedding": vector_for(text)}
-                    for index, text in enumerate(body["input"])
+                    for index, text in enumerate(texts)
                 ]
             },
         )

@@ -1,6 +1,28 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.4.4 (2026-11-12)
+**Текущая версия:** v1.4.5 (2026-11-13)
+
+---
+
+## Хотфикс v1.4.5 — авторизация эмбеддингов и LLM_ALLOW_REMOTE в UI
+
+**Дата:** 2026-11-13 · **Тег:** `v1.4.5`
+
+RAG снова работает при включённой авторизации LM Studio, а разрешение
+удалённых endpoint'ов настраивается без `.env`.
+
+- **Авторизация:** `embed_or_raise()` формирует `Authorization: Bearer ...` из
+  активного профиля (`api_key`), `EMBEDDING_API_KEY` или `LLM_API_KEY`;
+  обёртка `embed()` использует тот же путь, `POST /settings/llm/test` — тоже.
+- **Payload:** одиночный текст → строка, при HTTP 400 → массив; батчи — массив.
+- **Логи:** `embedding_request` (полный payload, endpoint, модель, тип `input`,
+  номер попытки), `embedding_request_headers` (`has_auth`, без токена),
+  `embedding_request_failed` (+ `response_text`).
+- **UI:** чекбокс «Разрешить удалённые подключения (LLM_ALLOW_REMOTE)» в блоке
+  «AI Провайдеры»; сохраняется сразу через `PATCH /settings`, применяется к
+  `config.LLM_ALLOW_REMOTE` и разрешает чат + эмбеддинги.
+- **Проверки:** backend **365** (364 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **73** unit, `typecheck/lint/test/build`; sidecar пересобран.
 
 ---
 

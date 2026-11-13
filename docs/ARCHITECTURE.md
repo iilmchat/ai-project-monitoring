@@ -15,7 +15,8 @@
 v1.4.3; §34 — **план v1.5.0** (Sprint 64), см.
 [`TODO_V1.5.0.md`](../TODO_V1.5.0.md). v1.4.2 — разделение `model_name` (чат) и
 `embedding_model` (RAG) в §15.7/§21; v1.4.4 — настройки RAG в UI и диагностика
-эмбеддингов.
+эмбеддингов; v1.4.5 — `Authorization` и string/array fallback для
+`/v1/embeddings`, `LLM_ALLOW_REMOTE` в UI.
 
 ---
 
@@ -1054,6 +1055,14 @@ backfill'ит существующие OpenAI-совместимые профи�
 текст ошибки возвращается в `test_embedding`. Перед индексацией
 `CodeSearchService` делает пробный `embed("test")` и возвращает
 `dimension_mismatch` с фактической/ожидаемой длиной.
+
+**v1.4.5 (embedding auth & payload):** `embed_or_raise()` передаёт
+`Authorization: Bearer ...` из активного профиля (`api_key`), а при его
+отсутствии — `EMBEDDING_API_KEY`/`LLM_API_KEY`. Одиночный текст уходит как
+строка (`{"input": "text"}`), при HTTP 400 повторяется массивом; батчи всегда
+используют массив. Перед запросом structlog пишет `embedding_request`
+(полный payload) и `embedding_request_headers` (`has_auth`, без токена).
+`LLM_ALLOW_REMOTE` из UI разрешает не-loopback endpoint для чата и эмбеддингов.
 
 ---
 

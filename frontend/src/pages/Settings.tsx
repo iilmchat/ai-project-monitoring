@@ -52,6 +52,7 @@ function SettingsContent() {
   const [telegramToken, setTelegramToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [llmAllowRemote, setLlmAllowRemote] = useState(false)
   const [fetchTimeout, setFetchTimeout] = useState(30)
   const [statusTtl, setStatusTtl] = useState(60)
   const [mirrorPoll, setMirrorPoll] = useState(300)
@@ -102,6 +103,7 @@ function SettingsContent() {
         setProvider(data.default_canonical_provider === 'gitflic' ? 'gitflic' : 'github')
         setTelegramChatId(data.telegram_chat_id ?? '')
         setNotificationsEnabled(data.notifications_enabled ?? true)
+        setLlmAllowRemote(data.llm_allow_remote ?? false)
         setFetchTimeout(data.fetch_timeout ?? 30)
         setStatusTtl(data.status_ttl_seconds ?? 60)
         setMirrorPoll(data.mirror_poll_interval_seconds ?? 300)
@@ -151,6 +153,7 @@ function SettingsContent() {
         default_canonical_provider: provider,
         telegram_chat_id: telegramChatId,
         notifications_enabled: notificationsEnabled,
+        llm_allow_remote: llmAllowRemote,
         fetch_timeout: fetchTimeout,
         status_ttl_seconds: statusTtl,
         mirror_poll_interval_seconds: mirrorPoll,
@@ -175,6 +178,20 @@ function SettingsContent() {
       setError(t('settings.saveError'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleAllowRemoteChange(next: boolean) {
+    setLlmAllowRemote(next)
+    try {
+      const updated = await updateSettings({ llm_allow_remote: next })
+      setSettings(updated)
+      setLlmAllowRemote(updated.llm_allow_remote)
+      setMessage(t('settings.saved'))
+      setError(null)
+    } catch {
+      setLlmAllowRemote(!next)
+      setError(t('settings.saveError'))
     }
   }
 
@@ -622,6 +639,22 @@ function SettingsContent() {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {t('settings.aiProvidersHint')}
             </p>
+            <label className="mt-3 flex items-start gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={llmAllowRemote}
+                onChange={(event) =>
+                  void handleAllowRemoteChange(event.target.checked)
+                }
+              />
+              <span>
+                {t('settings.llmAllowRemote')}
+                <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">
+                  {t('settings.llmAllowRemoteHint')}
+                </span>
+              </span>
+            </label>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button

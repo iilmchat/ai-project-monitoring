@@ -133,7 +133,7 @@ class Settings(BaseSettings):
     tauri_mode: bool = False
     tauri_data_dir: str = ""
     debug: bool = False
-    app_version: str = "1.4.4"
+    app_version: str = "1.4.5"
 
     @property
     def scan_root_paths(self) -> list[str]:

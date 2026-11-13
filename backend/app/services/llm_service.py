@@ -205,7 +205,12 @@ class LLMService:
             base_url=base_url,
             api_key=api_key,
             timeout=self._settings.embedding_timeout_seconds,
-            allow_remote=self._settings.embedding_allow_remote,
+            # ``LLM_ALLOW_REMOTE`` is the UI-visible switch; the dedicated
+            # embedding flag remains an additional opt-in for split servers.
+            allow_remote=(
+                self._settings.embedding_allow_remote
+                or self._settings.llm_allow_remote
+            ),
         )
 
     async def embedding_model_name(self) -> str | None:
@@ -537,7 +542,14 @@ class LLMService:
             return None
 
     async def embed_or_raise(self, texts: list[str]) -> list[list[float]]:
-        """Return embeddings, raising :class:`EmbeddingError` on failure."""
+        """Return embeddings, raising :class:`EmbeddingError` on failure.
+
+        LM Studio versions differ in how strict they are about ``input``: some
+        only accept a bare string, others require an array. A single text is
+        therefore sent as a string first and retried as ``[text]`` on HTTP 400
+        (S63-Fix-5). Batches always use the array form, because a string cannot
+        describe more than one input.
+        """
         if not texts:
             return []
         config = await self.resolve_embedding()
@@ -546,34 +558,64 @@ class LLMService:
                 "embedding_remote_not_allowed",
                 "embedding endpoint is not allowed",
             )
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
         if config.api_key:
             headers["Authorization"] = f"Bearer {config.api_key}"
-        payload = {
-            "model": config.model,
-            "input": texts,
-        }
+        logger.info(
+            "embedding_request_headers",
+            has_auth="Authorization" in headers,
+        )
+        endpoint = _embeddings_endpoint(config.base_url)
+        attempts = _embedding_payloads(config.model, texts)
+        response: httpx.Response | None = None
         try:
             async with httpx.AsyncClient(
                 timeout=config.timeout,
                 transport=self._transport,
             ) as client:
-                response = await client.post(
-                    _embeddings_endpoint(config.base_url),
-                    json=payload,
-                    headers=headers,
-                )
+                for attempt, payload in enumerate(attempts, start=1):
+                    logger.info(
+                        "embedding_request",
+                        endpoint=endpoint,
+                        model=config.model,
+                        batch_size=len(texts),
+                        input_type=_input_type(payload),
+                        attempt=attempt,
+                        payload=payload,
+                    )
+                    response = await client.post(
+                        endpoint,
+                        json=payload,
+                        headers=headers,
+                    )
+                    if response.status_code == 200:
+                        break
+                    response_text = response.text[:2000]
+                    logger.warning(
+                        "embedding_request_failed",
+                        endpoint=endpoint,
+                        status_code=response.status_code,
+                        attempt=attempt,
+                        input_type=_input_type(payload),
+                        payload=payload,
+                        response_text=response_text,
+                    )
+                    if response.status_code != 400 or attempt == len(attempts):
+                        break
         except httpx.TimeoutException as exc:
             raise EmbeddingError("timeout", "embedding request timed out") from exc
         except httpx.HTTPError as exc:
-            raise EmbeddingError("http_error", "embedding request failed") from exc
-        if response.status_code != 200:
-            response_text = response.text[:2000]
             logger.warning(
                 "embedding_request_failed",
-                status_code=response.status_code,
-                response_text=response_text,
+                endpoint=endpoint,
+                reason="http_error",
+                error=str(exc),
             )
+            raise EmbeddingError("http_error", "embedding request failed") from exc
+        if response is None:  # pragma: no cover - defensive
+            raise EmbeddingError("http_error", "embedding request failed")
+        if response.status_code != 200:
+            response_text = response.text[:2000]
             detail = response_text.strip() or f"HTTP {response.status_code}"
             raise EmbeddingError(
                 f"http_{response.status_code}",
@@ -805,6 +847,27 @@ def _embeddings_endpoint(base_url: str) -> str:
     if base.endswith("/v1"):
         return f"{base}/embeddings"
     return f"{base}/v1/embeddings"
+
+
+def _embedding_payloads(
+    model: str, texts: list[str]
+) -> list[dict[str, object]]:
+    """Build request bodies for ``/v1/embeddings``.
+
+    A single text is tried as a bare string first (LM Studio 0.4.25 expects
+    that), then as an array on HTTP 400. Multiple texts can only be expressed
+    as an array, so there is no fallback for them.
+    """
+    if len(texts) == 1:
+        return [
+            {"model": model, "input": texts[0]},
+            {"model": model, "input": list(texts)},
+        ]
+    return [{"model": model, "input": list(texts)}]
+
+
+def _input_type(payload: dict[str, object]) -> str:
+    return "string" if isinstance(payload.get("input"), str) else "array"
 
 
 def _provider_from_url(base_url: str) -> str:

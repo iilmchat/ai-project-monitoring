@@ -51,6 +51,10 @@ export const settings = {
   'settings.aiProviders': 'AI Провайдеры',
   'settings.aiProvidersHint':
     'OpenAI-совместимые профили: локальные (LM Studio/Ollama) и внешние (DeepSeek, OpenRouter, Yandex и др.).',
+  'settings.llmAllowRemote':
+    'Разрешить удалённые подключения (LLM_ALLOW_REMOTE)',
+  'settings.llmAllowRemoteHint':
+    'Разрешает обращаться к не-loopback endpoint (чат и эмбеддинги). Для локального LM Studio/Ollama не требуется.',
   'settings.addProvider': 'Добавить провайдера',
   'settings.providerActive': 'Активен',
   'settings.providerInactive': 'Неактивен',

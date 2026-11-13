@@ -15,10 +15,12 @@ Sprints 53–54; §3.30 (conversational RAG) — реализовано в Sprin
 RAG и управление паролями (Sprint 61); v1.4.2 — разделение `model_name` (чат) и
 `embedding_model` (RAG), миграция 016; v1.4.3 — Global Tech Debt Dashboard
 (§3.34, Sprint 63); v1.4.4 — настройки RAG в UI (§3.12) и диагностика
-эмбеддингов. §3.35 (IaC Scanning) — **план v1.5.0** (Sprint 64), см.
+эмбеддингов; v1.4.5 — `Authorization` для `/v1/embeddings`, string/array
+fallback payload и `LLM_ALLOW_REMOTE` в UI. §3.35 (IaC Scanning) — **план
+v1.5.0** (Sprint 64), см.
 [`TODO_V1.5.0.md`](../TODO_V1.5.0.md).
 
-**Версия:** v1.4.4 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-12
+**Версия:** v1.4.5 (текущая) · v1.5.0 (планирование) · **Обновлено:** 2026-11-13
 
 ---
 
@@ -2797,6 +2799,7 @@ IaC-отчёты не персистятся между перезапускам
 | v1.4.2 | `chat_model`/`embedding_model` в профиле AI, отдельная проверка эмбеддингов, миграция 016 | `docs/CHANGELOG.md` |
 | v1.4.3 | Global Tech Debt Dashboard, AI-обзор и графики | `docs/CHANGELOG.md` |
 | v1.4.4 | настройки RAG в UI, диагностика HTTP-ошибок эмбеддингов, проверка размерности | `docs/CHANGELOG.md` |
+| v1.4.5 | `Authorization` в `/v1/embeddings`, string/array fallback, `LLM_ALLOW_REMOTE` в UI | `docs/CHANGELOG.md` |
 | v1.5.0 (план) | Global Tech Debt Dashboard, AI-отчёт по всей базе, IaC Scanning (`Dockerfile`/compose), global-iac | `TODO_V1.5.0.md` |
 
 ---

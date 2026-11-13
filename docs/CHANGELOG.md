@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-11-13
+
+Хотфикс RAG: эмбеддинги снова работают с LM Studio под авторизацией и
+разными версиями API, а `LLM_ALLOW_REMOTE` вынесен в UI.
+
+### Исправлено
+
+- fix(llm): `embed_or_raise()` передаёт `Authorization: Bearer <api_key>` из
+  активного профиля (или `EMBEDDING_API_KEY`/`LLM_API_KEY`), поэтому
+  `/v1/embeddings` работает при включённом **Require Authentication** в
+  LM Studio. Заголовки больше не теряются в обёртке `embed()`.
+- fix(llm): одиночный текст сначала отправляется как строка
+  (`{"input": "text"}`), при HTTP 400 — fallback на массив
+  (`{"input": ["text"]}`); батчи всегда идут массивом.
+- fix(settings): `LLM_ALLOW_REMOTE` разрешает и чат, и эмбеддинги на
+  не-loopback endpoint.
+
+### Добавлено
+
+- feat(settings): чекбокс **«Разрешить удалённые подключения
+  (LLM_ALLOW_REMOTE)»** в блоке «AI Провайдеры»; значение сохраняется сразу
+  через `PATCH /settings` и применяется к `config.LLM_ALLOW_REMOTE`.
+- feat(llm): structlog `embedding_request` с полным телом запроса (endpoint,
+  модель, тип `input`, попытка) и `embedding_request_headers` с
+  `has_auth` — без самого токена.
+- test: fallback string → array, батч-массив, передача `Authorization`.
+
+### Изменено
+
+- chore(release): версия `1.4.5` во всех манифестах; sidecar пересобран.
+
 ## [1.4.4] - 2026-11-12
 
 Настройки RAG вынесены в UI, а HTTP-ошибки эмбеддингов теперь логируются с
