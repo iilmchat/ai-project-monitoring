@@ -1,6 +1,24 @@
 # RELEASES — Журнал спринтов
 
-**Текущая версия:** v1.4.5 (2026-11-13)
+**Текущая версия:** v1.4.6 (2026-11-13)
+
+---
+
+## Хотфикс v1.4.6 — base_url эмбеддингов из активного профиля
+
+**Дата:** 2026-11-13 · **Тег:** `v1.4.6`
+
+Причина: чат ходил на профиль (порт 8034), а RAG — на глобальный
+`EMBEDDING_BASE_URL` (default 1234), поэтому `/v1/embeddings` не получал
+запросов в нужном LM Studio.
+
+- **Адрес:** `resolve_embedding()` при активном профиле использует его
+  `base_url`; `EMBEDDING_BASE_URL` — только fallback без профиля.
+- **Тест LLM:** `POST /settings/llm/test` проверяет эмбеддинги по адресу
+  профиля; `Authorization`, `Content-Type` и string/array payload сохранены.
+- **Диагностика:** лог `embedding_request` с `endpoint` оставлен без изменений.
+- **Проверки:** backend **366** (365 passed, 1 skipped), `ruff`, `mypy`;
+  frontend **73** unit, `typecheck/lint/test/build`; sidecar пересобран.
 
 ---
 

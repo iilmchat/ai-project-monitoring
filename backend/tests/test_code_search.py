@@ -339,6 +339,44 @@ async def test_embedding_uses_active_profile_model(
     }
 
 
+async def test_embedding_uses_active_profile_base_url(
+    session_factory,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["auth"] = request.headers.get("Authorization")
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [0.1]}]},
+        )
+
+    async with session_factory() as session:
+        session.add(
+            AIProviderProfile(
+                name="LM Studio 8034",
+                base_url="http://127.0.0.1:8034/v1",
+                api_key="lm-secret",
+                model_name="qwen2.5-coder-7b-instruct",
+                embedding_model="nomic-embed-text",
+                is_active=True,
+            )
+        )
+        await session.commit()
+
+    service = LLMService(
+        _settings(embedding_base_url="http://127.0.0.1:1234/v1"),
+        transport=httpx.MockTransport(handler),
+        session_factory=session_factory,
+    )
+
+    await service.embed_or_raise(["redis"])
+
+    assert captured["url"] == "http://127.0.0.1:8034/v1/embeddings"
+    assert captured["auth"] == "Bearer lm-secret"
+
+
 async def test_embedding_model_not_configured_raises(
     session_factory,
 ) -> None:

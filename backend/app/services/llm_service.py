@@ -176,25 +176,30 @@ class LLMService:
     async def resolve_embedding(self) -> EmbeddingConfig:
         """Return the effective embedding model and endpoint.
 
-        The active profile is the source of truth for the model id. A profile
-        with an empty ``embedding_model`` is a configuration error rather than a
-        silent fallback to the chat model: LM Studio serves chat and embedding
-        models separately.
+        The active profile is the source of truth for both the model id and
+        ``base_url``: chat and embeddings are served by the same LM Studio
+        instance, so a profile pointing at e.g. port 8034 must not silently
+        fall back to the ``EMBEDDING_BASE_URL`` default (port 1234). The global
+        setting is used only when no profile is active. A profile with an empty
+        ``embedding_model`` is a configuration error rather than a silent
+        fallback to the chat model: LM Studio serves chat and embedding models
+        separately.
         """
         config = await self.resolve()
         if config.profile_id is not None:
             model = (config.embedding_model or "").strip()
+            base_url = config.base_url.strip().rstrip("/")
         else:
             model = (self._settings.embedding_model or "").strip()
+            base_url = (
+                self._settings.embedding_base_url.strip().rstrip("/")
+                or config.base_url.strip().rstrip("/")
+            )
         if not model:
             raise EmbeddingError(
                 "embedding_model_not_configured",
                 "embedding_model_not_configured",
             )
-        base_url = (
-            self._settings.embedding_base_url.strip().rstrip("/")
-            or config.base_url.strip().rstrip("/")
-        )
         api_key = (
             self._settings.embedding_api_key
             or config.api_key

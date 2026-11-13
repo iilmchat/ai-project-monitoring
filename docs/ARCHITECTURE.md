@@ -16,7 +16,8 @@ v1.4.3; §34 — **план v1.5.0** (Sprint 64), см.
 [`TODO_V1.5.0.md`](../TODO_V1.5.0.md). v1.4.2 — разделение `model_name` (чат) и
 `embedding_model` (RAG) в §15.7/§21; v1.4.4 — настройки RAG в UI и диагностика
 эмбеддингов; v1.4.5 — `Authorization` и string/array fallback для
-`/v1/embeddings`, `LLM_ALLOW_REMOTE` в UI.
+`/v1/embeddings`, `LLM_ALLOW_REMOTE` в UI; v1.4.6 — `base_url` эмбеддингов из
+активного профиля.
 
 ---
 
@@ -1063,6 +1064,11 @@ backfill'ит существующие OpenAI-совместимые профи�
 используют массив. Перед запросом structlog пишет `embedding_request`
 (полный payload) и `embedding_request_headers` (`has_auth`, без токена).
 `LLM_ALLOW_REMOTE` из UI разрешает не-loopback endpoint для чата и эмбеддингов.
+
+**v1.4.6 (profile embedding base_url):** при активном `AIProviderProfile`
+`resolve_embedding()` берёт `base_url` профиля, поэтому чат и RAG обращаются к
+одному инстансу LM Studio (например, `:8034`). `EMBEDDING_BASE_URL`
+используется только без профиля; `test_embedding` наследует тот же адрес.
 
 ---
 
